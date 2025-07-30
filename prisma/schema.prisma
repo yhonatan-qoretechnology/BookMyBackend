@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ClientType {
+  people
+  business
+}
+
+enum ClientState {
+  enabled
+  disabled
+  blocked
+}
+
+model Users {
+  id             Int         @id @default(autoincrement()) @map("id")
+  email          String      @unique @map("email") @db.VarChar(100)
+  clientType     ClientType  @default(people) @map("client_type")
+  state          ClientState @default(disabled) @map("state")
+  acceptTerms    Boolean     @default(false) @map("accept_terms")
+  acceptPolitics Boolean     @default(false) @map("accept_polits")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  UserData UserData? @relation("UserToUserData")
+  UserAuth UserAuth? @relation("UserToUserAuth")
+
+  @@index([email])
+  @@map("users")
+}
+
+model UserAuth {
+  id        Int      @id @default(autoincrement()) @map("id")
+  email     String   @unique @map("email")
+  password  String   @map("password")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user_id Int   @unique @map("user_id")
+  user    Users @relation("UserToUserAuth", fields: [user_id], references: [id])
+
+  @@map("user_auth")
+}
+
+model UserData {
+  id         Int    @id @default(autoincrement()) @map("id")
+  name       String @map("name") @db.VarChar(50)
+  familyName String @map("family_name") @db.VarChar(50)
+  phone      String @map("phone") @db.VarChar(20)
+  email      String @unique @map("email")  
+  postalCode String @map("postal_code") @db.VarChar(10)
+  userId    Int @unique @map("user_id")
+  countryId Int @map("country_id")
+  user    Users   @relation("UserToUserData", fields: [userId], references: [id])
+  country Country @relation(fields: [countryId], references: [id])
+
+  @@map("user_data")
+}
+
+model Country {
+  id            Int                     @id @default(autoincrement()) @map("id")
+  name          String                  @map("name")
+  isoCode       String                  @unique @map("iso_code") @db.Char(2)
+  flagUrl       String?                 @map("flag_url")
+  dialingCode   String                  @map("dialing_code") @db.VarChar(10)
+  UserData      UserData[]
+  DocumentTypes DocumentTypeByCountry[]
+
+  @@map("country")
+}
+
+model DocumentType {
+  id      Int    @id @default(autoincrement())
+  name    String @unique
+  acronym String
+
+  type ClientType @default(people)
+  DocumentTypes DocumentTypeByCountry[]
+
+  @@map("document_type")
+}
+
+model DocumentTypeByCountry {
+  countryId      Int @map("country_id")
+  documentTypeId Int @map("document_type_id")
+
+  documentType DocumentType @relation(fields: [documentTypeId], references: [id])
+  country      Country      @relation(fields: [countryId], references: [id])
+
+  @@id([countryId, documentTypeId])
+  @@map("document_type_by_country")
+}
