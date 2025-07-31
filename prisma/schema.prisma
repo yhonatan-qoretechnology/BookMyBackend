@@ -96,3 +96,12 @@ model DocumentTypeByCountry {
   @@id([countryId, documentTypeId])
   @@map("document_type_by_country")
 }
+
+model Otp {
+  id         Int      @id @default(autoincrement())
+  phone      String
+  code       String
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  verified   Boolean  @default(false)
+}

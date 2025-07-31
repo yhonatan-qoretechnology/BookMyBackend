@@ -14,8 +14,9 @@ async function bootstrap() {
     .setDescription('Documentación del api con autenticación.')
     .setVersion('1.0')
     .build();
-  const documentFactory = () => SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, documentFactory);
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document); // ✅ esta línea estaba mal
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') ?? 3000;
