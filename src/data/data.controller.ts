@@ -1,5 +1,4 @@
-import { Controller, Get, Logger, Param, ParseEnumPipe } from '@nestjs/common';
-import { ClientType } from '@prisma/client';
+import { Controller, Get, Logger } from '@nestjs/common';
 import { GeographicService } from './geographic/geographic.service';
 import { PersonalDocumentsService } from './geographic/personal-documents/personal-documents.service';
 
@@ -34,6 +33,8 @@ export class DataController {
     }
   }
 
+  //GET data/personal-documents/{countryId}/{type}
+  /*
   @Get('personal-documents/{:countryId}/{:type}')
   public async getPersonalDocumentsByCountryAndClient(
     @Param('countryId') countryId: string,
@@ -45,4 +46,5 @@ export class DataController {
       type,
     );
   }
+  */
 }

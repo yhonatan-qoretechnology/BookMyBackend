@@ -24,6 +24,20 @@ enum ClientType {
 }
 
 export class RegisterDto {
+  @ApiProperty({ example: 'John', description: 'First name of the user' })
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(50)
+  name: string;
+
+  @ApiProperty({
+    example: '+573001112233',
+    description: 'Phone number with country code',
+  })
+  @IsNotEmpty()
+  @IsPhoneNumber('CO')
+  phone: string;
+
   @ApiProperty({
     example: 'email@example.com',
     description: 'User email address',
@@ -37,25 +51,17 @@ export class RegisterDto {
   @MinLength(6)
   password: string;
 
-  @ApiProperty({ example: 'John', description: 'First name of the user' })
+  @ApiProperty({ example: 'Masculino', description: 'genero' })
   @IsNotEmpty()
   @IsString()
   @MaxLength(50)
-  name: string;
+  genero: string;
 
-  @ApiProperty({ example: 'Doe', description: 'Last name of the user' })
+  @ApiProperty({ example: 'Español', description: 'idioma' })
   @IsNotEmpty()
   @IsString()
   @MaxLength(50)
-  familyName: string;
-
-  @ApiProperty({
-    example: '+573001112233',
-    description: 'Phone number with country code',
-  })
-  @IsNotEmpty()
-  @IsPhoneNumber('CO')
-  phone: string;
+  idioma: string;
 
   @ApiProperty({ example: 1, description: 'Country ID (foreign key)' })
   @IsNotEmpty()

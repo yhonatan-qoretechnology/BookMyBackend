@@ -30,11 +30,12 @@ export class AuthService {
 
   async register(registerDto: RegisterDto) {
     const {
-      email,
-      password,
       name,
-      familyName,
       phone,
+      email,
+      genero,
+      idioma,
+      password,
       countryId,
       acceptPolitics,
       acceptTerms,
@@ -77,10 +78,11 @@ export class AuthService {
     // 3. Crear data adicional del usuario
     await this.prisma.userData.create({
       data: {
-        email,
         name,
-        familyName,
         phone,
+        email,
+        genero,
+        idioma,
         countryId,
         userId: createdUser.id,
       },
@@ -93,10 +95,12 @@ export class AuthService {
       token,
       user: {
         id: createdUser.id,
-        email,
         name,
-        familyName,
         phone,
+        email,
+        genero,
+        idioma,
+        countryId,
       },
     };
   }

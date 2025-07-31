@@ -51,9 +51,10 @@ model UserAuth {
 model UserData {
   id         Int    @id @default(autoincrement()) @map("id")
   name       String @map("name") @db.VarChar(50)
-  familyName String @map("family_name") @db.VarChar(50)
   phone      String @map("phone") @db.VarChar(20)
   email      String @unique @map("email")  
+  genero       String @map("nagenerome") @db.VarChar(50)
+  idioma       String @map("idioma") @db.VarChar(50)
   userId    Int @unique @map("user_id")
   countryId Int @map("country_id")
   user    Users   @relation("UserToUserData", fields: [userId], references: [id])
