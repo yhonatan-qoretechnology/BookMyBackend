@@ -5,9 +5,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ValidatePhoneDto } from './dto/validate-phone.dto';
 import { HashService } from './services/hash/hash.service';
 
 @Injectable()
@@ -142,6 +144,7 @@ export class AuthService {
 
   async recoveryPass(token: string, password: string) {
     const data = this.jwtService.decode(token);
+    console.log('Decoded data:', data);
     const userId = data.id;
     this.checkUser(userId);
     const hashedPassword = await this.hashService.hash(password);
@@ -157,5 +160,35 @@ export class AuthService {
       where: { OR: [{ email }, { phone }] },
     });
     return !!userData;
+  }
+
+  private mockDBPhones = ['+34611222333', '+34699888777']; // simula base de datos
+
+  async validatePhone(dto: ValidatePhoneDto) {
+    const { phone } = dto;
+
+    // Validar formato con libphonenumber-js
+    const parsed = parsePhoneNumberFromString(phone);
+
+    if (!parsed) {
+      throw new BadRequestException('Formato de número inválido');
+    }
+
+    if (parsed.country !== 'ES') {
+      throw new BadRequestException('El número no es de España');
+    }
+
+    // Simulación de búsqueda en base de datos
+    const exists = this.mockDBPhones.includes(phone);
+
+    if (exists) {
+      throw new BadRequestException('El número ya está registrado');
+    }
+
+    return {
+      success: true,
+      message: 'Número válido y disponible',
+      formatted: parsed.formatInternational(),
+    };
   }
 }
