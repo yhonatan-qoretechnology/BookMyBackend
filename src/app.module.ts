@@ -4,7 +4,8 @@ import { SwaggerModule } from '@nestjs/swagger';
 import * as Joi from 'joi';
 import { AuthModule } from './auth/auth.module';
 import { DataModule } from './data/data.module';
-import { SmsModule } from './data/otp/sms.module';
+import { OtpModule } from './data/otp/otp.module';
+import { SmsModule } from './data/sms/sms.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SeedModule } from './seed/seed.module';
 
@@ -23,6 +24,7 @@ import { SeedModule } from './seed/seed.module';
     SeedModule,
     DataModule,
     SmsModule,
+    OtpModule,
   ],
 })
 export class AppModule {}

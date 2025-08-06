@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Twilio } from 'twilio';
 
@@ -29,5 +29,13 @@ export class SmsService {
       console.error('Error sending SMS:', error.message);
       throw new Error('Failed to send SMS');
     }
+  }
+
+  private readonly logger = new Logger(SmsService.name);
+
+  async sendSms(phone: string, message: string): Promise<void> {
+    // Simula envío (sustituye con Twilio u otro)
+    this.logger.log(`SMS enviado a ${phone}: ${message}`);
+    console.log(`SMS enviado a ${phone}: ${message}`);
   }
 }
