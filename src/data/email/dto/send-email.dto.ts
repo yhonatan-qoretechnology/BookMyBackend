@@ -17,4 +17,12 @@ export class SendEmailDto {
     description: 'The name of the user to greet',
   })
   name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @ApiProperty({
+    example: '123456',
+    description: 'The OTP (One-Time Password) for confirmation',
+  })
+  otp: string;
 }
