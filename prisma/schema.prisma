@@ -111,6 +111,7 @@ model Category {
   id           Int                     @id @default(autoincrement())
   createdAt    DateTime                @default(now())
   updatedAt    DateTime                @updatedAt
+  services     Service[]
   translations CategoryTranslation[]
 }
 
@@ -126,4 +127,34 @@ model CategoryTranslation {
   @@unique([categoryId, language])
   @@index([language])
   @@map("category_translation")
+}
+
+model Service {
+  id          Int                 @id @default(autoincrement())
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  categoryId  Int
+  category    Category            @relation(fields: [categoryId], references: [id])
+  prices      Price[]
+  translations ServiceTranslation[]
+
+  @@index([categoryId])
+}
+
+model ServiceTranslation {
+  id          Int      @id @default(autoincrement())
+  service     Service  @relation(fields: [serviceId], references: [id])
+  serviceId   Int
+  language    String   // 'es' | 'en'
+  name        String
+  description String?
+}
+
+model Price {
+  id          Int      @id @default(autoincrement())
+  service     Service  @relation(fields: [serviceId], references: [id])
+  serviceId   Int
+  amount      Float
+  duration    Int      // en minutos
+  currency    String   @default("EUR")  // EUR implica España
 }
