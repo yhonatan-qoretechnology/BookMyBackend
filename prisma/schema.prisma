@@ -105,3 +105,25 @@ model Otp {
   expiresAt  DateTime
   verified   Boolean  @default(false)
 }
+
+
+model Category {
+  id           Int                     @id @default(autoincrement())
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  translations CategoryTranslation[]
+}
+
+model CategoryTranslation {
+  id          Int      @id @default(autoincrement())
+  categoryId  Int
+  language    String   // 'es' o 'en'
+  name        String
+  description String?
+
+  category    Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([categoryId, language])
+  @@index([language])
+  @@map("category_translation")
+}

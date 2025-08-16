@@ -43,6 +43,18 @@ npm i
 npx prisma migrate dev
 npm run start:dev
 
+# Generar cliente
+
+npx prisma generate
+
+# Crear migración (elige un nombre descriptivo)
+
+npx prisma migrate dev --name categories_i18n
+
+# (Opcional) Ver el estado del DB
+
+npx prisma studio
+
 ---
 
 ## License

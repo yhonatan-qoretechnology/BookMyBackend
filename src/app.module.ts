@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { SwaggerModule } from '@nestjs/swagger';
 import * as Joi from 'joi';
 import { AuthModule } from './auth/auth.module';
+import { CategoryModule } from './data/category/category.module';
 import { DataModule } from './data/data.module';
 import { MailModule } from './data/email/mail.module';
 import { OtpModule } from './data/otp/otp.module';
@@ -27,6 +28,7 @@ import { SeedModule } from './seed/seed.module';
     SmsModule,
     OtpModule,
     MailModule,
+    CategoryModule,
   ],
 })
 export class AppModule {}
