@@ -122,11 +122,17 @@ export class CategoryService {
    * Elimina una categoría
    */
   async remove(id: number) {
-    try {
-      return await this.prisma.category.delete({ where: { id } });
-    } catch (error) {
-      this.handlePrismaError(error);
-    }
+    return await this.prisma.$transaction(async (tx) => {
+      // 1. Primero eliminar las traducciones
+      await tx.categoryTranslation.deleteMany({
+        where: { categoryId: id },
+      });
+
+      // 2. Luego eliminar la categoría
+      return await tx.category.delete({
+        where: { id },
+      });
+    });
   }
 
   /**
