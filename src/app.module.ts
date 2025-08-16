@@ -7,6 +7,7 @@ import { CategoryModule } from './data/category/category.module';
 import { DataModule } from './data/data.module';
 import { MailModule } from './data/email/mail.module';
 import { OtpModule } from './data/otp/otp.module';
+import { ServiceModule } from './data/serviceCategory/service.module';
 import { SmsModule } from './data/sms/sms.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SeedModule } from './seed/seed.module';
@@ -29,6 +30,7 @@ import { SeedModule } from './seed/seed.module';
     OtpModule,
     MailModule,
     CategoryModule,
+    ServiceModule,
   ],
 })
 export class AppModule {}
