@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -30,81 +31,46 @@ export class AuthService {
     if (!user) throw new NotFoundException(`User ${userId} not found`);
   }
 
-  async register(registerDto: RegisterDto) {
-    const {
-      name,
-      phone,
-      email,
-      genero,
-      idioma,
-      password,
-      countryId,
-      acceptPolitics,
-      acceptTerms,
-      clientType,
-    } = registerDto;
+  async register(dto: RegisterDto) {
+    try {
+      const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    const existingUser = await this.prisma.users.findUnique({
-      where: { email },
-    });
-    const existingUserData = await this.prisma.userData.findUnique({
-      where: { email },
-    });
-    if (existingUser || existingUserData) {
-      throw new BadRequestException(
-        'El correo electrónico ya está registrado.',
-      );
+      const user = await this.prisma.users.create({
+        data: {
+          email: dto.email,
+          clientType: dto.clientType,
+          acceptTerms: dto.acceptTerms,
+          acceptPolitics: dto.acceptPolitics,
+          UserAuth: {
+            create: {
+              email: dto.email,
+              password: hashedPassword,
+            },
+          },
+          UserData: {
+            create: {
+              name: dto.name,
+              phone: dto.phone,
+              email: dto.email,
+              gender: dto.gender,
+              idioma: dto.idioma,
+              countryId: dto.countryId,
+              birthdate: dto.birthdate ? new Date(dto.birthdate) : null,
+            },
+          },
+        },
+        include: {
+          UserData: true,
+        },
+      });
+
+      return user;
+    } catch (error) {
+      if (error.code === 'P2002') {
+        throw new BadRequestException('El email ya está en uso');
+      }
+      throw error;
     }
-
-    const hashedPassword = await this.hashService.hash(password);
-
-    // 1. Crear usuario base (users)
-    const createdUser = await this.prisma.users.create({
-      data: {
-        email,
-        clientType,
-        acceptPolitics,
-        acceptTerms,
-      },
-    });
-
-    // 2. Crear auth asociado al usuario
-    await this.prisma.userAuth.create({
-      data: {
-        email,
-        password: hashedPassword,
-        user_id: createdUser.id,
-      },
-    });
-
-    // 3. Crear data adicional del usuario
-    await this.prisma.userData.create({
-      data: {
-        name,
-        phone,
-        email,
-        genero,
-        idioma,
-        countryId,
-        userId: createdUser.id,
-      },
-    });
-
-    const token = await this.generateToken({ id: createdUser.id, email });
-
-    return {
-      message: 'Usuario registrado correctamente',
-      token,
-      user: {
-        id: createdUser.id,
-        name,
-        phone,
-        email,
-        genero,
-        idioma,
-        countryId,
-      },
-    };
   }
 
   async login(loginDto: LoginDto) {

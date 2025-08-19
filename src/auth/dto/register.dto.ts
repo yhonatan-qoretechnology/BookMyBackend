@@ -6,17 +6,11 @@ import {
   IsEnum,
   IsNotEmpty,
   IsNumber,
-  IsPhoneNumber,
+  IsOptional,
   IsString,
   MaxLength,
   MinLength,
 } from 'class-validator';
-
-enum State {
-  disabled = 'disabled',
-  enabled = 'enabled',
-  blocked = 'blocked',
-}
 
 enum ClientType {
   people = 'people',
@@ -24,18 +18,17 @@ enum ClientType {
 }
 
 export class RegisterDto {
-  @ApiProperty({ example: 'John', description: 'First name of the user' })
+  @ApiProperty({ example: 'John Doe', description: 'Full name of the user' })
   @IsNotEmpty()
   @IsString()
   @MaxLength(50)
   name: string;
 
   @ApiProperty({
-    example: '+34612345678',
+    example: '+348001112233',
     description: 'Phone number with country code',
   })
   @IsNotEmpty()
-  @IsPhoneNumber('CO')
   phone: string;
 
   @ApiProperty({
@@ -51,16 +44,14 @@ export class RegisterDto {
   @MinLength(6)
   password: string;
 
-  @ApiProperty({ example: 'Masculino', description: 'genero' })
+  @ApiProperty({ example: 'Masculino', description: 'Gender' })
   @IsNotEmpty()
   @IsString()
-  @MaxLength(50)
-  genero: string;
+  gender: string;
 
-  @ApiProperty({ example: 'Español', description: 'idioma' })
+  @ApiProperty({ example: 'Español', description: 'Language' })
   @IsNotEmpty()
   @IsString()
-  @MaxLength(50)
   idioma: string;
 
   @ApiProperty({ example: 1, description: 'Country ID (foreign key)' })
@@ -87,8 +78,9 @@ export class RegisterDto {
   @ApiProperty({
     example: '1990-01-15',
     description: 'Date of birth of the user (YYYY-MM-DD)',
+    required: false,
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsDateString()
-  birthdate: string;
+  birthdate?: string;
 }

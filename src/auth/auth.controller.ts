@@ -6,7 +6,7 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
-import { ApiBody, ApiHeader, ApiOperation } from '@nestjs/swagger';
+import { ApiBody, ApiHeader, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -18,29 +18,15 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('register')
-  async register(@Body() registerDto: RegisterDto) {
-    try {
-      return await this.authService.register(registerDto);
-    } catch (error) {
-      console.error('Error al registrar:', error);
-
-      if (error instanceof HttpException) {
-        throw error;
-      }
-
-      // Prisma error por duplicado
-      if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
-        throw new HttpException(
-          'El correo ya está registrado',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      throw new HttpException(
-        'Error interno al registrar usuario',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+  @ApiOperation({ summary: 'Register a new user' })
+  @ApiResponse({ status: 201, description: 'User successfully registered' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  async register(@Body() dto: RegisterDto) {
+    const user = await this.authService.register(dto);
+    return {
+      message: 'User registered successfully',
+      user,
+    };
   }
 
   @Post('login')

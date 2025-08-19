@@ -7,17 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum ClientType {
-  people
-  business
-}
-
-enum ClientState {
-  enabled
-  disabled
-  blocked
-}
-
 model Users {
   id             Int            @id @default(autoincrement()) @map("id")
   email          String         @unique @map("email") @db.VarChar(100)
@@ -27,10 +16,11 @@ model Users {
   acceptPolitics Boolean        @default(false) @map("accept_polits")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
+  UserAuth       UserAuth?      @relation("UserToUserAuth")
   UserCategories UserCategory[]
   UserData       UserData?      @relation("UserToUserData")
-  UserAuth       UserAuth?      @relation("UserToUserAuth")
- UserLocation   UserLocation?   @relation("UserToLocation")
+  UserLocation   UserLocation?  @relation("UserToLocation")
+
   @@index([email])
   @@map("users")
 }
@@ -41,9 +31,8 @@ model UserAuth {
   password  String   @map("password")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
-
-  user_id Int   @unique @map("user_id")
-  user    Users @relation("UserToUserAuth", fields: [user_id], references: [id])
+  user_id   Int      @unique @map("user_id")
+  user      Users    @relation("UserToUserAuth", fields: [user_id], references: [id])
 
   @@map("user_auth")
 }
@@ -53,12 +42,13 @@ model UserData {
   name      String  @map("name") @db.VarChar(50)
   phone     String  @map("phone") @db.VarChar(20)
   email     String  @unique @map("email")
-  genero    String  @map("nagenerome") @db.VarChar(50)
-  idioma    String  @map("idioma") @db.VarChar(50)
   userId    Int     @unique @map("user_id")
   countryId Int     @map("country_id")
-  user      Users   @relation("UserToUserData", fields: [userId], references: [id])
+  idioma    String  @map("idioma") @db.VarChar(50)
+  gender    String  @db.VarChar(50)
+  birthdate DateTime?
   country   Country @relation(fields: [countryId], references: [id])
+  user      Users   @relation("UserToUserData", fields: [userId], references: [id])
 
   @@map("user_data")
 }
@@ -69,17 +59,16 @@ model Country {
   isoCode       String                  @unique @map("iso_code") @db.Char(2)
   flagUrl       String?                 @map("flag_url")
   dialingCode   String                  @map("dialing_code") @db.VarChar(10)
-  UserData      UserData[]
   DocumentTypes DocumentTypeByCountry[]
+  UserData      UserData[]
 
   @@map("country")
 }
 
 model DocumentType {
-  id      Int    @id @default(autoincrement())
-  name    String @unique
-  acronym String
-
+  id            Int                     @id @default(autoincrement())
+  name          String                  @unique
+  acronym       String
   type          ClientType              @default(people)
   DocumentTypes DocumentTypeByCountry[]
 
@@ -87,11 +76,10 @@ model DocumentType {
 }
 
 model DocumentTypeByCountry {
-  countryId      Int @map("country_id")
-  documentTypeId Int @map("document_type_id")
-
-  documentType DocumentType @relation(fields: [documentTypeId], references: [id])
-  country      Country      @relation(fields: [countryId], references: [id])
+  countryId      Int          @map("country_id")
+  documentTypeId Int          @map("document_type_id")
+  country        Country      @relation(fields: [countryId], references: [id])
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id])
 
   @@id([countryId, documentTypeId])
   @@map("document_type_by_country")
@@ -111,18 +99,17 @@ model Category {
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   services       Service[]
-  UserCategories UserCategory[]
   translations   CategoryTranslation[]
+  UserCategories UserCategory[]
 }
 
 model CategoryTranslation {
-  id          Int     @id @default(autoincrement())
-  categoryId  Int
-  language    String // 'es' o 'en'
+  id          Int      @id @default(autoincrement())
   name        String
   description String?
-
-  category Category @relation(fields: [categoryId], references: [id])
+  language    String
+  categoryId  Int
+  category    Category @relation(fields: [categoryId], references: [id])
 
   @@unique([categoryId, language])
   @@index([language])
@@ -134,8 +121,8 @@ model Service {
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
   categoryId   Int
-  category     Category             @relation(fields: [categoryId], references: [id])
   prices       Price[]
+  category     Category             @relation(fields: [categoryId], references: [id])
   translations ServiceTranslation[]
 
   @@index([categoryId])
@@ -143,31 +130,30 @@ model Service {
 
 model ServiceTranslation {
   id          Int     @id @default(autoincrement())
-  service     Service @relation(fields: [serviceId], references: [id])
   serviceId   Int
-  language    String // 'es' | 'en'
+  language    String
   name        String
   description String?
+  service     Service @relation(fields: [serviceId], references: [id])
 }
 
 model Price {
   id        Int     @id @default(autoincrement())
-  service   Service @relation(fields: [serviceId], references: [id])
   serviceId Int
   amount    Float
-  duration  Int // en minutos
-  currency  String  @default("EUR") // EUR implica España
+  duration  Int
+  currency  String  @default("EUR")
+  service   Service @relation(fields: [serviceId], references: [id])
 }
 
 model UserCategory {
   userId     Int      @map("user_id")
   categoryId Int      @map("category_id")
   createdAt  DateTime @default(now()) @map("created_at")
+  category   Category @relation(fields: [categoryId], references: [id])
+  user       Users    @relation(fields: [userId], references: [id])
 
-  user     Users    @relation(fields: [userId], references: [id])
-  category Category @relation(fields: [categoryId], references: [id])
-
-  @@id([userId, categoryId]) // Clave compuesta para evitar duplicados de User-Category
+  @@id([userId, categoryId])
   @@map("user_category")
 }
 
@@ -178,9 +164,19 @@ model UserLocation {
   address   String?  @map("address") @db.VarChar(255)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  userId    Int      @unique @map("user_id")
+  user      Users    @relation("UserToLocation", fields: [userId], references: [id], onDelete: Cascade)
 
-  userId Int   @unique @map("user_id")
-  user   Users @relation("UserToLocation", fields: [userId], references: [id], onDelete: Cascade)
+  @@map("user_locations")
+}
 
-  @@map("user_locations")  
+enum ClientType {
+  people
+  business
+}
+
+enum ClientState {
+  enabled
+  disabled
+  blocked
 }
