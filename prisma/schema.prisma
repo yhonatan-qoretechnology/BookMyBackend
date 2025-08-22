@@ -20,6 +20,7 @@ model Users {
   UserCategories UserCategory[]
   UserData       UserData?      @relation("UserToUserData")
   UserLocation   UserLocation?  @relation("UserToLocation")
+  resenas        Resena[]     @relation("UserToResena")
 
   @@index([email])
   @@map("users")
@@ -193,6 +194,76 @@ model Empresa {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  
+  // Relaciones
+  sedes Sede[] // Una empresa puede tener muchas sedes
+
   @@map("empresas")
+}
+
+model Sede {
+  id              Int      @id @default(autoincrement())
+  nombre          String
+  direccion       String
+  telefono        String?
+  latitud         Float?
+  longitud        Float?
+  provincia       String?
+  horario         Json?
+  diasCerrado     Json?
+  imagenes        String[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  empresaId       Int
+  empresa         Empresa  @relation(fields: [empresaId], references: [id])
+  
+  profesionales   Profesional[]
+  resenas         Resena[]
+  galeria         Galeria[]
+
+  @@map("sedes")
+}
+
+model Profesional {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  biografia    String?
+  imagen       String?
+  especialidad String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  sedeId       Int
+  sede         Sede     @relation(fields: [sedeId], references: [id])
+
+  @@map("profesionales")
+}
+model Resena {
+  id           Int      @id @default(autoincrement())
+  calificacion Int
+  comentario   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  sedeId       Int
+  sede         Sede     @relation(fields: [sedeId], references: [id])
+
+  // Relación con el usuario
+ usuarioId    Int
+  usuario      Users    @relation("UserToResena", fields: [usuarioId], references: [id])
+
+  @@map("resenas")
+}
+
+model Galeria {
+  id          Int      @id @default(autoincrement())
+  url         String
+  descripcion String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  sedeId      Int
+  sede        Sede     @relation(fields: [sedeId], references: [id])
+
+  @@map("galerias")
 }
