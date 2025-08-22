@@ -180,3 +180,19 @@ enum ClientState {
   disabled
   blocked
 }
+
+
+model Empresa {
+  id          Int      @id @default(autoincrement())
+  nombre      String   @unique
+  telefono    String?  @map("telefono")
+  email       String?  @map("email")
+  nit         String?  @map("nit")
+  logo        String?  @map("logo_url") // URL del logo
+  descripcion String?  @map("descripcion")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  
+  @@map("empresas")
+}
