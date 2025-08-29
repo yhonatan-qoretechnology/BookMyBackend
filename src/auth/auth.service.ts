@@ -78,6 +78,7 @@ export class AuthService {
 
     const user = await this.prisma.userAuth.findUnique({
       where: { email },
+      include: { user: true },
     });
 
     if (!user || !user.password) {
@@ -93,6 +94,11 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales incorrectas');
     }
 
+    if (user.user.state !== 'enabled') {
+      throw new UnauthorizedException(
+        'El usuario no está activo, se envió un código de validación a su correo.',
+      );
+    }
     const { password: _, ...userData } = user;
 
     const token = await this.generateToken(userData);
@@ -128,7 +134,7 @@ export class AuthService {
     return !!userData;
   }
 
-  private mockDBPhones = ['+34611222333', '+34699888777']; // simula base de datos
+  private mockDBPhones = ['+348001112233', '+348001112233']; // simula base de datos
 
   async validatePhone(dto: ValidatePhoneDto) {
     const { phone } = dto;

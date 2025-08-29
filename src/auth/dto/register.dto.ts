@@ -17,6 +17,12 @@ enum ClientType {
   business = 'business',
 }
 
+enum ClientState {
+  enabled = 'enabled',
+  disabled = 'disabled',
+  blocked = 'blocked',
+}
+
 export class RegisterDto {
   @ApiProperty({ example: 'John Doe', description: 'Full name of the user' })
   @IsNotEmpty()
@@ -49,7 +55,7 @@ export class RegisterDto {
   @IsString()
   gender: string;
 
-  @ApiProperty({ example: 'Español', description: 'Language' })
+  @ApiProperty({ example: 'es', description: 'Language' })
   @IsNotEmpty()
   @IsString()
   idioma: string;
@@ -83,4 +89,12 @@ export class RegisterDto {
   @IsOptional()
   @IsDateString()
   birthdate?: string;
+
+  @ApiProperty({
+    example: 'enabled',
+    enum: ClientState,
+    description: 'User state (enabled, disabled, or blocked)',
+  })
+  @IsEnum(ClientState)
+  state: ClientState;
 }

@@ -23,7 +23,7 @@ export class CreateSedeDto {
   direccion: string;
 
   @ApiProperty({
-    example: '+348123456789',
+    example: '+348001112233',
     description: 'Número de teléfono de la sede',
     required: false,
   })

@@ -3,7 +3,7 @@ import { IsNotEmpty, IsPhoneNumber, IsString } from 'class-validator';
 
 export class SendSmsDto {
   @ApiProperty({
-    example: '+347134445467',
+    example: '+348001112233',
     description: 'Número de teléfono del destinatario en formato internacional',
   })
   @IsPhoneNumber()

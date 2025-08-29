@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import * as dayjs from 'dayjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SmsService } from '../sms/sms.service';
@@ -31,6 +35,8 @@ export class OtpService {
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
+    // 1. Permite que la variable sea null.
+    //    Quita la anotación de tipo explícita para que TypeScript infiera el tipo correcto.
     const record = await this.prisma.otp.findFirst({
       where: {
         phone: dto.phone,
@@ -42,15 +48,33 @@ export class OtpService {
       },
     });
 
+    // 2. Maneja el caso en el que no se encuentre el registro.
     if (!record || new Date() > record.expiresAt) {
       throw new BadRequestException('Código inválido o expirado');
     }
 
+    // 3. Si el registro existe y es válido, actualiza el estado del OTP y del usuario.
     await this.prisma.otp.update({
       where: { id: record.id },
       data: { verified: true },
     });
 
-    return { message: 'Código verificado correctamente' };
+    const userData = await this.prisma.userData.findUnique({
+      where: { phone: dto.phone },
+      include: { user: true },
+    });
+
+    if (!userData) {
+      throw new NotFoundException(
+        'Usuario no encontrado para este número de teléfono.',
+      );
+    }
+
+    await this.prisma.users.update({
+      where: { id: userData.userId },
+      data: { state: 'enabled' },
+    });
+
+    return { message: 'Código verificado correctamente y usuario activado' };
   }
 }

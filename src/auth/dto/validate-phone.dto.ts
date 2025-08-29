@@ -8,5 +8,5 @@ export class ValidatePhoneDto {
   })
   @IsString()
   @IsNotEmpty()
-  phone: string; // Ej: +34611222333
+  phone: string;
 }

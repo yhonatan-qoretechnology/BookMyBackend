@@ -41,8 +41,8 @@ model UserAuth {
 model UserData {
   id        Int     @id @default(autoincrement()) @map("id")
   name      String  @map("name") @db.VarChar(50)
-  phone     String  @map("phone") @db.VarChar(20)
-  email     String  @unique @map("email")
+  phone       String    @unique @map("phone") @db.VarChar(20) // Campo phone en UserData
+  email       String    @unique @map("email")
   userId    Int     @unique @map("user_id")
   countryId Int     @map("country_id")
   idioma    String  @map("idioma") @db.VarChar(50)
