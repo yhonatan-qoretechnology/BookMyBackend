@@ -47,6 +47,9 @@ npm run start:dev
 
 npx prisma generate
 
+// borrar la db 
+npx prisma migrate reset
+
 # Crear migración (elige un nombre descriptivo)
 
 npx prisma migrate dev --name categories_i18n

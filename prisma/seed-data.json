@@ -1,19 +1,6 @@
 {
   "countries": [
     {
-      "name": "Colombia",
-      "isoCode": "CO",
-      "dialingCode": "+57",
-      "documentTypes": [
-        { "name": "Cédula de ciudadanía", "acronym": "CC", "type": "people" },
-        {
-          "name": "Cédula de extranjería (Persona extranjera)",
-          "acronym": "CE",
-          "type": "people"
-        }
-      ]
-    },
-    {
       "name": "España",
       "isoCode": "ES",
       "dialingCode": "+34",
