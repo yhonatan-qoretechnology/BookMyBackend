@@ -202,8 +202,6 @@ model Sede {
   profesionales   Profesional[]
   resenas         Resena[]
   galeria         Galeria[]
-  services     SedeService[] // Nueva relación de muchos a muchos
-
   @@map("sedes")
 }
 
@@ -264,22 +262,12 @@ model Service {
   translations     ServiceTranslation[]
   imagenes         String[]
   profesionales    Profesional[] // Relación de muchos a muchos
-  sedes            SedeService[] // Nueva relación de muchos a muchos
-  
+
 
   @@index([categoryId])
   @@map("servicios")
 }
 
-model SedeService {
-  sedeId    Int
-  serviceId Int
-
-  sede      Sede    @relation(fields: [sedeId], references: [id])
-  service   Service @relation(fields: [serviceId], references: [id])
-
-  @@id([sedeId, serviceId])
-}
 
 model ServiceTranslation {
   id          Int       @id @default(autoincrement())
