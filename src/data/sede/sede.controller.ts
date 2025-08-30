@@ -51,6 +51,8 @@ export class SedeController {
     @Body() createSedeDto: CreateSedeDto,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
+    // Los campos de horario y diasCerrado se manejarán dentro del servicio
+    // porque el @Body() ya los deserializa correctamente.
     return this.sedeService.create(createSedeDto, files);
   }
 
@@ -78,6 +80,8 @@ export class SedeController {
     @Param('id', ParseIntPipe) id: number,
     @Body() updateSedeDto: UpdateSedeDto,
   ) {
+    // Asegúrate de que los campos JSON se parseen si es necesario,
+    // pero NestJS lo hace automáticamente si el Content-Type es 'application/json'.
     return this.sedeService.update(id, updateSedeDto);
   }
 
@@ -95,7 +99,20 @@ export class SedeController {
   @ApiResponse({ status: 200, description: 'Imagen añadida exitosamente.' })
   @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ type: CreateSedeWithImagesDto })
+  @ApiBody({
+    description: 'Archivo de imagen a subir',
+    type: 'multipart/form-data',
+    required: true,
+    schema: {
+      type: 'object',
+      properties: {
+        imagen: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
   @UseInterceptors(
     FileInterceptor('imagen', {
       dest: './uploads/sedes/temp',

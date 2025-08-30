@@ -1,9 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
 } from 'class-validator';
@@ -59,6 +61,33 @@ export class CreateSedeDto {
   @IsOptional()
   @IsString()
   provincia?: string;
+
+  @ApiProperty({
+    example: {
+      lunes: '10:00-19:00',
+      martes: '10:00-19:00',
+      Miércoles: '10:00-19:00',
+      Jueves: '10:00-19:00',
+      Viernes: '10:00-19:00',
+      Sábado: '10:00-14:00',
+      Domingo: 'Cerrado',
+    },
+    description: 'Horario de apertura y cierre en formato de objeto JSON',
+    required: false,
+  })
+  @IsOptional()
+  @IsObject() // ✅ Ahora valida que sea un objeto
+  horario?: object;
+
+  @ApiProperty({
+    example: ['2025-08-31', '2026-09-07', '2026-09-14', '2026-09-21'],
+    description: 'Días que la sede estará cerrada en formato de array JSON',
+    required: false,
+  })
+  @IsOptional()
+  @IsArray() // ✅ Ahora valida que sea un array
+  @IsString({ each: true }) // ✅ Asegura que cada elemento del array sea una cadena
+  diasCerrado?: string[];
 
   @ApiProperty({
     type: 'number',

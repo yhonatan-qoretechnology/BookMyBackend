@@ -27,13 +27,8 @@ export class SedeService {
 
       const sede = await this.prisma.sede.create({
         data: {
-          nombre: createSedeDto.nombre,
-          direccion: createSedeDto.direccion,
-          telefono: createSedeDto.telefono,
-          latitud: createSedeDto.latitud,
-          longitud: createSedeDto.longitud,
-          provincia: createSedeDto.provincia,
-          empresaId: createSedeDto.empresaId,
+          ...createSedeDto,
+          // NestJS ya ha convertido los campos JSON a objetos/arrays nativos.
         },
       });
 
@@ -91,6 +86,7 @@ export class SedeService {
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
     }
 
+    // La data ya está en el formato correcto, no es necesario parsear
     return this.prisma.sede.update({
       where: { id },
       data: updateSedeDto,
@@ -110,7 +106,6 @@ export class SedeService {
 
     return this.prisma.sede.delete({ where: { id } });
   }
-
   async addImageToSede(id: number, file: Express.Multer.File) {
     const sede = await this.prisma.sede.findUnique({
       where: { id },
