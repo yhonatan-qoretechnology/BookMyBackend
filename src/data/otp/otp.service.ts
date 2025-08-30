@@ -5,15 +5,18 @@ import {
 } from '@nestjs/common';
 import * as dayjs from 'dayjs';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../email/mail.service';
 import { SmsService } from '../sms/sms.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
 @Injectable()
 export class OtpService {
+  [x: string]: any;
   constructor(
     private prisma: PrismaService,
     private smsService: SmsService,
+    private mailService: MailService,
   ) {}
 
   async sendOtp(dto: SendOtpDto) {
@@ -23,13 +26,17 @@ export class OtpService {
 
     await this.prisma.otp.create({
       data: {
+        name: dto.name,
         phone: dto.phone,
+        email: dto.email,
         code,
         expiresAt,
       },
     });
 
-    await this.smsService.sendSms(dto.phone, `Tu código OTP es ${code}`);
+    //await this.smsService.sendSms(dto.phone, `Tu código OTP es ${code}`);
+
+    await this.mailService.sendUserConfirmation(dto.name, dto.email, code);
 
     return { message: 'Código enviado por SMS' };
   }
