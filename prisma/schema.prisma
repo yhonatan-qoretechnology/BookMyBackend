@@ -41,8 +41,8 @@ model UserAuth {
 model UserData {
   id        Int     @id @default(autoincrement()) @map("id")
   name      String  @map("name") @db.VarChar(50)
-  phone       String    @unique @map("phone") @db.VarChar(20) // Campo phone en UserData
-  email       String    @unique @map("email")
+  phone     String    @unique @map("phone") @db.VarChar(20) // Campo phone en UserData
+  email     String    @unique @map("email")
   userId    Int     @unique @map("user_id")
   countryId Int     @map("country_id")
   idioma    String  @map("idioma") @db.VarChar(50)
@@ -89,8 +89,8 @@ model DocumentTypeByCountry {
 model Otp {
   id        Int      @id @default(autoincrement())
   name      String  @map("name") @db.VarChar(50)
-  phone       String     @map("phone") @db.VarChar(20) // Campo phone en UserData
-  email       String     @map("email")
+  phone     String     @map("phone") @db.VarChar(20) // Campo phone en UserData
+  email     String     @map("email")
   code      String
   createdAt DateTime @default(now())
   expiresAt DateTime
@@ -231,15 +231,19 @@ model Profesional {
   nombre       String
   biografia    String?
   imagen       String?
-  especialidad String?
+  phone        String    @unique @map("phone") @db.VarChar(20) 
+  state        ClientState    @default(disabled) @map("state")
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  
+  updatedAt    DateTime @updatedAt  
   sedeId       Int
   sede         Sede     @relation(fields: [sedeId], references: [id])
 
   @@map("profesionales")
 }
+
+
+
+
 model Resena {
   id           Int      @id @default(autoincrement())
   calificacion Int

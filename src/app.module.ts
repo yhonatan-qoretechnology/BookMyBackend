@@ -8,6 +8,7 @@ import { DataModule } from './data/data.module';
 import { MailModule } from './data/email/mail.module';
 import { EmpresaModule } from './data/empresa/empresa.module';
 import { OtpModule } from './data/otp/otp.module';
+import { ProfesionalModule } from './data/profecional/profesional.module';
 import { SedeModule } from './data/sede/sede.module';
 import { ServiceModule } from './data/serviceCategory/service.module';
 import { SmsModule } from './data/sms/sms.module';
@@ -39,6 +40,7 @@ import { SeedModule } from './seed/seed.module';
     UserLocationModule,
     EmpresaModule,
     SedeModule,
+    ProfesionalModule,
   ],
 })
 export class AppModule {}
