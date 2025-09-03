@@ -47,7 +47,7 @@ npm run start:dev
 
 npx prisma generate
 
-// borrar la db 
+// borrar la db
 npx prisma migrate reset
 
 # Crear migración (elige un nombre descriptivo)
@@ -112,7 +112,7 @@ npx prisma migrate dev --name nombre_de_migracion
 ### Aplicar migraciones en producción
 
 ```bash
-npx prisma migrate deploy
+npx prisma migratenpx prisma migrate deploy
 ```
 
 ### Resetear la base de datos (borra todo y aplica migraciones desde cero)

@@ -24,6 +24,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import * as fs from 'fs';
 import { CreateSedeWithImagesDto } from './dto/create-sede-with-images.dto';
 import { CreateSedeDto } from './dto/create-sede.dto';
 import { UpdateSedeDto } from './dto/update-sede.dto';
@@ -48,11 +51,31 @@ export class SedeController {
     }),
   )
   async create(
-    @Body() createSedeDto: CreateSedeDto,
+    @Body() body: any,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    // Los campos de horario y diasCerrado se manejarán dentro del servicio
-    // porque el @Body() ya los deserializa correctamente.
+    // Manejar el parseo manual de los campos
+    const parsedBody = {
+      ...body,
+      horario: body.horario ? JSON.parse(body.horario) : undefined,
+      diasCerrado: body.diasCerrado
+        ? body.diasCerrado.split(',').map((s) => s.trim())
+        : undefined,
+    };
+
+    const createSedeDto = plainToInstance(CreateSedeDto, parsedBody);
+    const errors = await validate(createSedeDto);
+
+    if (errors.length > 0) {
+      if (files && files.length > 0) {
+        files.forEach((file) => {
+          if (fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        });
+      }
+      throw new BadRequestException(errors);
+    }
     return this.sedeService.create(createSedeDto, files);
   }
 
@@ -80,8 +103,6 @@ export class SedeController {
     @Param('id', ParseIntPipe) id: number,
     @Body() updateSedeDto: UpdateSedeDto,
   ) {
-    // Asegúrate de que los campos JSON se parseen si es necesario,
-    // pero NestJS lo hace automáticamente si el Content-Type es 'application/json'.
     return this.sedeService.update(id, updateSedeDto);
   }
 

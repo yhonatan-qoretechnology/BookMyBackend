@@ -220,22 +220,45 @@ model Profesional {
   @@map("profesionales")
 }
 
-model Resena {
-  id           Int      @id @default(autoincrement())
-  calificacion Int
-  comentario   String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  
-  sedeId       Int
-  sede         Sede     @relation(fields: [sedeId], references: [id])
+enum ResenaState {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+enum ResenaType {
+  SEDE
+  SERVICIO
+}
 
-  // Relación con el usuario
- usuarioId    Int
+
+model Resena {
+  id            Int           @id @default(autoincrement())
+  calificacion  Float
+  comentario    String?
+  aprobado      Boolean       @default(false)
+  estado        ResenaState
+  tipo          ResenaType
+  
+  sedeId        Int?
+  sede          Sede?         @relation(fields: [sedeId], references: [id], onDelete: SetNull)
+  
+  serviceId     Int?
+  service       Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  
+   usuarioId    Int
   usuario      Users    @relation("UserToResena", fields: [usuarioId], references: [id])
 
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Se asegura de que solo uno de los campos de relación (sedeId, serviceId) esté presente
+  @@index([sedeId])
+  @@index([serviceId])
+  
   @@map("resenas")
 }
+
+
 
 model Galeria {
   id          Int      @id @default(autoincrement())
@@ -262,6 +285,7 @@ model Service {
   translations     ServiceTranslation[]
   imagenes         String[]
   profesionales    Profesional[] // Relación de muchos a muchos
+  resenas          Resena[]
 
 
   @@index([categoryId])
