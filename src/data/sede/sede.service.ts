@@ -38,7 +38,8 @@ export class SedeService {
       }
 
       const imagenesUrls = files.map((file) => {
-        const finalPath = path.join(finalDir, file.filename);
+        const newFileName = `${Date.now()}-${file.originalname}`;
+        const finalPath = path.join(finalDir, newFileName);
         fs.renameSync(file.path, finalPath);
         return finalPath;
       });
@@ -106,6 +107,7 @@ export class SedeService {
 
     return this.prisma.sede.delete({ where: { id } });
   }
+
   async addImageToSede(id: number, file: Express.Multer.File) {
     const sede = await this.prisma.sede.findUnique({
       where: { id },
@@ -131,5 +133,45 @@ export class SedeService {
         },
       },
     });
+  }
+
+  async addImagesToGaleria(id: number, files: Express.Multer.File[]) {
+    const sede = await this.prisma.sede.findUnique({ where: { id } });
+    if (!sede) {
+      this.deleteTempFiles(files);
+      throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
+    }
+
+    const finalDir = path.join('./uploads/sedes', sede.id.toString());
+    if (!fs.existsSync(finalDir)) {
+      fs.mkdirSync(finalDir, { recursive: true });
+    }
+
+    const newImagePaths: string[] = [];
+    files.forEach((file) => {
+      const newFileName = `${Date.now()}-${file.originalname}`;
+      const finalPath = path.join(finalDir, newFileName);
+      fs.renameSync(file.path, finalPath);
+      newImagePaths.push(finalPath);
+    });
+
+    return await this.prisma.sede.update({
+      where: { id },
+      data: {
+        imagenes: {
+          push: newImagePaths,
+        },
+      },
+    });
+  }
+
+  private deleteTempFiles(files: Express.Multer.File[]) {
+    if (files && files.length > 0) {
+      files.forEach((file) => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
   }
 }

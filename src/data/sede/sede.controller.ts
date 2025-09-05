@@ -115,7 +115,7 @@ export class SedeController {
     return this.sedeService.remove(id);
   }
 
-  @Post(':id/imagenes')
+  @Post(':id/imagen')
   @ApiOperation({ summary: 'Añadir una imagen a una sede existente' })
   @ApiResponse({ status: 200, description: 'Imagen añadida exitosamente.' })
   @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
@@ -147,5 +147,44 @@ export class SedeController {
       throw new BadRequestException('Debe subir un archivo de imagen.');
     }
     return this.sedeService.addImageToSede(id, file);
+  }
+
+  @Post(':id/galeria')
+  @ApiOperation({
+    summary: 'Añadir varias imágenes a una sede existente (galería)',
+  })
+  @ApiResponse({ status: 200, description: 'Imágenes añadidas exitosamente.' })
+  @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Archivos de imágenes a subir',
+    schema: {
+      type: 'object',
+      properties: {
+        imagenes: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FilesInterceptor('imagenes', 10, {
+      dest: './uploads/sedes/temp',
+    }),
+  )
+  async addImages(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    if (!files || files.length === 0) {
+      throw new BadRequestException(
+        'Debe subir al menos un archivo de imagen.',
+      );
+    }
+    return this.sedeService.addImagesToGaleria(id, files);
   }
 }
