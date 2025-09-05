@@ -202,6 +202,7 @@ model Sede {
   profesionales   Profesional[]
   resenas         Resena[]
   galeria         Galeria[]
+  serviceSedeProfesional ServiceSedeProfesional[]
   @@map("sedes")
 }
 
@@ -217,6 +218,7 @@ model Profesional {
   sedeId       Int
   sede         Sede     @relation(fields: [sedeId], references: [id])
  servicios   Service[] // Relación de muchos a muchos
+ serviceSedeProfesional ServiceSedeProfesional[]
   @@map("profesionales")
 }
 
@@ -286,7 +288,7 @@ model Service {
   imagenes         String[]
   profesionales    Profesional[] // Relación de muchos a muchos
   resenas          Resena[]
-
+ serviceSedeProfesional ServiceSedeProfesional[]
 
   @@index([categoryId])
   @@map("servicios")
@@ -300,4 +302,22 @@ model ServiceTranslation {
   name        String
   description String?
   service     Service @relation(fields: [serviceId], references: [id])
+}
+
+// ESTA ES LA TABLA CLAVE que relaciona los datos.
+// Conecta `Sede`, `Service` y `Profesional`.
+model ServiceSedeProfesional {
+  id             Int          @id @default(autoincrement())
+  
+  sedeId         Int
+  sede           Sede         @relation(fields: [sedeId], references: [id])
+  
+  serviceId      Int
+  service        Service      @relation(fields: [serviceId], references: [id])
+  
+  profesionalId  Int?
+  profesional    Profesional? @relation(fields: [profesionalId], references: [id])
+  
+  @@unique([sedeId, serviceId, profesionalId]) // Esto evita duplicados
+  @@map("service_sede_profesional")
 }
