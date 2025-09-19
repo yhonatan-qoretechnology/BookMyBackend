@@ -35,6 +35,17 @@ export class AuthService {
     try {
       const hashedPassword = await bcrypt.hash(dto.password, 10);
 
+      // 1. Validar que el país exista
+      const country = await this.prisma.country.findUnique({
+        where: { id: dto.countryId },
+      });
+      if (!country) {
+        throw new BadRequestException(
+          'El ID del país proporcionado no es válido.',
+        );
+      }
+
+      // 2. Crear el usuario solo si las validaciones pasan
       const user = await this.prisma.users.create({
         data: {
           email: dto.email,
