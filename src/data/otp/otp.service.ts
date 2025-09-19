@@ -38,7 +38,7 @@ export class OtpService {
 
     await this.mailService.sendUserConfirmation(dto.name, dto.email, code);
 
-    return { message: 'Código enviado por SMS' };
+    return { message: 'Código enviado al correo' };
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
