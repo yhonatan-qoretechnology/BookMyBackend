@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCitaDto } from './dto/createCita.dto';
+import { UpdateCitaDto } from './dto/update-cita.dto';
 
 @Injectable()
 export class CitaService {
@@ -110,5 +111,63 @@ export class CitaService {
     });
 
     return nuevaCita;
+  }
+
+  /**
+   * Actualiza una cita existente.
+   * @param id El ID de la cita a actualizar.
+   * @param updateCitaDto Los datos actualizados.
+   * @returns La cita actualizada.
+   */
+  async update(id: number, updateCitaDto: UpdateCitaDto) {
+    const cita = await this.prisma.appointment.findUnique({ where: { id } });
+    if (!cita) {
+      throw new NotFoundException(`Cita con ID ${id} no encontrada.`);
+    }
+
+    // Si se actualiza el profesional, la fecha o la hora, se verifica la disponibilidad.
+    if (
+      updateCitaDto.profesionalId ||
+      updateCitaDto.fecha ||
+      updateCitaDto.hora
+    ) {
+      const profesionalId = updateCitaDto.profesionalId || cita.profesionalId;
+      const fecha = updateCitaDto.fecha || cita.fecha;
+      const hora = updateCitaDto.hora || cita.hora;
+
+      const citaExistente = await this.prisma.appointment.findFirst({
+        where: {
+          profesionalId,
+          fecha,
+          hora,
+          NOT: { id }, // Ignora la cita actual para evitar conflictos.
+        },
+      });
+
+      if (citaExistente) {
+        throw new BadRequestException(
+          `El profesional ya tiene una cita agendada para el día ${fecha} a las ${hora}.`,
+        );
+      }
+    }
+
+    return this.prisma.appointment.update({
+      where: { id },
+      data: updateCitaDto,
+    });
+  }
+
+  /**
+   * Elimina una cita.
+   * @param id El ID de la cita a eliminar.
+   * @returns La cita eliminada.
+   */
+  async remove(id: number) {
+    const cita = await this.prisma.appointment.findUnique({ where: { id } });
+    if (!cita) {
+      throw new NotFoundException(`Cita con ID ${id} no encontrada.`);
+    }
+
+    return this.prisma.appointment.delete({ where: { id } });
   }
 }
