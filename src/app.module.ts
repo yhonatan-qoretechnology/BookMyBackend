@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { SwaggerModule } from '@nestjs/swagger';
 import * as Joi from 'joi';
 import { AuthModule } from './auth/auth.module';
+import { CitaModule } from './data/appointment/cita.module';
 import { CategoryModule } from './data/category/category.module';
 import { DataModule } from './data/data.module';
 import { MailModule } from './data/email/mail.module';
@@ -45,6 +46,7 @@ import { SeedModule } from './seed/seed.module';
     ProfesionalModule,
     ResenaModule,
     ServiceSedeProfesionalModule,
+    CitaModule,
   ],
 })
 export class AppModule {}

@@ -204,6 +204,7 @@ model Sede {
   galeria         Galeria[]
   serviceSedeProfesional ServiceSedeProfesional[]
   @@map("sedes")
+  Appointment Appointment[]
 }
 
 model Profesional {
@@ -220,6 +221,7 @@ model Profesional {
  servicios   Service[] // Relación de muchos a muchos
  serviceSedeProfesional ServiceSedeProfesional[]
   @@map("profesionales")
+  Appointment Appointment[]
 }
 
 enum ResenaState {
@@ -292,6 +294,7 @@ model Service {
 
   @@index([categoryId])
   @@map("servicios")
+  Appointment Appointment[]
 }
 
 
@@ -320,4 +323,26 @@ model ServiceSedeProfesional {
   
   @@unique([sedeId, serviceId, profesionalId]) // Esto evita duplicados
   @@map("service_sede_profesional")
+}
+
+
+
+model Appointment {
+  id              Int         @id @default(autoincrement())
+  fecha           DateTime
+  hora            String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  sedeId          Int
+  sede            Sede        @relation(fields: [sedeId], references: [id])
+
+  serviceId       Int
+  service         Service     @relation(fields: [serviceId], references: [id])
+
+  profesionalId   Int
+  profesional     Profesional @relation(fields: [profesionalId], references: [id])
+
+  @@unique([profesionalId, fecha, hora]) // Evita que un profesional tenga 2 Appointments a la misma hora
+
 }
