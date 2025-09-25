@@ -88,8 +88,6 @@ model DocumentTypeByCountry {
 
 model Otp {
   id        Int      @id @default(autoincrement())
-  name      String  @map("name") @db.VarChar(50)
-  phone     String     @map("phone") @db.VarChar(20) // Campo phone en UserData
   email     String     @map("email")
   code      String
   createdAt DateTime @default(now())

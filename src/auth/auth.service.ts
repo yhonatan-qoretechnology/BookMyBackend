@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -87,34 +86,74 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    const user = await this.prisma.userAuth.findUnique({
+    // Buscar solo lo necesario
+    const userAuth = await this.prisma.userAuth.findUnique({
       where: { email },
-      include: { user: true },
+      select: {
+        id: true,
+        password: true,
+        user: {
+          select: {
+            id: true,
+            clientType: true,
+            state: true,
+            acceptTerms: true,
+            acceptPolitics: true,
+            createdAt: true,
+            updatedAt: true,
+            UserData: {
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                idioma: true,
+                gender: true,
+                birthdate: true,
+                country: {
+                  select: {
+                    id: true,
+                    name: true,
+                    isoCode: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
-    if (!user || !user.password) {
-      throw new UnauthorizedException('Credenciales incorrectas.');
+    // Validaciones
+    if (!userAuth || !userAuth.password) {
+      return { error: 'Credenciales incorrectas.' };
     }
 
     const isPasswordValid = await this.hashService.compare(
       password,
-      user.password,
+      userAuth.password,
     );
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Credenciales incorrectas');
+      return { error: 'Credenciales incorrectas.' };
     }
 
-    if (user.user.state !== 'enabled') {
-      throw new UnauthorizedException(
-        'El usuario no está activo, se envió un código de validación a su correo.',
-      );
+    if (userAuth.user.state !== 'enabled') {
+      return { error: 'El usuario no está activo.' };
     }
-    const { password: _, ...userData } = user;
 
-    const token = await this.generateToken(userData);
+    // Remover password de la respuesta
+    const { password: _, ...userData } = userAuth;
 
-    return { user: userData, token };
+    // Generar token con los datos del usuario
+    const token = await this.generateToken({
+      id: userAuth.user.id,
+      email, // lo usas solo para el payload del token
+    });
+
+    return {
+      user: userAuth.user,
+      token,
+    };
   }
 
   async generateToken(user: any): Promise<string> {

@@ -14,7 +14,6 @@ export class EmailController {
     try {
       await this.mailService.sendUserConfirmation(
         sendEmailDto.email,
-        sendEmailDto.name,
         sendEmailDto.otp,
       );
       return { message: 'Confirmation email sent successfully.' };

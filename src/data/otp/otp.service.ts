@@ -26,8 +26,6 @@ export class OtpService {
 
     await this.prisma.otp.create({
       data: {
-        name: dto.name,
-        phone: dto.phone,
         email: dto.email,
         code,
         expiresAt,
@@ -36,7 +34,7 @@ export class OtpService {
 
     //await this.smsService.sendSms(dto.phone, `Tu código OTP es ${code}`);
 
-    await this.mailService.sendUserConfirmation(dto.name, dto.email, code);
+    await this.mailService.sendUserConfirmation(dto.email, code);
 
     return { message: 'Código enviado al correo' };
   }
@@ -46,7 +44,7 @@ export class OtpService {
     //    Quita la anotación de tipo explícita para que TypeScript infiera el tipo correcto.
     const record = await this.prisma.otp.findFirst({
       where: {
-        phone: dto.phone,
+        email: dto.email,
         code: dto.code,
         verified: false,
       },
@@ -67,7 +65,7 @@ export class OtpService {
     });
 
     const userData = await this.prisma.userData.findUnique({
-      where: { phone: dto.phone },
+      where: { email: dto.email },
       include: { user: true },
     });
 
