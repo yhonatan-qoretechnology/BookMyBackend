@@ -24,6 +24,7 @@ model Users {
 
   @@index([email])
   @@map("users")
+  Appointment Appointment[]
 }
 
 model UserAuth {
@@ -152,8 +153,8 @@ model UserLocation {
 }
 
 enum ClientType {
-  people
-  business
+  people // usuario persona
+  business // usuario empresa
 }
 
 enum ClientState {
@@ -201,8 +202,11 @@ model Sede {
   resenas         Resena[]
   galeria         Galeria[]
   serviceSedeProfesional ServiceSedeProfesional[]
-  @@map("sedes")
   Appointment Appointment[]
+   HorarioSede HorarioSede[]
+  DiaCerradoSede DiaCerradoSede[]
+  @@map("sedes")
+  
 }
 
 model Profesional {
@@ -218,8 +222,10 @@ model Profesional {
   sede         Sede     @relation(fields: [sedeId], references: [id])
  servicios   Service[] // Relación de muchos a muchos
  serviceSedeProfesional ServiceSedeProfesional[]
+ Appointment Appointment[]
+  DisponibilidadProfesional DisponibilidadProfesional[]
   @@map("profesionales")
-  Appointment Appointment[]
+  
 }
 
 enum ResenaState {
@@ -324,11 +330,24 @@ model ServiceSedeProfesional {
 }
 
 
+enum AppointmentStatus {
+  PENDING    // pendiente de confirmación
+  CONFIRMED  // confirmada
+  COMPLETED  // completada
+  CANCELLED  // cancelada
+  NO_SHOW    // el cliente no asistió
+}
+
+
 
 model Appointment {
   id              Int         @id @default(autoincrement())
   fecha           DateTime
-  hora            String
+  horaInicio      DateTime          // inicio
+  horaFin         DateTime          // fin
+  duracion        Int               // minutos
+  estado          AppointmentStatus @default(PENDING)
+  notas           String?           // notas opcionales
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -341,6 +360,57 @@ model Appointment {
   profesionalId   Int
   profesional     Profesional @relation(fields: [profesionalId], references: [id])
 
-  @@unique([profesionalId, fecha, hora]) // Evita que un profesional tenga 2 Appointments a la misma hora
+   userId          Int
+   user            Users             @relation(fields: [userId], references: [id])
 
+  @@index([fecha])
+  @@index([profesionalId, fecha])
+  @@index([sedeId, fecha])
+  @@unique([profesionalId, horaInicio]) // evita doble reserva a la misma hora
+
+}
+
+model HorarioSede {
+  id        Int      @id @default(autoincrement())
+  sedeId    Int
+  diaSemana Int      // 0=Domingo, 1=Lunes, etc.
+  horaApertura String
+  horaCierre   String
+  activo    Boolean  @default(true)
+
+  sede      Sede     @relation(fields: [sedeId], references: [id])
+
+  @@unique([sedeId, diaSemana])
+  @@map("horario_sede")
+}
+
+model DiaCerradoSede {
+  id          Int      @id @default(autoincrement())
+  sedeId      Int
+  fecha       DateTime // fecha cerrada
+  motivo      String?
+  todoElDia   Boolean  @default(true)
+  horaInicio  String?
+  horaFin     String?
+
+  sede        Sede     @relation(fields: [sedeId], references: [id])
+
+  @@index([sedeId, fecha])
+  @@map("dias_cerrados_sede")
+}
+
+model DisponibilidadProfesional {
+  id             Int      @id @default(autoincrement())
+  profesionalId  Int
+  fecha          DateTime // día específico
+  disponible     Boolean  @default(true)
+  horaInicio     String?  // rango inicio
+  horaFin        String?  // rango fin
+  motivo         String?  // motivo (vacaciones, enfermedad, etc.)
+
+  profesional    Profesional @relation(fields: [profesionalId], references: [id])
+
+  @@index([profesionalId, fecha])
+  @@unique([profesionalId, fecha])
+  @@map("disponibilidad_profesional")
 }

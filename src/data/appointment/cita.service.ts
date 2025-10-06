@@ -17,7 +17,8 @@ export class CitaService {
    * @returns La cita recién creada.
    */
   async create(createCitaDto: CreateCitaDto) {
-    const { sedeId, serviceId, profesionalId, fecha, hora } = createCitaDto;
+    const { sedeId, serviceId, profesionalId, fecha, hora, usuarioId } =
+      createCitaDto;
 
     // 1. Validar que la sede, el servicio y el profesional existan.
     const sede = await this.prisma.sede.findUnique({ where: { id: sedeId } });
@@ -89,7 +90,7 @@ export class CitaService {
       where: {
         profesionalId,
         fecha: fechaCita,
-        hora,
+        horaInicio: hora,
       },
     });
 
@@ -105,8 +106,15 @@ export class CitaService {
         sedeId,
         serviceId,
         profesionalId,
+        userId: createCitaDto.usuarioId, // Asegúrate de que userId esté presente en createCitaDto
         fecha: fechaCita,
-        hora,
+        horaInicio: hora,
+        horaFin: new Date(
+          new Date(`${fecha}T${hora}:00`).getTime() + 30 * 60000,
+        ), // Asumiendo una duración de 30 minutos
+        duracion: 30, // Duración en minutos
+        estado: 'PENDING', // Estado inicial  de la cita pendiente
+        notas: '5',
       },
     });
 
@@ -133,13 +141,13 @@ export class CitaService {
     ) {
       const profesionalId = updateCitaDto.profesionalId || cita.profesionalId;
       const fecha = updateCitaDto.fecha || cita.fecha;
-      const hora = updateCitaDto.hora || cita.hora;
+      const hora = updateCitaDto.hora || cita.horaInicio;
 
       const citaExistente = await this.prisma.appointment.findFirst({
         where: {
           profesionalId,
           fecha,
-          hora,
+          horaInicio: hora,
           NOT: { id }, // Ignora la cita actual para evitar conflictos.
         },
       });

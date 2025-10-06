@@ -45,4 +45,13 @@ export class CreateCitaDto {
   @IsNotEmpty()
   @IsString()
   hora: string;
+
+  @ApiProperty({
+    description: 'ID del Usuario que tomo la cita.',
+    example: 1,
+  })
+  @IsNotEmpty()
+  @IsNumber()
+  @Type(() => Number)
+  usuarioId: number;
 }
