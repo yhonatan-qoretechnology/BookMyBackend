@@ -3,11 +3,14 @@ import { ConfigModule } from '@nestjs/config';
 import { SwaggerModule } from '@nestjs/swagger';
 import * as Joi from 'joi';
 import { AuthModule } from './auth/auth.module';
-import { CitaModule } from './data/appointment/cita.module';
+import { AppointmentModule } from './data/appointment/appointment.module';
 import { CategoryModule } from './data/category/category.module';
 import { DataModule } from './data/data.module';
+import { DiaCerradoSedeModule } from './data/diaCerradoSede/dia-cerrado-sede.module';
+import { DisponibilidadProfesionalModule } from './data/disponibilidadProfesional/disponibilidad-profesional.module';
 import { MailModule } from './data/email/mail.module';
 import { EmpresaModule } from './data/empresa/empresa.module';
+import { HorarioSedeModule } from './data/HorarioSede/horario-sede.module';
 import { OtpModule } from './data/otp/otp.module';
 import { ProfesionalModule } from './data/profecional/profesional.module';
 import { ResenaModule } from './data/resena/resena.module';
@@ -46,7 +49,11 @@ import { SeedModule } from './seed/seed.module';
     ProfesionalModule,
     ResenaModule,
     ServiceSedeProfesionalModule,
-    CitaModule,
+    AppointmentModule,
+
+    DiaCerradoSedeModule,
+    DisponibilidadProfesionalModule,
+    HorarioSedeModule,
   ],
 })
 export class AppModule {}
