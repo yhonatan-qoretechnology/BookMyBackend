@@ -368,6 +368,7 @@ model Appointment {
   @@index([sedeId, fecha])
   @@unique([profesionalId, horaInicio]) // evita doble reserva a la misma hora
 
+   Payment Payment[]
 }
 
 model HorarioSede {
@@ -413,4 +414,35 @@ model DisponibilidadProfesional {
   @@index([profesionalId, fecha])
   @@unique([profesionalId, fecha])
   @@map("disponibilidad_profesional")
+}
+
+
+enum PaymentMethod {
+  CARD
+  CASH
+}
+
+enum PaymentStatus {
+  PENDING
+  RESERVED
+  PAID
+  FAILED
+  CANCELLED
+}
+
+model Payment {
+  id               Int             @id @default(autoincrement())
+  appointmentId    Int             @unique
+  appointment      Appointment     @relation(fields: [appointmentId], references: [id])
+  method           PaymentMethod
+  status           PaymentStatus   @default(PENDING)
+  totalAmount      Float
+  reservedAmount   Float?          // monto parcial si es pago en establecimiento
+  paidAmount       Float?          // cuánto se ha pagado
+  transactionId    String?
+  bankResponse     Json?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@map("payments")
 }

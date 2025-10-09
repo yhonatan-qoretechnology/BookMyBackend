@@ -169,6 +169,9 @@ Abre una interfaz gráfica en el navegador para explorar y editar los datos de t
 
 ---
 
+--iniciar session de nuevo
+gh auth login
+
 ## 📄 Ejemplo de Modelo
 
 ```prisma

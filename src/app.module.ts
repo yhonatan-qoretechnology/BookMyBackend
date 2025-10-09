@@ -12,6 +12,7 @@ import { MailModule } from './data/email/mail.module';
 import { EmpresaModule } from './data/empresa/empresa.module';
 import { HorarioSedeModule } from './data/HorarioSede/horario-sede.module';
 import { OtpModule } from './data/otp/otp.module';
+import { PaymentModule } from './data/payment/payment.module';
 import { ProfesionalModule } from './data/profecional/profesional.module';
 import { ResenaModule } from './data/resena/resena.module';
 import { SedeModule } from './data/sede/sede.module';
@@ -54,6 +55,7 @@ import { SeedModule } from './seed/seed.module';
     DiaCerradoSedeModule,
     DisponibilidadProfesionalModule,
     HorarioSedeModule,
+    PaymentModule,
   ],
 })
 export class AppModule {}
