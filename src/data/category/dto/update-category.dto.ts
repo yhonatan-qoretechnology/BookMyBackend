@@ -1,13 +1,21 @@
-import { ApiProperty, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, ValidateNested } from 'class-validator';
+import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { CreateCategoryDto } from './create-category.dto';
 import { CategoryTranslationDto } from './translation.dto';
 
 export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {
+  @ApiPropertyOptional({
+    description: 'Nueva URL o ruta de la imagen de la categoría (opcional)',
+    example: 'https://cdn.miapp.com/categories/new-electronics.png',
+  })
+  @IsString()
+  @IsOptional()
+  image?: string;
+
   @ApiProperty({
     type: [CategoryTranslationDto],
-    description: 'Array of translations to update',
+    description: 'Traducciones actualizadas',
     example: [
       {
         language: 'es',
@@ -17,10 +25,9 @@ export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {
       {
         language: 'en',
         name: 'Updated Electronics',
-        description: 'nee  description in English',
+        description: 'Updated description in English',
       },
     ],
-    required: true,
   })
   @IsArray()
   @ValidateNested({ each: true })

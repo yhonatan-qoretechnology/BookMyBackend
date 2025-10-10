@@ -100,6 +100,7 @@ model Category {
   id             Int                   @id @default(autoincrement())
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
+   image          String?  
   services       Service[]
   translations   CategoryTranslation[]
   UserCategories UserCategory[]
