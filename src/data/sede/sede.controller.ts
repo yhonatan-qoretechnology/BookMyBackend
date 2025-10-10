@@ -37,6 +37,7 @@ import { SedeService } from './sede.service';
 export class SedeController {
   constructor(private readonly sedeService: SedeService) {}
 
+  // 🟢 Crear una sede con imágenes
   @Post()
   @ApiOperation({ summary: 'Crear una nueva sede con imágenes' })
   @ApiResponse({ status: 201, description: 'Sede creada exitosamente.' })
@@ -54,7 +55,6 @@ export class SedeController {
     @Body() body: any,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    // Manejar el parseo manual de los campos
     const parsedBody = {
       ...body,
       horario: body.horario ? JSON.parse(body.horario) : undefined,
@@ -69,9 +69,7 @@ export class SedeController {
     if (errors.length > 0) {
       if (files && files.length > 0) {
         files.forEach((file) => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
+          if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
         });
       }
       throw new BadRequestException(errors);
@@ -79,6 +77,7 @@ export class SedeController {
     return this.sedeService.create(createSedeDto, files);
   }
 
+  // 🟢 Obtener todas las sedes
   @Get()
   @ApiOperation({ summary: 'Obtener todas las sedes' })
   @ApiResponse({ status: 200, description: 'Lista de todas las sedes.' })
@@ -86,6 +85,7 @@ export class SedeController {
     return this.sedeService.findAll();
   }
 
+  // 🟢 Obtener una sede por ID
   @Get(':id')
   @ApiOperation({ summary: 'Obtener una sede por su ID' })
   @ApiResponse({ status: 200, description: 'Sede encontrada.' })
@@ -94,6 +94,7 @@ export class SedeController {
     return this.sedeService.findOne(id);
   }
 
+  // 🟢 Actualizar una sede
   @Patch(':id')
   @ApiOperation({ summary: 'Actualizar una sede por su ID' })
   @ApiResponse({ status: 200, description: 'Sede actualizada exitosamente.' })
@@ -106,6 +107,7 @@ export class SedeController {
     return this.sedeService.update(id, updateSedeDto);
   }
 
+  // 🟢 Eliminar una sede
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Eliminar una sede por su ID' })
@@ -115,6 +117,7 @@ export class SedeController {
     return this.sedeService.remove(id);
   }
 
+  // 🟢 Añadir una imagen
   @Post(':id/imagen')
   @ApiOperation({ summary: 'Añadir una imagen a una sede existente' })
   @ApiResponse({ status: 200, description: 'Imagen añadida exitosamente.' })
@@ -149,6 +152,7 @@ export class SedeController {
     return this.sedeService.addImageToSede(id, file);
   }
 
+  // 🟢 Añadir múltiples imágenes (galería)
   @Post(':id/galeria')
   @ApiOperation({
     summary: 'Añadir varias imágenes a una sede existente (galería)',
@@ -186,5 +190,81 @@ export class SedeController {
       );
     }
     return this.sedeService.addImagesToGaleria(id, files);
+  }
+
+  // 🟠 Asociar servicios a una sede
+  @Post(':id/servicios')
+  @ApiOperation({ summary: 'Asociar servicios existentes a una sede' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        serviceIds: {
+          type: 'array',
+          items: { type: 'number' },
+          example: [1, 2, 3],
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Servicios asociados exitosamente a la sede.',
+  })
+  @ApiNotFoundResponse({ description: 'Sede o servicio no encontrado.' })
+  async addServices(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('serviceIds') serviceIds: number[],
+  ) {
+    if (!serviceIds || serviceIds.length === 0) {
+      throw new BadRequestException(
+        'Debe proporcionar al menos un ID de servicio.',
+      );
+    }
+    return this.sedeService.addServicesToSede(id, serviceIds);
+  }
+
+  // 🔵 Obtener los servicios de una sede
+  @Get(':id/servicios')
+  @ApiOperation({ summary: 'Obtener todos los servicios asociados a una sede' })
+  @ApiResponse({
+    status: 200,
+    description: 'Servicios obtenidos exitosamente.',
+  })
+  @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
+  async getServices(@Param('id', ParseIntPipe) id: number) {
+    return this.sedeService.getServicesBySede(id);
+  }
+
+  // 🔴 Eliminar servicios asociados de una sede
+  @Delete(':id/servicios')
+  @ApiOperation({ summary: 'Eliminar servicios asociados de una sede' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        serviceIds: {
+          type: 'array',
+          items: { type: 'number' },
+          example: [1, 2],
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Servicios desasociados exitosamente de la sede.',
+  })
+  @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
+  async removeServices(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('serviceIds') serviceIds: number[],
+  ) {
+    if (!serviceIds || serviceIds.length === 0) {
+      throw new BadRequestException(
+        'Debe proporcionar al menos un ID de servicio.',
+      );
+    }
+    return this.sedeService.removeServicesFromSede(id, serviceIds);
   }
 }

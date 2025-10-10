@@ -207,6 +207,7 @@ model Sede {
   DiaCerradoSede DiaCerradoSede[]
   @@map("sedes")
   
+  Service Service[] @relation("SedeServicios")
 }
 
 model Profesional {
@@ -295,7 +296,7 @@ model Service {
   profesionales    Profesional[] // Relación de muchos a muchos
   resenas          Resena[]
  serviceSedeProfesional ServiceSedeProfesional[]
-
+  sedes            Sede[]               @relation("SedeServicios")
   @@index([categoryId])
   @@map("servicios")
   Appointment Appointment[]

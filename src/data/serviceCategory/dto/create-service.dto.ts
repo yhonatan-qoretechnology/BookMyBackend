@@ -1,6 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsNotEmpty, ValidateNested } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
 import { PriceDto } from './price.dto';
 import { ServiceTranslationDto } from './service-translation.dto';
 
@@ -57,4 +64,15 @@ export class CreateServiceDto {
   @ValidateNested({ each: true })
   @Type(() => PriceDto)
   prices: PriceDto[];
+
+  @ApiProperty({
+    example: [1, 2],
+    description: 'Lista opcional de IDs de sedes donde se ofrece este servicio',
+    required: false,
+  })
+  @IsArray()
+  @IsInt({ each: true })
+  @ArrayNotEmpty()
+  @IsOptional()
+  sedeIds?: number[];
 }

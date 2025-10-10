@@ -14,6 +14,7 @@ import { UpdateSedeDto } from './dto/update-sede.dto';
 export class SedeService {
   constructor(private prisma: PrismaService) {}
 
+  // 🔹 Crear una nueva sede
   async create(createSedeDto: CreateSedeDto, files: Express.Multer.File[]) {
     try {
       const empresa = await this.prisma.empresa.findUnique({
@@ -28,7 +29,6 @@ export class SedeService {
       const sede = await this.prisma.sede.create({
         data: {
           ...createSedeDto,
-          // NestJS ya ha convertido los campos JSON a objetos/arrays nativos.
         },
       });
 
@@ -67,13 +67,22 @@ export class SedeService {
     }
   }
 
+  // 🔹 Obtener todas las sedes
   async findAll() {
-    return this.prisma.sede.findMany();
+    return this.prisma.sede.findMany({
+      include: {
+        Service: true, // incluir los servicios asociados
+      },
+    });
   }
 
+  // 🔹 Obtener una sede específica
   async findOne(id: number) {
     const sede = await this.prisma.sede.findUnique({
       where: { id },
+      include: {
+        Service: true, // incluir los servicios asociados
+      },
     });
     if (!sede) {
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
@@ -81,19 +90,20 @@ export class SedeService {
     return sede;
   }
 
+  // 🔹 Actualizar datos de la sede
   async update(id: number, updateSedeDto: UpdateSedeDto) {
     const sede = await this.prisma.sede.findUnique({ where: { id } });
     if (!sede) {
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
     }
 
-    // La data ya está en el formato correcto, no es necesario parsear
     return this.prisma.sede.update({
       where: { id },
       data: updateSedeDto,
     });
   }
 
+  // 🔹 Eliminar una sede
   async remove(id: number) {
     const sede = await this.prisma.sede.findUnique({ where: { id } });
     if (!sede) {
@@ -108,6 +118,7 @@ export class SedeService {
     return this.prisma.sede.delete({ where: { id } });
   }
 
+  // 🔹 Agregar una sola imagen
   async addImageToSede(id: number, file: Express.Multer.File) {
     const sede = await this.prisma.sede.findUnique({
       where: { id },
@@ -135,6 +146,7 @@ export class SedeService {
     });
   }
 
+  // 🔹 Agregar múltiples imágenes
   async addImagesToGaleria(id: number, files: Express.Multer.File[]) {
     const sede = await this.prisma.sede.findUnique({ where: { id } });
     if (!sede) {
@@ -165,6 +177,81 @@ export class SedeService {
     });
   }
 
+  // 🔹 Asociar servicios a una sede
+  async addServicesToSede(sedeId: number, serviceIds: number[]) {
+    const sede = await this.prisma.sede.findUnique({
+      where: { id: sedeId },
+    });
+
+    if (!sede) {
+      throw new NotFoundException(`Sede con ID ${sedeId} no encontrada.`);
+    }
+
+    // Verificar que los servicios existan
+    const services = await this.prisma.service.findMany({
+      where: { id: { in: serviceIds } },
+    });
+
+    if (services.length !== serviceIds.length) {
+      const missingIds = serviceIds.filter(
+        (id) => !services.find((s) => s.id === id),
+      );
+      throw new NotFoundException(
+        `Servicios no encontrados: ${missingIds.join(', ')}`,
+      );
+    }
+
+    return this.prisma.sede.update({
+      where: { id: sedeId },
+      data: {
+        Service: {
+          connect: serviceIds.map((id) => ({ id })),
+        },
+      },
+      include: {
+        Service: true,
+      },
+    });
+  }
+
+  // 🔹 Eliminar servicios asociados de una sede
+  async removeServicesFromSede(sedeId: number, serviceIds: number[]) {
+    const sede = await this.prisma.sede.findUnique({
+      where: { id: sedeId },
+    });
+
+    if (!sede) {
+      throw new NotFoundException(`Sede con ID ${sedeId} no encontrada.`);
+    }
+
+    return this.prisma.sede.update({
+      where: { id: sedeId },
+      data: {
+        Service: {
+          disconnect: serviceIds.map((id) => ({ id })),
+        },
+      },
+      include: {
+        Service: true,
+      },
+    });
+  }
+
+  // 🔹 Obtener servicios de una sede
+  async getServicesBySede(sedeId: number) {
+    const sede = await this.prisma.sede.findUnique({
+      where: { id: sedeId },
+      include: { Service: true },
+    });
+
+    if (!sede) {
+      throw new NotFoundException(`Sede con ID ${sedeId} no encontrada.`);
+    }
+
+    return sede.Service;
+  }
+
+  // 🔹 Utilidad para limpiar archivos temporales
   private deleteTempFiles(files: Express.Multer.File[]) {
     if (files && files.length > 0) {
       files.forEach((file) => {
