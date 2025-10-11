@@ -71,6 +71,24 @@ export class CategoryService {
     return categories.filter((c) => c.translations.length > 0);
   }
 
+  async findThenRandom(language: string = 'es') {
+    // Obtener todas las categorías con traducciones en el idioma solicitado
+    const categories = await this.prisma.category.findMany({
+      include: {
+        translations: { where: { language } },
+      },
+    });
+
+    // Filtrar categorías que tengan traducciones válidas
+    const filtered = categories.filter((c) => c.translations.length > 0);
+
+    // Mezclar aleatoriamente (Fisher-Yates shuffle)
+    const shuffled = filtered.sort(() => Math.random() - 0.5);
+
+    // Limitar a 10 resultados
+    return shuffled.slice(0, 10);
+  }
+
   /**
    * Obtiene una categoría por ID
    */

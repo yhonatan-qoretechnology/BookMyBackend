@@ -54,6 +54,13 @@ export class CategoryController {
     return this.categoryService.findAll(language);
   }
 
+  @Get('random')
+  @ApiOperation({ summary: 'Listar categorías aleatorias' })
+  @ApiResponse({ status: 200, description: 'Lista de categorías aleatorias.' })
+  findThenRandom(@Query('language') language: string = 'es') {
+    return this.categoryService.findThenRandom(language);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Obtener categoría por ID e idioma' })
   @ApiResponse({ status: 200, description: 'Categoría encontrada.' })
