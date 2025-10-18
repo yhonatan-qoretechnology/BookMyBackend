@@ -18,4 +18,16 @@ export class SeedController {
   async seedEmpresas() {
     return this.seedService.seedEmpresas();
   }
+
+  @Post('categories')
+  @ApiOperation({ summary: 'Ejecuta el seed de categorías y traducciones' })
+  async seedCategories() {
+    return this.seedService.seedCategories();
+  }
+
+  @Post('seedSedes')
+  @ApiOperation({ summary: 'Ejecutar seed de sedes (solo desarrollo)' })
+  async seedSedes() {
+    return this.seedService.seedSedes();
+  }
 }
