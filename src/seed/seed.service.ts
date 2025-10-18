@@ -41,4 +41,28 @@ export class SeedService {
       }
     }
   }
+
+  ///seed de empresas
+  async seedEmpresas() {
+    const empresas = [
+      {
+        nombre: 'Glow',
+        telefono: '+34664474706',
+        email: 'servicio@glowexperience.eu',
+        nit: '000000000-1',
+        descripcion: 'Salud/belleza',
+        logo: 'uploads/logos/f42bcfbb3666c38a6108c26b3da9ecd7',
+      },
+    ];
+
+    await this.prisma.empresa.createMany({
+      data: empresas,
+      skipDuplicates: true,
+    });
+
+    return {
+      message: 'Seed ejecutado correctamente.',
+      total: empresas.length,
+    };
+  }
 }
