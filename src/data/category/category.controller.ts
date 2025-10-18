@@ -14,18 +14,16 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  ApiBadRequestResponse,
   ApiBody,
   ApiConsumes,
-  ApiNotFoundResponse,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { multerConfig } from 'src/config/multer.config';
 import { CreateCategoryWithFileDto } from '../serviceCategory/dto/create-category-with-file.dto';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
-import { UpdateCategoryImageDto } from './dto/update-category-image.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @ApiTags('Categories')
@@ -37,9 +35,7 @@ export class CategoryController {
   @ApiOperation({ summary: 'Crear categoría con traducciones e imagen' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: CreateCategoryWithFileDto })
-  @ApiResponse({ status: 201, description: 'Categoría creada exitosamente.' })
-  @ApiBadRequestResponse({ description: 'Datos inválidos o idioma duplicado.' })
-  @UseInterceptors(FileInterceptor('image', { dest: './uploads/categories' }))
+  @UseInterceptors(FileInterceptor('image', multerConfig)) // 👈 aquí
   async create(
     @Body() createCategoryDto: CreateCategoryDto,
     @UploadedFile() file?: Express.Multer.File,
@@ -48,23 +44,16 @@ export class CategoryController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Listar categorías por idioma' })
-  @ApiResponse({ status: 200, description: 'Lista de categorías.' })
   findAll(@Query('language') language: string = 'es') {
     return this.categoryService.findAll(language);
   }
 
   @Get('random')
-  @ApiOperation({ summary: 'Listar categorías aleatorias' })
-  @ApiResponse({ status: 200, description: 'Lista de categorías aleatorias.' })
   findThenRandom(@Query('language') language: string = 'es') {
     return this.categoryService.findThenRandom(language);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Obtener categoría por ID e idioma' })
-  @ApiResponse({ status: 200, description: 'Categoría encontrada.' })
-  @ApiNotFoundResponse({ description: 'Categoría no encontrada.' })
   findOne(
     @Param('id', ParseIntPipe) id: number,
     @Query('language') language: string = 'es',
@@ -73,16 +62,8 @@ export class CategoryController {
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Actualizar categoría (imagen opcional)' })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ type: CreateCategoryWithFileDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Categoría actualizada exitosamente.',
-  })
-  @ApiBadRequestResponse({ description: 'Datos inválidos o idioma duplicado.' })
-  @ApiNotFoundResponse({ description: 'Categoría no encontrada.' })
-  @UseInterceptors(FileInterceptor('image', { dest: './uploads/categories' }))
+  @UseInterceptors(FileInterceptor('image', multerConfig)) // 👈 aquí también
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateCategoryDto: UpdateCategoryDto,
@@ -91,31 +72,34 @@ export class CategoryController {
     return this.categoryService.update(id, updateCategoryDto, file);
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Eliminar categoría e imagen' })
-  @ApiResponse({
-    status: 200,
-    description: 'Categoría eliminada correctamente.',
-  })
-  @ApiNotFoundResponse({ description: 'Categoría no encontrada.' })
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    return this.categoryService.remove(id);
-  }
-
-  // 🔹 Endpoint para actualizar solo la imagen
   @Patch(':id/image')
   @ApiOperation({ summary: 'Actualizar solo la imagen de una categoría' })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ type: UpdateCategoryImageDto })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        image: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 200,
     description: 'Imagen actualizada correctamente.',
   })
-  @UseInterceptors(FileInterceptor('image', { dest: './uploads/categories' }))
+  @UseInterceptors(FileInterceptor('image', multerConfig))
   async updateImage(
     @Param('id', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.categoryService.updateImage(id, file);
+  }
+
+  @Delete(':id')
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    return this.categoryService.remove(id);
   }
 }

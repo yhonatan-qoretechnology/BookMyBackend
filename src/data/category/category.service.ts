@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -195,7 +196,6 @@ export class CategoryService {
     return { message: `Categoría con ID ${id} eliminada correctamente.` };
   }
 
-  // 🔹 Actualizar solo la imagen de la categoría
   async updateImage(id: number, file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('Debe subir una imagen válida.');
@@ -203,26 +203,36 @@ export class CategoryService {
 
     const category = await this.prisma.category.findUnique({ where: { id } });
     if (!category) {
-      // Elimina archivo si la categoría no existe
-      fs.unlinkSync(file.path);
+      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
       throw new NotFoundException(`Categoría con ID ${id} no encontrada.`);
     }
 
-    // Eliminar imagen anterior (si existe)
-    if (category.image) {
+    // ✅ Eliminar imagen anterior (si existe)
+    if (category.image && fs.existsSync(category.image)) {
       try {
         fs.unlinkSync(category.image);
-      } catch (error) {
+      } catch {
         console.warn(
           `⚠️ No se pudo eliminar la imagen anterior: ${category.image}`,
         );
       }
     }
 
-    // Actualizar la nueva ruta de imagen
-    return this.prisma.category.update({
+    // ✅ Guardar ruta relativa
+    const relativePath = path
+      .relative(process.cwd(), file.path)
+      .replace(/\\/g, '/');
+
+    const updated = await this.prisma.category.update({
       where: { id },
-      data: { image: file.path },
+      data: { image: relativePath },
     });
+
+    // ✅ Mostrar la URL de acceso en consola
+    console.log(
+      `🖼️ Imagen accesible en: http://localhost:3000/${relativePath}`,
+    );
+
+    return updated;
   }
 }
