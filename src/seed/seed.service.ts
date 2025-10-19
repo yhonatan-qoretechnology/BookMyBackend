@@ -135,10 +135,6 @@ export class SeedService {
   }
 
   async seedSedes() {
-    if (process.env.NODE_ENV !== 'development') {
-      throw new ForbiddenException('Solo disponible en entorno de desarrollo');
-    }
-
     // ✅ Crear sedes con los campos correctos según tu modelo Prisma y DTO
     await this.prisma.sede.createMany({
       data: [
