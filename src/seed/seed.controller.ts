@@ -30,4 +30,9 @@ export class SeedController {
   async seedSedes() {
     return this.seedService.seedSedes();
   }
+
+  @Post('profesionales')
+  async seedProfesionales() {
+    return this.seedService.seedProfesionales();
+  }
 }

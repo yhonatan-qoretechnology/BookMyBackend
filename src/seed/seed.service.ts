@@ -194,4 +194,85 @@ export class SeedService {
 
     return { message: '✅ Seed de sedes ejecutado correctamente.' };
   }
+
+  async seedProfesionales() {
+    // ✅ Verificar que las sedes existan antes de insertar profesionales
+    const sedes = await this.prisma.sede.findMany();
+    if (sedes.length === 0) {
+      throw new ForbiddenException(
+        'No hay sedes registradas. Debes ejecutar primero el seed de sedes.',
+      );
+    }
+
+    await this.prisma.profesional.createMany({
+      data: [
+        {
+          nombre: 'Nayomi Clenshaw',
+          biografia:
+            'Manicurista profesional con amplia experiencia en tratamientos y diseño de uñas.',
+          phone: '+34666555444',
+          sedeId: 1,
+          imagen:
+            'https://d375139ucebi94.cloudfront.net/region2/es/26140/resource_photos/29b0ef56cfba49b5b5a6b9e344c577-glow-benalmadena-nayomi-clenshaw-872338da480847949c01025f01db7a-booksy.jpeg?size=250x250&size=100x100',
+        },
+        {
+          nombre: 'Lidia Sánchez',
+          biografia:
+            'Manicurista con atención al detalle y pasión por el arte en las uñas.',
+          phone: '+34666555445',
+          sedeId: 1,
+          imagen:
+            'https://d375139ucebi94.cloudfront.net/region2/es/26140/resource_photos/29b0ef56cfba49b5b5a6b9e344c577-glow-benalmadena-nayomi-clenshaw-872338da480847949c01025f01db7a-booksy.jpeg?size=250x250&size=100x100',
+        },
+        {
+          nombre: 'Priscila Cuervo',
+          biografia:
+            'Especialista en manicura moderna y técnicas de esmaltado profesional.',
+          phone: '+34666555446',
+          sedeId: 1,
+          imagen:
+            'https://d375139ucebi94.cloudfront.net/region2/es/26140/resource_photos/5c819b901a174187b5a02f5b90617e-glow-benalmadena-priscila-cuervo-bbaefaa0c2694ff3ab2fca32d7181f-booksy.jpeg?size=250x250&size=100x100',
+        },
+        {
+          nombre: 'Francesca Dela Magna',
+          biografia:
+            'Manicurista especializada en tratamientos estéticos y diseño artístico.',
+          phone: '+34666555447',
+          sedeId: 1,
+          imagen:
+            'https://d375139ucebi94.cloudfront.net/region2/es/26140/resource_photos/2512c13228f848acbc2652a15a8847-glow-benalmadena-francesca-dela-magna-f291664ec0fb42a09a2b168c453680-booksy.jpeg?size=250x250&size=100x100',
+        },
+        {
+          nombre: 'Laura',
+          biografia:
+            'Manicurista con amplia experiencia en técnicas modernas y tratamientos personalizados.',
+          phone: '+34666555448',
+          sedeId: 2,
+          imagen:
+            'https://d375139ucebi94.cloudfront.net/region2/es/25686/resource_photos/1b810cabfdba4ffba9202890e6712a-glow-fuengirola-laura-e36c370bb176421893583738986b8c-booksy.jpeg?size=250x250&size=100x100',
+        },
+        {
+          nombre: 'Natalia',
+          biografia:
+            'Especialista en manicura y pedicura, dedicada al cuidado integral de las uñas.',
+          phone: '+34666555449',
+          sedeId: 2,
+          imagen:
+            'https://d375139ucebi94.cloudfront.net/region2/es/25686/resource_photos/629f3f297b154693a8ff2992ec350e-glow-fuengirola-natalia-c444ed18a3f341bca6afbbdee6f77c-booksy.jpeg?size=250x250&size=100x100',
+        },
+        {
+          nombre: 'Gabriela',
+          biografia:
+            'Manicurista profesional con enfoque en tratamientos naturales y personalizados.',
+          phone: '+34666555450',
+          sedeId: 2,
+          imagen:
+            'https://d375139ucebi94.cloudfront.net/region2/es/25686/resource_photos/97eaa5d70ade4ccb94dbabde8cc2df-glow-fuengirola-gabriela-5c23aac4295b429ea292f86acc23d6-booksy.jpeg?size=250x250&size=100x100',
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    return { message: '✅ Seed de profesionales ejecutado correctamente.' };
+  }
 }
