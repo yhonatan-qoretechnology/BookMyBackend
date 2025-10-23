@@ -127,4 +127,27 @@ export class ServiceController {
     const dto = { sedeIds };
     return this.serviceService.update(id, dto as any);
   }
+
+  // 🔵 Listar servicios por categoría (filtrando idioma)
+  @Get('category/:categoryId')
+  @ApiOperation({
+    summary:
+      'Listar servicios por categoría con traducción filtrada por idioma',
+  })
+  @ApiQuery({
+    name: 'language',
+    enum: ['es', 'en'],
+    required: false,
+    description: 'Idioma de las traducciones a devolver (por defecto: es)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de servicios filtrados por categoría e idioma',
+  })
+  async getByCategory(
+    @Param('categoryId', ParseIntPipe) categoryId: number,
+    @Query('language') language: string = 'es', // idioma por defecto
+  ) {
+    return this.serviceService.findByCategory(categoryId, language);
+  }
 }

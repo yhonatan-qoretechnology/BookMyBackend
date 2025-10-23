@@ -201,4 +201,82 @@ export class ServiceService {
       return tx.service.delete({ where: { id } });
     });
   }
+
+  // 🔹 Listar servicios por categoría con idioma filtrado
+  async findByCategory(categoryId: number, language: string = 'es') {
+    const services = await this.prisma.service.findMany({
+      where: { categoryId },
+      include: {
+        translations: {
+          where: { language },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            language: true,
+          },
+        },
+        prices: {
+          select: {
+            id: true,
+            serviceId: true,
+            amount: true,
+            duration: true,
+            currency: true,
+          },
+        },
+        serviceSedeProfesional: {
+          include: {
+            sede: {
+              select: {
+                id: true,
+                nombre: true,
+                direccion: true,
+                telefono: true,
+                latitud: true,
+                longitud: true,
+                provincia: true,
+                horario: true,
+                diasCerrado: true,
+                imagenes: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+            profesional: {
+              select: {
+                id: true,
+                nombre: true,
+                biografia: true,
+                imagen: true,
+                phone: true,
+                state: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    if (!services || services.length === 0) {
+      throw new NotFoundException(
+        `No se encontraron servicios para la categoría ID ${categoryId}`,
+      );
+    }
+
+    // 🔹 Transformamos para agrupar sedes (sin duplicar servicios)
+    return services.map((service) => ({
+      id: service.id,
+      name: service.translations[0]?.name || 'Sin traducción',
+      description: service.translations[0]?.description || '',
+      prices: service.prices,
+      sedes: service.serviceSedeProfesional.map((ssp) => ssp.sede),
+      profesionales: service.serviceSedeProfesional
+        .map((ssp) => ssp.profesional)
+        .filter(Boolean), // elimina nulls
+    }));
+  }
 }
