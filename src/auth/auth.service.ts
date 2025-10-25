@@ -158,9 +158,7 @@ export class AuthService {
 
   async generateToken(user: any): Promise<string> {
     const payload = { email: user.email, id: user.id };
-    const token = this.jwtService.sign(payload, {
-      expiresIn: this.EXPIRATION_TOKEN_TIME,
-    });
+    const token = this.jwtService.sign(payload, { expiresIn: '1d' });
     return token;
   }
 
