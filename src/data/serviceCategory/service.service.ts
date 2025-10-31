@@ -279,4 +279,89 @@ export class ServiceService {
         .filter(Boolean), // elimina nulls
     }));
   }
+
+  // 🔹 Obtener todos los servicios de una sede específica
+  async findBySede(sedeId: number, language: string = 'es') {
+    // 1️⃣ Buscar todos los servicios relacionados a la sede
+    const services = await this.prisma.service.findMany({
+      where: {
+        serviceSedeProfesional: {
+          some: { sedeId },
+        },
+      },
+      include: {
+        translations: {
+          where: { language },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            language: true,
+          },
+        },
+        prices: {
+          select: {
+            id: true,
+            amount: true,
+            duration: true,
+            currency: true,
+          },
+        },
+        category: {
+          include: {
+            translations: {
+              where: { language },
+              select: { name: true, description: true },
+            },
+          },
+        },
+        serviceSedeProfesional: {
+          where: { sedeId },
+          include: {
+            profesional: {
+              select: {
+                id: true,
+                nombre: true,
+                biografia: true,
+                imagen: true,
+                phone: true,
+                state: true,
+              },
+            },
+            sede: {
+              select: {
+                id: true,
+                nombre: true,
+                direccion: true,
+                telefono: true,
+                latitud: true,
+                longitud: true,
+                provincia: true,
+                imagenes: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!services || services.length === 0) {
+      throw new NotFoundException(
+        `No se encontraron servicios para la sede ID ${sedeId}`,
+      );
+    }
+
+    // 2️⃣ Agrupar la información final
+    return services.map((service) => ({
+      id: service.id,
+      name: service.translations[0]?.name ?? 'Sin traducción',
+      description: service.translations[0]?.description ?? '',
+      category: service.category?.translations?.[0]?.name ?? 'Sin categoría',
+      prices: service.prices,
+      profesionales: service.serviceSedeProfesional
+        .map((ssp) => ssp.profesional)
+        .filter(Boolean),
+      sede: service.serviceSedeProfesional[0]?.sede,
+    }));
+  }
 }

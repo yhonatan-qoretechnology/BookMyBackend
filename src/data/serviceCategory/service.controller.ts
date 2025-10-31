@@ -150,4 +150,26 @@ export class ServiceController {
   ) {
     return this.serviceService.findByCategory(categoryId, language);
   }
+
+  // 🟢 Obtener todos los servicios de una sede
+  @Get('by-sede/:sedeId')
+  @ApiOperation({
+    summary: 'Listar todos los servicios de una sede',
+  })
+  @ApiQuery({
+    name: 'language',
+    enum: ['es', 'en'],
+    required: false,
+    description: 'Idioma de las traducciones a devolver (por defecto: es)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de servicios asociados a una sede',
+  })
+  async findBySede(
+    @Param('sedeId') sedeId: string,
+    @Query('language') language: string = 'es',
+  ) {
+    return this.serviceService.findBySede(Number(sedeId), language);
+  }
 }
