@@ -140,4 +140,75 @@ export class ProfesionalService {
     }
     return this.prisma.profesional.delete({ where: { id } });
   }
+
+  // 📦 Servicio para obtener los profesionales con sus servicios asociados por sede
+  async findProfesionalesPorSede(sedeId: number, language: string = 'es') {
+    const profesionales = await this.prisma.profesional.findMany({
+      where: { sedeId },
+      include: {
+        serviceSedeProfesional: {
+          include: {
+            service: {
+              include: {
+                translations: {
+                  where: { language },
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    language: true,
+                  },
+                },
+                prices: true,
+                category: {
+                  include: {
+                    translations: {
+                      where: { language },
+                      select: { name: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!profesionales.length) {
+      throw new NotFoundException(
+        `No hay profesionales registrados en esta sede`,
+      );
+    }
+
+    // 🧩 Transformación a una respuesta limpia y legible
+    return profesionales.map((prof) => {
+      const servicios = prof.serviceSedeProfesional
+        .filter((ssp) => ssp.service) // ✅ evita incluir relaciones vacías
+        .map((ssp) => ({
+          id: ssp.service.id,
+          nombre: ssp.service.translations[0]?.name ?? 'Sin nombre',
+          descripcion: ssp.service.translations[0]?.description ?? '',
+          categoria:
+            ssp.service.category?.translations?.[0]?.name ?? 'Sin categoría',
+          precios: ssp.service.prices.map((p) => ({
+            id: p.id,
+            amount: p.amount,
+            duration: p.duration,
+            currency: p.currency,
+          })),
+        }));
+
+      return {
+        id: prof.id,
+        nombre: prof.nombre,
+        biografia: prof.biografia,
+        imagen: prof.imagen,
+        telefono: prof.phone,
+        state: prof.state,
+        sedeId: prof.sedeId,
+        servicios,
+      };
+    });
+  }
 }
