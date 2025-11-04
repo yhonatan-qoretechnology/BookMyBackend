@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -124,5 +125,20 @@ export class ProfesionalController {
   @ApiNotFoundResponse({ description: 'Profesional no encontrado.' })
   async remove(@Param('id', ParseIntPipe) id: number) {
     return this.profesionalService.remove(id);
+  }
+
+  @Get('by-sede/:sedeId')
+  @ApiOperation({
+    summary: 'Obtener los profesionales de una sede con sus servicios',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de profesionales con sus servicios',
+  })
+  async findBySede(
+    @Param('sedeId', ParseIntPipe) sedeId: number,
+    @Query('lang') lang: string = 'es',
+  ) {
+    return this.profesionalService.findProfesionalesPorSede(sedeId, lang);
   }
 }
