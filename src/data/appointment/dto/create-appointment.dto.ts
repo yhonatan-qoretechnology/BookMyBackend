@@ -6,6 +6,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Min,
 } from 'class-validator';
 
 export class CreateAppointmentDto {
@@ -32,6 +33,7 @@ export class CreateAppointmentDto {
 
   @ApiProperty({ example: 30, description: 'Duración del servicio en minutos' })
   @IsInt()
+  @Min(1)
   duracion: number;
 
   @ApiProperty({ enum: AppointmentStatus, example: AppointmentStatus.PENDING })
