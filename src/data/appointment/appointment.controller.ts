@@ -31,6 +31,14 @@ export class AppointmentController {
     return this.appointmentService.findAll();
   }
 
+  @Get('users/:userId/services')
+  @ApiOperation({
+    summary: 'Listar servicios de un usuario separados por estado',
+  })
+  getUserServices(@Param('userId', ParseIntPipe) userId: number) {
+    return this.appointmentService.getUserServices(userId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Obtener una cita por ID' })
   findOne(@Param('id', ParseIntPipe) id: number) {

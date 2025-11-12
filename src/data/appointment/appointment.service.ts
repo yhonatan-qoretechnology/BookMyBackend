@@ -60,6 +60,43 @@ export class AppointmentService {
     });
   }
 
+  private buildAppointmentSummary(appointment: {
+    id: number;
+    serviceId: number;
+    profesionalId: number;
+    sedeId: number;
+    estado: AppointmentStatus;
+    fecha: Date;
+    horaInicio: Date;
+    horaFin: Date;
+    service?: {
+      translations: { language: string; name: string }[];
+    } | null;
+    profesional?: { nombre: string } | null;
+    sede?: { nombre: string } | null;
+  }) {
+    const serviceName =
+      appointment.service?.translations.find((translation) =>
+        ['es', 'es-ES', 'es-419'].includes(translation.language.toLowerCase()),
+      )?.name ??
+      appointment.service?.translations[0]?.name ??
+      null;
+
+    return {
+      appointmentId: appointment.id,
+      serviceId: appointment.serviceId,
+      serviceName,
+      profesionalId: appointment.profesionalId,
+      profesionalNombre: appointment.profesional?.nombre ?? null,
+      sedeId: appointment.sedeId,
+      sedeNombre: appointment.sede?.nombre ?? null,
+      estado: appointment.estado,
+      fecha: appointment.fecha.toISOString(),
+      horaInicio: appointment.horaInicio.toISOString(),
+      horaFin: appointment.horaFin.toISOString(),
+    };
+  }
+
   async create(data: CreateAppointmentDto) {
     const fecha = new Date(data.fecha);
     const horaInicio = new Date(data.horaInicio);
@@ -310,6 +347,59 @@ export class AppointmentService {
         horaFin,
       },
     });
+  }
+
+  async getUserServices(userId: number) {
+    const user = await this.prisma.users.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    const [pendingAppointments, completedAppointments] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          userId,
+          estado: {
+            in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED],
+          },
+        },
+        orderBy: { fecha: 'asc' },
+        include: {
+          service: {
+            select: {
+              translations: { select: { language: true, name: true } },
+            },
+          },
+          profesional: { select: { nombre: true } },
+          sede: { select: { nombre: true } },
+        },
+      }),
+      this.prisma.appointment.findMany({
+        where: {
+          userId,
+          estado: AppointmentStatus.COMPLETED,
+        },
+        orderBy: { fecha: 'desc' },
+        include: {
+          service: {
+            select: {
+              translations: { select: { language: true, name: true } },
+            },
+          },
+          profesional: { select: { nombre: true } },
+          sede: { select: { nombre: true } },
+        },
+      }),
+    ]);
+
+    return {
+      pending: pendingAppointments.map((appointment) =>
+        this.buildAppointmentSummary(appointment),
+      ),
+      completed: completedAppointments.map((appointment) =>
+        this.buildAppointmentSummary(appointment),
+      ),
+    };
   }
 
   async findAll() {
