@@ -1,5 +1,5 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { SaveUserCategoriesDto } from './dto/save-user-categories.dto';
@@ -35,6 +35,30 @@ export class UsersController {
     @Body() dto: SaveUserCategoriesDto,
   ) {
     const userId = req.user.userId;
+    return this.usersService.saveSelectedCategories(userId, dto.categoryIds);
+  }
+
+  @Post(':userId/categories')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Guardar categorías seleccionadas para un usuario específico',
+    description:
+      'Permite indicar explícitamente el ID del usuario al que se le asignarán las categorías.',
+  })
+  @ApiParam({
+    name: 'userId',
+    type: Number,
+    description: 'ID del usuario al que se le guardarán las categorías seleccionadas.',
+    example: 1,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Categorías guardadas correctamente para el usuario indicado.',
+  })
+  async saveCategoriesForUser(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: SaveUserCategoriesDto,
+  ) {
     return this.usersService.saveSelectedCategories(userId, dto.categoryIds);
   }
 }
