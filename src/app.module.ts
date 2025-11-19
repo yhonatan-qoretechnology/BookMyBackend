@@ -21,6 +21,7 @@ import { ServiceModule } from './data/serviceCategory/service.module';
 import { SmsModule } from './data/sms/sms.module';
 import { UserLocationModule } from './data/user-location/user-location.module';
 import { UserCategoriesModule } from './data/userCategory/user-categories.module';
+import { UsersModule } from './data/users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SeedModule } from './seed/seed.module';
 
@@ -37,13 +38,14 @@ import { SeedModule } from './seed/seed.module';
     PrismaModule,
     SwaggerModule,
     SeedModule,
-    DataModule,
+    DataModule, 
     SmsModule,
     OtpModule,
     MailModule,
     CategoryModule,
     ServiceModule,
     UserCategoriesModule,
+    UsersModule,
     UserLocationModule,
     EmpresaModule,
     SedeModule,
@@ -56,6 +58,7 @@ import { SeedModule } from './seed/seed.module';
     DisponibilidadProfesionalModule,
     HorarioSedeModule,
     PaymentModule,
+    UserCategoriesModule,
   ],
 })
 export class AppModule {}
