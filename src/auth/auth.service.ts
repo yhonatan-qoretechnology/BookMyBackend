@@ -91,7 +91,10 @@ export class AuthService {
       where: { email },
       select: {
         id: true,
+        email: true,
         password: true,
+        createdAt: true,
+        updatedAt: true,
         user: {
           select: {
             id: true,
@@ -142,7 +145,7 @@ export class AuthService {
     }
 
     // Remover password de la respuesta
-    const { password: _, ...userData } = userAuth;
+    const { password: _password, ...safeUserAuth } = userAuth;
 
     // Generar token con los datos del usuario
     const token = await this.generateToken({
@@ -151,7 +154,7 @@ export class AuthService {
     });
 
     return {
-      user: userAuth.user,
+      user: safeUserAuth,
       token,
     };
   }

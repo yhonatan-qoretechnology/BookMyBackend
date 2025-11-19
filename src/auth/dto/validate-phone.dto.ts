@@ -3,7 +3,7 @@ import { IsNotEmpty, IsString } from 'class-validator';
 
 export class ValidatePhoneDto {
   @ApiProperty({
-    example: '+34612345678',
+    example: '+348001112233',
     description: 'Número de teléfono en formato internacional (España)',
   })
   @IsString()
