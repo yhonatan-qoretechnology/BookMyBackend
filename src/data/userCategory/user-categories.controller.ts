@@ -105,7 +105,7 @@ export class UserCategoriesController {
     @Req() req: CustomRequest,
     @Query() query: GetUserCategoriesDto,
     @GetToken() token: string, // 👈 Se inyecta el token también aquí
-  ): Promise<CategoryResponseDto[]> {
+  ): Promise<any[]> {
     // Puedes usar 'token' aquí si lo necesitas para alguna lógica
     console.log('Token JWT recibido en GET:', token);
 

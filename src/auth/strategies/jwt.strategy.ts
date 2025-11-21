@@ -21,14 +21,20 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (!payload || isNaN(payload.id))
       throw new UnauthorizedException('Invalid token');
 
-    const user = await this.prisma.userAuth.findUnique({
+    // En el token estamos guardando el id de Users (ver AuthService.generateToken),
+    // por lo que debemos validar contra la tabla Users y no contra userAuth.
+    const user = await this.prisma.users.findUnique({
       where: {
         id: payload.id,
+      },
+      select: {
+        id: true,
+        email: true,
       },
     });
 
     if (!user) throw new UnauthorizedException('Invalid token');
 
-    return { userId: payload.id, name: payload.name, email: payload.email };
+    return { userId: user.id, email: user.email };
   }
 }
