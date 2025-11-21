@@ -77,7 +77,23 @@ export class AuthService {
       return user;
     } catch (error) {
       if (error.code === 'P2002') {
-        throw new BadRequestException('El email ya está en uso');
+        const target = Array.isArray((error as any).meta?.target)
+          ? ((error as any).meta.target as string[]).join(',')
+          : (((error as any).meta?.target as string | undefined) ?? '');
+
+        // Mensajes específicos según el índice/columna única que falle
+        if (target.includes('Users_email_key') || target.includes('email')) {
+          throw new BadRequestException('El email ya está registrado');
+        }
+
+        if (target.includes('UserData_phone_key') || target.includes('phone')) {
+          throw new BadRequestException('El teléfono ya está registrado');
+        }
+
+        // Fallback genérico para otros campos únicos
+        throw new BadRequestException(
+          'Ya existe un registro con los datos proporcionados.',
+        );
       }
       throw error;
     }
