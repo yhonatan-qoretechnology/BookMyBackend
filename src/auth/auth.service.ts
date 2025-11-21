@@ -83,10 +83,41 @@ export class AuthService {
 
         // Mensajes específicos según el índice/columna única que falle
         if (target.includes('Users_email_key') || target.includes('email')) {
+          // Buscar usuario por email y revisar estado
+          const existingUser = await this.prisma.users.findFirst({
+            where: { email: dto.email },
+            select: { state: true },
+          });
+
+          if (existingUser && existingUser.state !== 'enabled') {
+            throw new BadRequestException(
+              'El usuario ya está registrado pero no está activo.',
+            );
+          }
+
           throw new BadRequestException('El email ya está registrado');
         }
 
         if (target.includes('UserData_phone_key') || target.includes('phone')) {
+          // Buscar usuario por teléfono y revisar estado
+          const existingUserData = await this.prisma.userData.findFirst({
+            where: { phone: dto.phone },
+            select: {
+              user: {
+                select: { state: true },
+              },
+            },
+          });
+
+          if (
+            existingUserData?.user &&
+            existingUserData.user.state !== 'enabled'
+          ) {
+            throw new BadRequestException(
+              'El usuario ya está registrado pero no está activo.',
+            );
+          }
+
           throw new BadRequestException('El teléfono ya está registrado');
         }
 
