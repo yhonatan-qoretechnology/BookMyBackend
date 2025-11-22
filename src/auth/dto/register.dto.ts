@@ -1,9 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEmail,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -97,4 +99,16 @@ export class RegisterDto {
   })
   @IsEnum(ClientState)
   state: ClientState;
+
+  @ApiPropertyOptional({
+    example: [1, 5, 10],
+    description:
+      'IDs de las categorías que el usuario selecciona durante el registro.',
+    isArray: true,
+    type: Number,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  categoryIds?: number[];
 }

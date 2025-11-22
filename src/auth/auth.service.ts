@@ -74,6 +74,38 @@ export class AuthService {
         },
       });
 
+      // 3. Asociar categorías al usuario (si se enviaron en el registro)
+      if (dto.categoryIds && dto.categoryIds.length > 0) {
+        const uniqueCategoryIds = [...new Set(dto.categoryIds)];
+
+        // Validar que todas las categorías existen
+        const foundCategories = await this.prisma.category.findMany({
+          where: { id: { in: uniqueCategoryIds } },
+          select: { id: true },
+        });
+
+        if (foundCategories.length !== uniqueCategoryIds.length) {
+          const existingIds = new Set(foundCategories.map((c) => c.id));
+          const missingIds = uniqueCategoryIds.filter(
+            (id) => !existingIds.has(id),
+          );
+          throw new BadRequestException(
+            `Las siguientes categorías no se encontraron: ${missingIds.join(', ')}.`,
+          );
+        }
+
+        // Crear relaciones en userCategory
+        const userCategoryData = uniqueCategoryIds.map((categoryId) => ({
+          userId: user.id,
+          categoryId,
+        }));
+
+        await this.prisma.userCategory.createMany({
+          data: userCategoryData,
+          skipDuplicates: true,
+        });
+      }
+
       return user;
     } catch (error) {
       if (error.code === 'P2002') {
@@ -194,7 +226,13 @@ export class AuthService {
     // Generar token con los datos del usuario
     const token = await this.generateToken({
       id: userAuth.user.id,
-      email, // lo usas solo para el payload del token
+      email, // correo del usuario
+      name: userAuth.user.UserData?.name,
+      gender: userAuth.user.UserData?.gender,
+      birthdate: userAuth.user.UserData?.birthdate,
+      phone: userAuth.user.UserData?.phone,
+      idioma: userAuth.user.UserData?.idioma,
+      country: userAuth.user.UserData?.country,
     });
 
     return {
@@ -204,7 +242,17 @@ export class AuthService {
   }
 
   async generateToken(user: any): Promise<string> {
-    const payload = { email: user.email, id: user.id };
+    const payload = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      gender: user.gender,
+      birthdate: user.birthdate,
+      phone: user.phone,
+      idioma: user.idioma,
+      country: user.country,
+    };
+
     const token = this.jwtService.sign(payload, { expiresIn: '1d' });
     return token;
   }
