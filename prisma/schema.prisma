@@ -173,6 +173,11 @@ model Empresa {
   nit         String?  @map("nit")
   logo        String?  @map("logo_url") // URL del logo
   descripcion String?  @map("descripcion")
+  descripcionLarga String?  @map("descripcion_larga")
+  facebookUrl      String?  @map("facebook_url")
+  instagramUrl     String?  @map("instagram_url")
+  tiktokUrl        String?  @map("tiktok_url")
+  webUrl           String?  @map("web_url")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 

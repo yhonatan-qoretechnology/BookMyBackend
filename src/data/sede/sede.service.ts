@@ -76,6 +76,24 @@ export class SedeService {
     });
   }
 
+  // 🔹 Obtener todas las sedes de una empresa
+  async findByEmpresa(empresaId: number) {
+    const empresa = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+    });
+
+    if (!empresa) {
+      throw new NotFoundException(`Empresa con ID ${empresaId} no encontrada.`);
+    }
+
+    return this.prisma.sede.findMany({
+      where: { empresaId },
+      include: {
+        Service: true, // incluir los servicios asociados
+      },
+    });
+  }
+
   // 🔹 Obtener una sede específica
   async findOne(id: number) {
     const sede = await this.prisma.sede.findUnique({

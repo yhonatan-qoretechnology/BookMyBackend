@@ -55,7 +55,7 @@ export class SeedService {
         telefono: '+34664474706',
         email: 'servicio@glowexperience.eu',
         nit: '000000000-1',
-        descripcion: 'Salud/belleza',
+        descripcion: 'Reserva en nuestras sedes ',
         logo: 'uploads/logos/f42bcfbb3666c38a6108c26b3da9ecd7',
       },
     ];

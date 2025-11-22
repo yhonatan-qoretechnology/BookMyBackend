@@ -85,6 +85,20 @@ export class SedeController {
     return this.sedeService.findAll();
   }
 
+  // 🟢 Obtener todas las sedes de una empresa
+  @Get('empresa/:empresaId')
+  @ApiOperation({
+    summary: 'Obtener todas las sedes relacionadas a una empresa',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de sedes de la empresa especificada.',
+  })
+  @ApiNotFoundResponse({ description: 'Empresa no encontrada.' })
+  async findByEmpresa(@Param('empresaId', ParseIntPipe) empresaId: number) {
+    return this.sedeService.findByEmpresa(empresaId);
+  }
+
   // 🟢 Obtener una sede por ID
   @Get(':id')
   @ApiOperation({ summary: 'Obtener una sede por su ID' })
