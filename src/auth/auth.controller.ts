@@ -1,28 +1,73 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Get,
   HttpException,
   HttpStatus,
+  Param,
+  ParseIntPipe,
+  Patch,
   Post,
   Req,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBody, ApiHeader, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBadRequestResponse,
+  ApiBody,
+  ApiConsumes,
+  ApiHeader,
+  ApiNotFoundResponse,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdatePassDto } from './dto/update-pass.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { ValidatePhoneDto } from './dto/validate-phone.dto';
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @Get('users')
+  @ApiOperation({ summary: 'Listar todos los usuarios' })
+  async findAllUsers() {
+    return this.authService.findAllUsers();
+  }
+
+  @Get('users/:id')
+  @ApiOperation({ summary: 'Obtener un usuario por ID' })
+  @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
+  async findUserById(@Param('id', ParseIntPipe) id: number) {
+    return this.authService.findUserById(id);
+  }
+
   @Post('register')
-  @ApiOperation({ summary: 'Register a new user' })
-  @ApiResponse({ status: 201, description: 'User successfully registered' })
-  @ApiResponse({ status: 400, description: 'Validation error' })
-  async register(@Body() dto: RegisterDto) {
-    const user = await this.authService.register(dto);
+  @ApiOperation({ summary: 'Registrar un nuevo usuario con foto opcional' })
+  @ApiResponse({
+    status: 201,
+    description: 'Usuario registrado correctamente.',
+  })
+  @ApiBadRequestResponse({ description: 'Datos inválidos.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ type: RegisterDto })
+  @UseInterceptors(
+    FileInterceptor('fotoPerfil', {
+      dest: './uploads/users/temp',
+    }),
+  )
+  async register(
+    @Body() dto: RegisterDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const user = await this.authService.register(dto, file);
     return {
       message: 'User registered successfully',
       user,
@@ -78,5 +123,53 @@ export class AuthController {
   @Post('validate-phone')
   async validatePhone(@Body() dto: ValidatePhoneDto) {
     return this.authService.validatePhone(dto);
+  }
+
+  @Patch('users/:id')
+  @ApiOperation({ summary: 'Actualizar los datos de un usuario' })
+  @ApiResponse({
+    status: 200,
+    description: 'Usuario actualizado correctamente.',
+  })
+  @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
+  @ApiBadRequestResponse({ description: 'Datos inválidos.' })
+  async updateUser(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUserDto,
+  ) {
+    return this.authService.updateUserProfile(id, dto);
+  }
+
+  @Patch('users/:id/foto')
+  @ApiOperation({ summary: 'Actualizar la foto de perfil del usuario' })
+  @ApiResponse({ status: 200, description: 'Foto actualizada correctamente.' })
+  @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
+  @ApiBadRequestResponse({ description: 'Debe adjuntar un archivo de imagen.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        fotoPerfil: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+      required: ['fotoPerfil'],
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('fotoPerfil', {
+      dest: './uploads/users/temp',
+    }),
+  )
+  async updateUserPhoto(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Debe adjuntar una imagen.');
+    }
+    return this.authService.updateUserPhoto(id, file);
   }
 }

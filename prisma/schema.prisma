@@ -16,6 +16,7 @@ model Users {
   acceptPolitics Boolean        @default(false) @map("accept_polits")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
+  fotoPerfil     String?        @map("foto_perfil")
   UserAuth       UserAuth?      @relation("UserToUserAuth")
   UserCategories UserCategory[]
   UserData       UserData?      @relation("UserToUserData")

@@ -5,10 +5,13 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as fs from 'fs';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { ValidatePhoneDto } from './dto/validate-phone.dto';
 import { HashService } from './services/hash/hash.service';
 
@@ -30,7 +33,7 @@ export class AuthService {
     if (!user) throw new NotFoundException(`User ${userId} not found`);
   }
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, file?: Express.Multer.File) {
     try {
       const hashedPassword = await bcrypt.hash(dto.password, 10);
 
@@ -45,12 +48,25 @@ export class AuthService {
       }
 
       // 2. Crear el usuario solo si las validaciones pasan
+      let fotoPerfilPath: string | null = null;
+      if (file) {
+        const userUploadsDir = path.join('uploads', 'users');
+        if (!fs.existsSync(userUploadsDir)) {
+          fs.mkdirSync(userUploadsDir, { recursive: true });
+        }
+        const finalName = `${Date.now()}-${file.originalname}`;
+        const finalPath = path.join(userUploadsDir, finalName);
+        fs.renameSync(file.path, finalPath);
+        fotoPerfilPath = finalPath.replace(/\\/g, '/');
+      }
+
       const user = await this.prisma.users.create({
         data: {
           email: dto.email,
           clientType: dto.clientType,
           acceptTerms: dto.acceptTerms,
           acceptPolitics: dto.acceptPolitics,
+          fotoPerfil: fotoPerfilPath,
           UserAuth: {
             create: {
               email: dto.email,
@@ -108,6 +124,9 @@ export class AuthService {
 
       return user;
     } catch (error) {
+      if (file && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
       if (error.code === 'P2002') {
         const target = Array.isArray((error as any).meta?.target)
           ? ((error as any).meta.target as string[]).join(',')
@@ -160,6 +179,128 @@ export class AuthService {
       }
       throw error;
     }
+  }
+
+  async updateUserProfile(userId: number, dto: UpdateUserDto) {
+    const user = await this.prisma.users.findUnique({
+      where: { id: userId },
+      include: { UserData: true },
+    });
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${userId} no encontrado.`);
+    }
+
+    const {
+      categoryIds,
+      name,
+      phone,
+      idioma,
+      gender,
+      birthdate,
+      countryId,
+      ...userFields
+    } = dto;
+
+    if (Object.keys(userFields).length > 0) {
+      await this.prisma.users.update({
+        where: { id: userId },
+        data: userFields,
+      });
+    }
+
+    if (
+      name !== undefined ||
+      phone !== undefined ||
+      idioma !== undefined ||
+      gender !== undefined ||
+      birthdate !== undefined ||
+      countryId !== undefined
+    ) {
+      await this.prisma.userData.update({
+        where: { userId },
+        data: {
+          ...(name !== undefined ? { name } : {}),
+          ...(phone !== undefined ? { phone } : {}),
+          ...(idioma !== undefined ? { idioma } : {}),
+          ...(gender !== undefined ? { gender } : {}),
+          ...(birthdate !== undefined
+            ? { birthdate: birthdate ? new Date(birthdate) : null }
+            : {}),
+          ...(countryId !== undefined ? { countryId } : {}),
+        },
+      });
+    }
+
+    if (categoryIds && categoryIds.length > 0) {
+      await this.prisma.userCategory.deleteMany({ where: { userId } });
+      const uniqueIds = [...new Set(categoryIds)];
+      const data = uniqueIds.map((categoryId) => ({ userId, categoryId }));
+      await this.prisma.userCategory.createMany({ data, skipDuplicates: true });
+    }
+
+    return this.prisma.users.findUnique({
+      where: { id: userId },
+      include: { UserData: true, UserCategories: true },
+    });
+  }
+
+  async updateUserPhoto(userId: number, file: Express.Multer.File) {
+    const user = await this.prisma.users.findUnique({ where: { id: userId } });
+    if (!user) {
+      if (fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+      throw new NotFoundException(`Usuario con ID ${userId} no encontrado.`);
+    }
+
+    const userUploadsDir = path.join('uploads', 'users');
+    if (!fs.existsSync(userUploadsDir)) {
+      fs.mkdirSync(userUploadsDir, { recursive: true });
+    }
+
+    if (user.fotoPerfil && fs.existsSync(user.fotoPerfil)) {
+      fs.unlinkSync(user.fotoPerfil);
+    }
+
+    const newFileName = `${Date.now()}-${file.originalname}`;
+    const finalPath = path.join(userUploadsDir, newFileName);
+    fs.renameSync(file.path, finalPath);
+
+    const normalizedPath = finalPath.replace(/\\/g, '/');
+
+    return this.prisma.users.update({
+      where: { id: userId },
+      data: { fotoPerfil: normalizedPath },
+    });
+  }
+
+  async findAllUsers() {
+    return this.prisma.users.findMany({
+      include: {
+        UserData: true,
+        UserCategories: {
+          include: { category: true },
+        },
+      },
+    });
+  }
+
+  async findUserById(userId: number) {
+    const user = await this.prisma.users.findUnique({
+      where: { id: userId },
+      include: {
+        UserData: true,
+        UserCategories: {
+          include: { category: true },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${userId} no encontrado.`);
+    }
+
+    return user;
   }
 
   async login(loginDto: LoginDto) {

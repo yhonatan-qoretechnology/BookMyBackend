@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -14,12 +15,12 @@ import {
   MinLength,
 } from 'class-validator';
 
-enum ClientType {
+export enum ClientType {
   people = 'people',
   business = 'business',
 }
 
-enum ClientState {
+export enum ClientState {
   enabled = 'enabled',
   disabled = 'disabled',
   blocked = 'blocked',
@@ -65,14 +66,21 @@ export class RegisterDto {
   @ApiProperty({ example: 1, description: 'Country ID (foreign key)' })
   @IsNotEmpty()
   @IsNumber()
+  @Type(() => Number)
   countryId: number;
 
   @ApiProperty({ example: true, description: 'Accept terms and conditions' })
   @IsBoolean()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toLowerCase() === 'true' : value,
+  )
   acceptTerms: boolean;
 
   @ApiProperty({ example: true, description: 'Accept privacy policy' })
   @IsBoolean()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.toLowerCase() === 'true' : value,
+  )
   acceptPolitics: boolean;
 
   @ApiProperty({
@@ -101,6 +109,14 @@ export class RegisterDto {
   state: ClientState;
 
   @ApiPropertyOptional({
+    description: 'Archivo de la foto de perfil del usuario',
+    type: 'string',
+    format: 'binary',
+  })
+  @IsOptional()
+  fotoPerfil?: string;
+
+  @ApiPropertyOptional({
     example: [1, 5, 10],
     description:
       'IDs de las categorías que el usuario selecciona durante el registro.',
@@ -110,5 +126,17 @@ export class RegisterDto {
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) {
+      return value.map((v) => Number(v));
+    }
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value
+        .split(',')
+        .map((v) => Number(v.trim()))
+        .filter((v) => !Number.isNaN(v));
+    }
+    return undefined;
+  })
   categoryIds?: number[];
 }
