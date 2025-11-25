@@ -206,6 +206,44 @@ export class SedeController {
     return this.sedeService.addImagesToGaleria(id, files);
   }
 
+  // 🟢 Subir imágenes adicionales a una sede
+  @Post(':id/imagenes')
+  @ApiOperation({ summary: 'Subir imágenes adicionales a una sede' })
+  @ApiResponse({ status: 200, description: 'Imágenes añadidas exitosamente.' })
+  @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Archivos de imágenes adicionales a subir',
+    schema: {
+      type: 'object',
+      properties: {
+        imagenes: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FilesInterceptor('imagenes', 10, {
+      dest: './uploads/sedes/temp',
+    }),
+  )
+  async uploadAdditionalImages(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    if (!files || files.length === 0) {
+      throw new BadRequestException(
+        'Debe subir al menos un archivo de imagen.',
+      );
+    }
+    return this.sedeService.addImagesToGaleria(id, files);
+  }
+
   // 🟠 Asociar servicios a una sede
   @Post(':id/servicios')
   @ApiOperation({ summary: 'Asociar servicios existentes a una sede' })
