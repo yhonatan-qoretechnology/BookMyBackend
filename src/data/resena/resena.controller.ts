@@ -54,6 +54,14 @@ export class ResenaController {
     return this.resenaService.findOne(id);
   }
 
+  @Get('sede/:sedeId')
+  @ApiOperation({ summary: 'Obtener reseñas asociadas a una sede' })
+  @ApiResponse({ status: 200, description: 'Listado de reseñas de la sede.' })
+  @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
+  findBySede(@Param('sedeId', ParseIntPipe) sedeId: number) {
+    return this.resenaService.findBySede(sedeId);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Actualizar una reseña por su ID' })
   @ApiResponse({ status: 200, description: 'Reseña actualizada exitosamente.' })
