@@ -321,6 +321,7 @@ export class AuthService {
             acceptPolitics: true,
             createdAt: true,
             updatedAt: true,
+            fotoPerfil: true,
             UserData: {
               select: {
                 id: true,
