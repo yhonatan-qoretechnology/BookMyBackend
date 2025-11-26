@@ -108,15 +108,29 @@ export class ResenaService {
     if (!sede) {
       throw new NotFoundException(`Sede con ID ${sedeId} no encontrada.`);
     }
-
-    return this.prisma.resena.findMany({
+    const resenas = await this.prisma.resena.findMany({
       where: { sedeId },
       include: {
         sede: true,
         service: true,
-        usuario: true,
+        usuario: {
+          include: {
+            UserData: true,
+          },
+        },
       },
     });
+
+    return resenas.map((resena) => ({
+      ...resena,
+      usuario: resena.usuario
+        ? {
+            ...resena.usuario,
+            fotoPerfil: resena.usuario.fotoPerfil ?? '',
+            UserData: resena.usuario.UserData ?? null,
+          }
+        : null,
+    }));
   }
 
   async update(id: number, updateResenaDto: UpdateResenaDto) {
