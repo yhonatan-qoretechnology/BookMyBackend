@@ -97,6 +97,30 @@ export class ProfesionalService {
             nombre: true,
             direccion: true,
             telefono: true,
+            latitud: true,
+            longitud: true,
+            provincia: true,
+            horario: true,
+            diasCerrado: true,
+            HorarioSede: {
+              select: {
+                id: true,
+                diaSemana: true,
+                horaApertura: true,
+                horaCierre: true,
+                activo: true,
+              },
+            },
+            DiaCerradoSede: {
+              select: {
+                id: true,
+                fecha: true,
+                motivo: true,
+                todoElDia: true,
+                horaInicio: true,
+                horaFin: true,
+              },
+            },
           },
         },
         serviceSedeProfesional: {
@@ -164,6 +188,28 @@ export class ProfesionalService {
             nombre: profesional.sede.nombre,
             direccion: profesional.sede.direccion,
             telefono: profesional.sede.telefono,
+            latitud: profesional.sede.latitud,
+            longitud: profesional.sede.longitud,
+            provincia: profesional.sede.provincia,
+            horario: profesional.sede.horario,
+            diasCerrado: profesional.sede.diasCerrado,
+            horarioSemanal:
+              profesional.sede.HorarioSede?.map((registro) => ({
+                id: registro.id,
+                diaSemana: registro.diaSemana,
+                horaApertura: registro.horaApertura,
+                horaCierre: registro.horaCierre,
+                activo: registro.activo,
+              })) ?? [],
+            cierresProgramados:
+              profesional.sede.DiaCerradoSede?.map((cierre) => ({
+                id: cierre.id,
+                fecha: cierre.fecha,
+                motivo: cierre.motivo,
+                todoElDia: cierre.todoElDia,
+                horaInicio: cierre.horaInicio,
+                horaFin: cierre.horaFin,
+              })) ?? [],
           }
         : null,
       servicios,
