@@ -170,12 +170,6 @@ export class AppointmentService {
       );
     }
 
-    if (profesional.sedeId !== data.sedeId) {
-      throw new BadRequestException(
-        'El profesional no pertenece a la sede seleccionada',
-      );
-    }
-
     if (!service) {
       throw new BadRequestException('El servicio seleccionado no existe');
     }
