@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { AppointmentStatus, Prisma } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -208,6 +208,102 @@ export class ProfesionalService {
         state: prof.state,
         sedeId: prof.sedeId,
         servicios,
+      };
+    });
+  }
+
+  async findServiciosFuturosPorProfesional(
+    profesionalId: number,
+    language: string = 'es',
+  ) {
+    const profesional = await this.prisma.profesional.findUnique({
+      where: { id: profesionalId },
+    });
+
+    if (!profesional) {
+      throw new NotFoundException(
+        `Profesional con ID ${profesionalId} no encontrado.`,
+      );
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        profesionalId,
+        fecha: { gte: today },
+        estado: {
+          in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED],
+        },
+      },
+      orderBy: [{ fecha: 'asc' }, { horaInicio: 'asc' }],
+      include: {
+        service: {
+          include: {
+            translations: {
+              where: { language },
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                language: true,
+              },
+            },
+            prices: {
+              select: {
+                id: true,
+                amount: true,
+                duration: true,
+                currency: true,
+              },
+            },
+            category: {
+              include: {
+                translations: {
+                  where: { language },
+                  select: { name: true },
+                },
+              },
+            },
+          },
+        },
+        sede: {
+          select: {
+            id: true,
+            nombre: true,
+          },
+        },
+      },
+    });
+
+    return appointments.map((appointment) => {
+      const service = appointment.service;
+      const serviceTranslation = service?.translations?.[0];
+      const categoryName =
+        service?.category?.translations?.[0]?.name ?? 'Sin categoría';
+
+      return {
+        appointmentId: appointment.id,
+        fecha: appointment.fecha.toISOString(),
+        horaInicio: appointment.horaInicio.toISOString(),
+        horaFin: appointment.horaFin.toISOString(),
+        estado: appointment.estado,
+        service: service
+          ? {
+              id: service.id,
+              nombre: serviceTranslation?.name ?? 'Sin nombre',
+              descripcion: serviceTranslation?.description ?? '',
+              categoria: categoryName,
+              precios: service.prices.map((price) => ({
+                id: price.id,
+                amount: price.amount,
+                duration: price.duration,
+                currency: price.currency,
+              })),
+            }
+          : null,
+        sede: appointment.sede,
       };
     });
   }

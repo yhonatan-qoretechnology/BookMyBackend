@@ -253,20 +253,32 @@ export class AuthService {
       throw new NotFoundException(`Usuario con ID ${userId} no encontrado.`);
     }
 
-    const userUploadsDir = path.join('uploads', 'users');
-    if (!fs.existsSync(userUploadsDir)) {
-      fs.mkdirSync(userUploadsDir, { recursive: true });
+    const uploadsRootDir = path.join('uploads', 'users');
+    const userUploadsDir = path.join(uploadsRootDir, String(userId));
+    const userUploadsDirAbs = path.resolve(userUploadsDir);
+
+    if (!fs.existsSync(userUploadsDirAbs)) {
+      fs.mkdirSync(userUploadsDirAbs, { recursive: true });
     }
 
-    if (user.fotoPerfil && fs.existsSync(user.fotoPerfil)) {
-      fs.unlinkSync(user.fotoPerfil);
+    if (user.fotoPerfil) {
+      const previousPhotoAbs = path.resolve(user.fotoPerfil);
+      const isWithinUserDir = previousPhotoAbs.startsWith(
+        `${userUploadsDirAbs}${path.sep}`,
+      );
+
+      if (isWithinUserDir && fs.existsSync(previousPhotoAbs)) {
+        fs.unlinkSync(previousPhotoAbs);
+      }
     }
 
     const newFileName = `${Date.now()}-${file.originalname}`;
-    const finalPath = path.join(userUploadsDir, newFileName);
-    fs.renameSync(file.path, finalPath);
+    const tempFileAbsPath = path.resolve(file.path);
+    const finalPathRelative = path.join(userUploadsDir, newFileName);
+    const finalPathAbs = path.resolve(finalPathRelative);
+    fs.renameSync(tempFileAbsPath, finalPathAbs);
 
-    const normalizedPath = finalPath.replace(/\\/g, '/');
+    const normalizedPath = finalPathRelative.replace(/\\/g, '/');
 
     return this.prisma.users.update({
       where: { id: userId },

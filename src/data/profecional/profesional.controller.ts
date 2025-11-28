@@ -141,4 +141,21 @@ export class ProfesionalController {
   ) {
     return this.profesionalService.findProfesionalesPorSede(sedeId, lang);
   }
+
+  @Get(':id/servicios-futuros')
+  @ApiOperation({
+    summary:
+      'Obtener los servicios programados de un profesional desde hoy en adelante',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de servicios futuros del profesional',
+  })
+  @ApiNotFoundResponse({ description: 'Profesional no encontrado.' })
+  async findServiciosFuturos(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('lang') lang: string = 'es',
+  ) {
+    return this.profesionalService.findServiciosFuturosPorProfesional(id, lang);
+  }
 }
