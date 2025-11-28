@@ -84,6 +84,92 @@ export class ProfesionalService {
     return profesional;
   }
 
+  async findProfesionalConServiciosYSede(
+    profesionalId: number,
+    language: string = 'es',
+  ) {
+    const profesional = await this.prisma.profesional.findUnique({
+      where: { id: profesionalId },
+      include: {
+        sede: {
+          select: {
+            id: true,
+            nombre: true,
+            direccion: true,
+            telefono: true,
+          },
+        },
+        serviceSedeProfesional: {
+          include: {
+            service: {
+              include: {
+                translations: {
+                  where: { language },
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    language: true,
+                  },
+                },
+                prices: true,
+                category: {
+                  include: {
+                    translations: {
+                      where: { language },
+                      select: { name: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!profesional) {
+      throw new NotFoundException(
+        `Profesional con ID ${profesionalId} no encontrado.`,
+      );
+    }
+
+    const servicios = profesional.serviceSedeProfesional
+      .filter((ssp) => ssp.service)
+      .map((ssp) => ({
+        id: ssp.service.id,
+        nombre: ssp.service.translations[0]?.name ?? 'Sin nombre',
+        descripcion: ssp.service.translations[0]?.description ?? '',
+        categoria:
+          ssp.service.category?.translations?.[0]?.name ?? 'Sin categoría',
+        precios: ssp.service.prices.map((p) => ({
+          id: p.id,
+          amount: p.amount,
+          duration: p.duration,
+          currency: p.currency,
+        })),
+      }));
+
+    return {
+      id: profesional.id,
+      nombre: profesional.nombre,
+      biografia: profesional.biografia,
+      imagen: profesional.imagen,
+      telefono: profesional.phone,
+      state: profesional.state,
+      sedeId: profesional.sedeId,
+      sede: profesional.sede
+        ? {
+            id: profesional.sede.id,
+            nombre: profesional.sede.nombre,
+            direccion: profesional.sede.direccion,
+            telefono: profesional.sede.telefono,
+          }
+        : null,
+      servicios,
+    };
+  }
+
   async update(id: number, updateProfesionalDto: UpdateProfesionalDto) {
     const profesional = await this.prisma.profesional.findUnique({
       where: { id },

@@ -70,6 +70,23 @@ export class ProfesionalController {
     return this.profesionalService.findOne(id);
   }
 
+  @Get(':id/detalle')
+  @ApiOperation({
+    summary:
+      'Obtener un profesional con sus servicios asociados y la información de su sede',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Profesional con sus servicios y sede.',
+  })
+  @ApiNotFoundResponse({ description: 'Profesional no encontrado.' })
+  async findDetalle(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('lang') lang: string = 'es',
+  ) {
+    return this.profesionalService.findProfesionalConServiciosYSede(id, lang);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Actualizar un profesional por su ID' })
   @ApiResponse({
