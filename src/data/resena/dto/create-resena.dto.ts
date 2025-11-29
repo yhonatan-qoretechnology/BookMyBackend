@@ -58,16 +58,6 @@ export class CreateResenaDto {
 
   @ApiProperty({
     example: 1,
-    description: 'ID del servicio al que pertenece la reseña',
-    required: false,
-  })
-  @IsOptional()
-  @IsInt()
-  @Type(() => Number)
-  serviceId?: number;
-
-  @ApiProperty({
-    example: 1,
     description: 'ID del usuario que crea la reseña',
   })
   @IsNotEmpty()

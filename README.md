@@ -219,3 +219,7 @@ main();
 ---
 
 ## gh auth login
+
+npx prisma migrate dev
+npx prisma db push
+npx prisma generate

@@ -14,20 +14,9 @@ export class ResenaService {
 
   async create(createResenaDto: CreateResenaDto) {
     if (createResenaDto.tipo === ResenaType.SEDE) {
-      if (createResenaDto.serviceId) {
-        throw new BadRequestException(
-          'Una reseña de tipo SEDE no puede tener un serviceId.',
-        );
-      }
       if (createResenaDto.sedeId == null) {
         throw new BadRequestException(
           'Una reseña de tipo SEDE debe tener un sedeId.',
-        );
-      }
-    } else if (createResenaDto.tipo === ResenaType.SERVICIO) {
-      if (createResenaDto.serviceId == null) {
-        throw new BadRequestException(
-          'Una reseña de tipo SERVICIO debe tener un serviceId.',
         );
       }
     }
@@ -43,7 +32,7 @@ export class ResenaService {
     }
 
     // Validar que la sede o servicio existe según el tipo de reseña
-    if (createResenaDto.tipo === ResenaType.SEDE) {
+    if (createResenaDto.sedeId != null) {
       const sede = await this.prisma.sede.findUnique({
         where: { id: createResenaDto.sedeId },
       });
@@ -52,38 +41,26 @@ export class ResenaService {
           `Sede con ID ${createResenaDto.sedeId} no encontrada.`,
         );
       }
-    } else {
-      const service = await this.prisma.service.findUnique({
-        where: { id: createResenaDto.serviceId },
-      });
-      if (!service) {
-        throw new NotFoundException(
-          `Servicio con ID ${createResenaDto.serviceId} no encontrado.`,
-        );
-      }
-      if (createResenaDto.sedeId != null) {
-        const sede = await this.prisma.sede.findUnique({
-          where: { id: createResenaDto.sedeId },
-        });
-        if (!sede) {
-          throw new NotFoundException(
-            `Sede con ID ${createResenaDto.sedeId} no encontrada.`,
-          );
-        }
-      }
     }
 
-    return this.prisma.resena.create({
+    const resena = await this.prisma.resena.create({
       data: createResenaDto,
     });
+
+    const { sedeId, ...resenaSinRelaciones } = resena;
+
+    return resenaSinRelaciones;
   }
 
   async findAll() {
     return this.prisma.resena.findMany({
       include: {
         sede: true,
-        service: true,
-        usuario: true,
+        usuario: {
+          include: {
+            UserData: true,
+          },
+        },
       },
     });
   }
@@ -93,8 +70,11 @@ export class ResenaService {
       where: { id },
       include: {
         sede: true,
-        service: true,
-        usuario: true,
+        usuario: {
+          include: {
+            UserData: true,
+          },
+        },
       },
     });
     if (!resena) {
@@ -112,7 +92,6 @@ export class ResenaService {
       where: { sedeId },
       include: {
         sede: true,
-        service: true,
         usuario: {
           include: {
             UserData: true,
@@ -144,28 +123,10 @@ export class ResenaService {
       updateResenaDto.sedeId !== undefined
         ? updateResenaDto.sedeId
         : resena.sedeId;
-    const targetServiceId =
-      updateResenaDto.serviceId !== undefined
-        ? updateResenaDto.serviceId
-        : resena.serviceId;
-
     if (targetType === ResenaType.SEDE) {
-      if (targetServiceId != null) {
-        throw new BadRequestException(
-          'Una reseña de tipo SEDE no puede tener un serviceId.',
-        );
-      }
       if (targetSedeId == null) {
         throw new BadRequestException(
           'Una reseña de tipo SEDE debe tener un sedeId.',
-        );
-      }
-    }
-
-    if (targetType === ResenaType.SERVICIO) {
-      if (targetServiceId == null) {
-        throw new BadRequestException(
-          'Una reseña de tipo SERVICIO debe tener un serviceId.',
         );
       }
     }
@@ -193,21 +154,11 @@ export class ResenaService {
       }
     }
 
+    // Si se actualiza el sedeId, validar que la sede exista
     if (
-      targetType === ResenaType.SERVICIO &&
-      updateResenaDto.serviceId !== undefined
+      updateResenaDto.sedeId !== undefined &&
+      updateResenaDto.sedeId != null
     ) {
-      const service = await this.prisma.service.findUnique({
-        where: { id: updateResenaDto.serviceId },
-      });
-      if (!service) {
-        throw new NotFoundException(
-          `Servicio con ID ${updateResenaDto.serviceId} no encontrado.`,
-        );
-      }
-    }
-
-    if (targetType === ResenaType.SERVICIO && updateResenaDto.sedeId != null) {
       const sede = await this.prisma.sede.findUnique({
         where: { id: updateResenaDto.sedeId },
       });

@@ -257,10 +257,7 @@ model Resena {
   
   sedeId        Int?
   sede          Sede?         @relation(fields: [sedeId], references: [id], onDelete: SetNull)
-  
-  serviceId     Int?
-  service       Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  
+
    usuarioId    Int
   usuario      Users    @relation("UserToResena", fields: [usuarioId], references: [id])
 
@@ -269,7 +266,6 @@ model Resena {
 
   // Se asegura de que solo uno de los campos de relación (sedeId, serviceId) esté presente
   @@index([sedeId])
-  @@index([serviceId])
   
   @@map("resenas")
 }
@@ -301,8 +297,7 @@ model Service {
   translations     ServiceTranslation[]
   imagenes         String[]
   profesionales    Profesional[] // Relación de muchos a muchos
-  resenas          Resena[]
- serviceSedeProfesional ServiceSedeProfesional[]
+  serviceSedeProfesional ServiceSedeProfesional[]
   sedes            Sede[]               @relation("SedeServicios")
   @@index([categoryId])
   @@map("servicios")
