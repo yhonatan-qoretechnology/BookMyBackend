@@ -4,16 +4,27 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { UserAuth } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import * as path from 'path';
+import { OtpService } from '../data/otp/otp.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ChangePasswordByAdminDto } from './dto/change-password-by-admin.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { RequestPasswordOtpDto } from './dto/request-password-otp.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ValidatePasswordOtpDto } from './dto/validate-password-otp.dto';
 import { ValidatePhoneDto } from './dto/validate-phone.dto';
 import { HashService } from './services/hash/hash.service';
+
+type UserAuthContext = {
+  userId: number;
+  userAuth: UserAuth;
+};
 
 @Injectable()
 export class AuthService {
@@ -23,7 +34,133 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private hashService: HashService,
+    private otpService: OtpService,
   ) {}
+
+  private async getUserAuthContextByIdOrThrow(
+    userId: number,
+  ): Promise<UserAuthContext> {
+    const user = await this.prisma.users.findUnique({
+      where: { id: userId },
+      include: { UserAuth: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${userId} no encontrado.`);
+    }
+
+    if (!user.UserAuth) {
+      throw new BadRequestException(
+        'El usuario no tiene credenciales asociadas para actualizar la contraseña.',
+      );
+    }
+
+    return {
+      userId: user.id,
+      userAuth: user.UserAuth,
+    };
+  }
+
+  private async getUserAuthContextByEmailOrThrow(
+    email: string,
+  ): Promise<UserAuthContext> {
+    const user = await this.prisma.users.findUnique({
+      where: { email },
+      include: { UserAuth: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con correo ${email} no encontrado.`);
+    }
+
+    if (!user.UserAuth) {
+      throw new BadRequestException(
+        'El usuario no tiene credenciales asociadas para actualizar la contraseña.',
+      );
+    }
+
+    return {
+      userId: user.id,
+      userAuth: user.UserAuth,
+    };
+  }
+
+  private async ensureCurrentPasswordMatches(
+    currentPassword: string,
+    hashedPassword: string,
+  ) {
+    const currentPasswordMatches = await this.hashService.compare(
+      currentPassword,
+      hashedPassword,
+    );
+
+    if (!currentPasswordMatches) {
+      throw new BadRequestException('La contraseña actual es incorrecta.');
+    }
+  }
+
+  private async ensureNewPasswordIsDifferent(
+    newPassword: string,
+    hashedPassword: string,
+  ) {
+    const isSamePassword = await this.hashService.compare(
+      newPassword,
+      hashedPassword,
+    );
+
+    if (isSamePassword) {
+      throw new BadRequestException(
+        'La nueva contraseña debe ser diferente a la actual.',
+      );
+    }
+  }
+
+  private async ensureOtpIsValid(email: string, code: string) {
+    const otpRecord = await this.prisma.otp.findFirst({
+      where: {
+        email,
+        code,
+        verified: false,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!otpRecord || otpRecord.expiresAt < new Date()) {
+      throw new BadRequestException('Código OTP inválido o expirado.');
+    }
+
+    return otpRecord;
+  }
+
+  private async updatePasswordHash(userId: number, newPassword: string) {
+    const hashedPassword = await this.hashService.hash(newPassword);
+
+    await this.prisma.userAuth.update({
+      where: { user_id: userId },
+      data: {
+        password: hashedPassword,
+      },
+    });
+  }
+
+  async requestPasswordOtp(dto: RequestPasswordOtpDto) {
+    const userExists = await this.prisma.users.findUnique({
+      where: { email: dto.email },
+      select: { id: true },
+    });
+
+    if (!userExists) {
+      throw new NotFoundException(
+        `Usuario con correo ${dto.email} no encontrado.`,
+      );
+    }
+
+    await this.otpService.sendOtp({ email: dto.email });
+
+    return { message: 'Se envió un código OTP al correo registrado.' };
+  }
 
   async checkUser(userId: number) {
     if (!userId) throw new NotFoundException('User ID is required');
@@ -284,6 +421,39 @@ export class AuthService {
       where: { id: userId },
       data: { fotoPerfil: normalizedPath },
     });
+  }
+
+  async validatePasswordOtp(dto: ValidatePasswordOtpDto) {
+    await this.ensureOtpIsValid(dto.email, dto.code);
+
+    return { message: 'Código OTP validado correctamente.' };
+  }
+
+  async changePasswordWithCurrent(userId: number, dto: ChangePasswordDto) {
+    const { userId: persistedUserId, userAuth } =
+      await this.getUserAuthContextByIdOrThrow(userId);
+
+    await this.ensureCurrentPasswordMatches(
+      dto.currentPassword,
+      userAuth.password,
+    );
+
+    await this.ensureNewPasswordIsDifferent(dto.newPassword, userAuth.password);
+
+    await this.updatePasswordHash(persistedUserId, dto.newPassword);
+
+    return { message: 'Contraseña actualizada correctamente.' };
+  }
+
+  async changePasswordById(userId: number, dto: ChangePasswordByAdminDto) {
+    const { userId: persistedUserId, userAuth } =
+      await this.getUserAuthContextByIdOrThrow(userId);
+
+    await this.ensureNewPasswordIsDifferent(dto.newPassword, userAuth.password);
+
+    await this.updatePasswordHash(persistedUserId, dto.newPassword);
+
+    return { message: 'Contraseña actualizada correctamente.' };
   }
 
   async findAllUsers() {

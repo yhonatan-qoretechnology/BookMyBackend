@@ -9,5 +9,6 @@ import { OtpService } from './otp.service';
   imports: [MailModule],
   controllers: [OtpController],
   providers: [OtpService, SmsService, PrismaService],
+  exports: [OtpService],
 })
 export class OtpModule {}

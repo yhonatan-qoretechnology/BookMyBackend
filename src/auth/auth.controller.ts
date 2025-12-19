@@ -25,10 +25,14 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { ChangePasswordByAdminDto } from './dto/change-password-by-admin.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { RequestPasswordOtpDto } from './dto/request-password-otp.dto';
 import { UpdatePassDto } from './dto/update-pass.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ValidatePasswordOtpDto } from './dto/validate-password-otp.dto';
 import { ValidatePhoneDto } from './dto/validate-phone.dto';
 
 @ApiTags('Auth')
@@ -171,5 +175,58 @@ export class AuthController {
       throw new BadRequestException('Debe adjuntar una imagen.');
     }
     return this.authService.updateUserPhoto(id, file);
+  }
+
+  @Post('users/password/otp/request')
+  @ApiOperation({
+    summary: 'Solicitar un OTP por correo para iniciar cambio de contraseña',
+  })
+  @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
+  async requestPasswordOtp(@Body() dto: RequestPasswordOtpDto) {
+    return this.authService.requestPasswordOtp(dto);
+  }
+
+  @Post('users/password/otp/validate')
+  @ApiOperation({
+    summary: 'Validar un código OTP previo al cambio de contraseña',
+  })
+  @ApiBadRequestResponse({ description: 'Código OTP inválido o expirado.' })
+  @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
+  async validatePasswordOtp(@Body() dto: ValidatePasswordOtpDto) {
+    return this.authService.validatePasswordOtp(dto);
+  }
+
+  @Patch('users/:id/password')
+  @ApiOperation({
+    summary: 'Actualizar contraseña usando la contraseña actual',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Contraseña actualizada correctamente.',
+  })
+  @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
+  @ApiBadRequestResponse({ description: 'Entrada inválida.' })
+  async changePasswordWithCurrent(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePasswordWithCurrent(id, dto);
+  }
+
+  @Patch('users/:id/password/direct')
+  @ApiOperation({
+    summary: 'Actualizar contraseña únicamente con el ID del usuario',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Contraseña actualizada correctamente.',
+  })
+  @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
+  @ApiBadRequestResponse({ description: 'Entrada inválida.' })
+  async changePasswordById(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ChangePasswordByAdminDto,
+  ) {
+    return this.authService.changePasswordById(id, dto);
   }
 }
