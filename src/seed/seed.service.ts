@@ -559,36 +559,35 @@ export class SeedService {
       }
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.serviceTranslation.deleteMany();
-      await tx.price.deleteMany();
-      await tx.service.deleteMany();
+    await this.prisma.serviceSedeProfesional.deleteMany();
+    await this.prisma.price.deleteMany();
+    await this.prisma.serviceTranslation.deleteMany();
+    await this.prisma.service.deleteMany();
 
-      for (const service of services) {
-        await tx.service.create({
-          data: {
-            category: { connect: { id: service.categoryId } },
-            sedes: service.sedeIds?.length
-              ? { connect: service.sedeIds.map((id) => ({ id })) }
-              : undefined,
-            translations: {
-              create: service.translations.map((translation) => ({
-                language: translation.language,
-                name: translation.name,
-                description: translation.description,
-              })),
-            },
-            prices: {
-              create: service.prices.map((price) => ({
-                amount: price.amount,
-                duration: price.duration,
-                currency: price.currency ?? 'EUR',
-              })),
-            },
-          } satisfies Prisma.ServiceCreateInput,
-        });
-      }
-    });
+    for (const service of services) {
+      await this.prisma.service.create({
+        data: {
+          category: { connect: { id: service.categoryId } },
+          sedes: service.sedeIds?.length
+            ? { connect: service.sedeIds.map((id) => ({ id })) }
+            : undefined,
+          translations: {
+            create: service.translations.map((translation) => ({
+              language: translation.language,
+              name: translation.name,
+              description: translation.description,
+            })),
+          },
+          prices: {
+            create: service.prices.map((price) => ({
+              amount: price.amount,
+              duration: price.duration,
+              currency: price.currency ?? 'EUR',
+            })),
+          },
+        } satisfies Prisma.ServiceCreateInput,
+      });
+    }
 
     return {
       message: '✅ Seed de servicios ejecutado correctamente.',
@@ -624,6 +623,31 @@ export class SeedService {
           imagenes: [
             '/uploads/sedes/benalmadena/front.jpg',
             '/uploads/sedes/benalmadena/interior.jpg',
+          ],
+        },
+        {
+          nombre: 'Glow Fuengirola',
+          direccion: 'C. Marbella, 6, 29640 Fuengirola, Málaga, España',
+          telefono: '+34651026701',
+          latitud: 36.5406,
+          longitud: -4.6247,
+          provincia: 'Málaga',
+          horario: {
+            lunes: '10:00-19:00',
+            martes: '10:00-19:00',
+            miércoles: '10:00-19:00',
+            jueves: '10:00-19:00',
+            viernes: '10:00-19:00',
+            sábado: '10:00-19:00',
+            domingo: 'Cerrado',
+          },
+          diasCerrado: [
+            // no publicados oficialmente
+          ],
+          empresaId: 1,
+          imagenes: [
+            '/uploads/sedes/fuengirola/front.jpg',
+            '/uploads/sedes/fuengirola/interior.jpg',
           ],
         },
       ],
@@ -685,7 +709,7 @@ export class SeedService {
           biografia:
             'Manicurista con amplia experiencia en técnicas modernas y tratamientos personalizados.',
           phone: '+34666555448',
-          sedeId: 2,
+          sedeId: 1,
           imagen:
             'https://d375139ucebi94.cloudfront.net/region2/es/25686/resource_photos/1b810cabfdba4ffba9202890e6712a-glow-fuengirola-laura-e36c370bb176421893583738986b8c-booksy.jpeg?size=250x250&size=100x100',
         },
@@ -694,7 +718,7 @@ export class SeedService {
           biografia:
             'Especialista en manicura y pedicura, dedicada al cuidado integral de las uñas.',
           phone: '+34666555449',
-          sedeId: 2,
+          sedeId: 1,
           imagen:
             'https://d375139ucebi94.cloudfront.net/region2/es/25686/resource_photos/629f3f297b154693a8ff2992ec350e-glow-fuengirola-natalia-c444ed18a3f341bca6afbbdee6f77c-booksy.jpeg?size=250x250&size=100x100',
         },
@@ -703,7 +727,7 @@ export class SeedService {
           biografia:
             'Manicurista profesional con enfoque en tratamientos naturales y personalizados.',
           phone: '+34666555450',
-          sedeId: 2,
+          sedeId: 1,
           imagen:
             'https://d375139ucebi94.cloudfront.net/region2/es/25686/resource_photos/97eaa5d70ade4ccb94dbabde8cc2df-glow-fuengirola-gabriela-5c23aac4295b429ea292f86acc23d6-booksy.jpeg?size=250x250&size=100x100',
         },
@@ -716,51 +740,44 @@ export class SeedService {
   }
 
   async seedServiceSedeProfesional() {
-    const relations = [
-      {
-        serviceId: 1,
-        sedeId: 2,
-        profesionalId: 2,
-      },
-    ];
+    await this.prisma.serviceSedeProfesional.deleteMany();
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.serviceSedeProfesional.deleteMany();
-
-      for (const relation of relations) {
-        const { serviceId, sedeId, profesionalId } = relation;
-
-        const [service, sede, profesional] = await Promise.all([
-          tx.service.findUnique({ where: { id: serviceId } }),
-          tx.sede.findUnique({ where: { id: sedeId } }),
-          tx.profesional.findUnique({ where: { id: profesionalId } }),
-        ]);
-
-        if (!service) {
-          throw new ForbiddenException(
-            `Servicio con ID ${serviceId} no encontrado. Asegúrate de ejecutar el seed de servicios primero.`,
-          );
-        }
-
-        if (!sede) {
-          throw new ForbiddenException(
-            `Sede con ID ${sedeId} no encontrada. Asegúrate de ejecutar el seed de sedes primero.`,
-          );
-        }
-
-        if (!profesional) {
-          throw new ForbiddenException(
-            `Profesional con ID ${profesionalId} no encontrado. Asegúrate de ejecutar el seed de profesionales primero.`,
-          );
-        }
-
-        await tx.serviceSedeProfesional.create({ data: relation });
-      }
+    const firstService = await this.prisma.service.findFirst({
+      orderBy: { id: 'asc' },
     });
+    if (!firstService) {
+      throw new ForbiddenException(
+        'No hay servicios registrados. Ejecuta primero el seed de servicios.',
+      );
+    }
+
+    const sedes = await this.prisma.sede.findMany({ orderBy: { id: 'asc' } });
+    if (sedes.length === 0) {
+      throw new ForbiddenException(
+        'No hay sedes registradas. Ejecuta primero el seed de sedes.',
+      );
+    }
+
+    const profesionales = await this.prisma.profesional.findMany({
+      orderBy: { id: 'asc' },
+    });
+    if (profesionales.length === 0) {
+      throw new ForbiddenException(
+        'No hay profesionales registrados. Ejecuta primero el seed de profesionales.',
+      );
+    }
+
+    const relation = {
+      serviceId: firstService.id,
+      sedeId: sedes[0].id,
+      profesionalId: profesionales[0].id,
+    } satisfies Prisma.ServiceSedeProfesionalCreateManyInput;
+
+    await this.prisma.serviceSedeProfesional.create({ data: relation });
 
     return {
       message: '✅ Seed de Service-Sede-Profesional ejecutado correctamente.',
-      total: relations.length,
+      total: 1,
     };
   }
 }
