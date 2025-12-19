@@ -35,4 +35,18 @@ export class SeedController {
   async seedProfesionales() {
     return this.seedService.seedProfesionales();
   }
+
+  @Post('services')
+  @ApiOperation({ summary: 'Ejecutar seed de servicios' })
+  async seedServices() {
+    return this.seedService.seedServices();
+  }
+
+  @Post('service-sede-profesional')
+  @ApiOperation({
+    summary: 'Ejecutar seed de relaciones Service-Sede-Profesional',
+  })
+  async seedServiceSedeProfesional() {
+    return this.seedService.seedServiceSedeProfesional();
+  }
 }

@@ -51,12 +51,19 @@ export class SeedService {
   async seedEmpresas() {
     const empresas = [
       {
-        nombre: 'Glow',
-        telefono: '+34664474706',
-        email: 'servicio@glowexperience.eu',
-        nit: '000000000-1',
-        descripcion: 'Reserva en nuestras sedes ',
-        logo: 'uploads/logos/f42bcfbb3666c38a6108c26b3da9ecd7',
+        nombre: 'Glow Experience',
+        telefono: '+34651026700',
+        email: 'info@glowexperience.eu',
+        nit: 'B04940219',
+        descripcion:
+          'Reserva tus servicios de belleza en las sedes Glow Experience.',
+        descripcionLarga:
+          'Glow Experience es una marca especializada en servicios de belleza y bienestar, con sedes en España. Ofrecemos manicura, pedicura, estética facial, depilación y tratamientos personalizados, con un enfoque en calidad, experiencia y atención profesional.',
+        facebookUrl: 'https://www.facebook.com/glowexperience',
+        instagramUrl: 'https://www.instagram.com/glowexperience.eu',
+        tiktokUrl: 'https://www.tiktok.com/@glowexperience',
+        webUrl: 'https://byglow.es',
+        logo: '/uploads/logos/glow-experience.png',
       },
     ];
 
@@ -76,32 +83,197 @@ export class SeedService {
 
     const categories = [
       {
-        image: 'https://cdn.miapp.com/categories/belleza.png',
+        image: 'https://cdn.miapp.com/categories/manicura.png',
         translations: [
           {
             language: 'es',
-            name: 'Belleza',
-            description: 'Servicios de belleza y cuidado personal',
+            name: 'Manicura',
+            description: 'Servicios de manicura y cuidado de uñas',
           },
           {
             language: 'en',
-            name: 'Beauty',
-            description: 'Beauty and personal care services',
+            name: 'Manicure',
+            description: 'Manicure and nail care services',
           },
         ],
       },
       {
-        image: 'https://cdn.miapp.com/categories/fitness.png',
+        image: 'https://cdn.miapp.com/categories/pedicura.png',
         translations: [
           {
             language: 'es',
-            name: 'Fitness',
-            description: 'Entrenamiento y bienestar físico',
+            name: 'Pedicura',
+            description: 'Servicios de pedicura y cuidado de pies',
           },
           {
             language: 'en',
-            name: 'Fitness',
-            description: 'Training and physical wellness',
+            name: 'Pedicure',
+            description: 'Pedicure and foot care services',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/refuerzos.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Refuerzos',
+            description: 'Refuerzos de uñas y fortalecimiento',
+          },
+          {
+            language: 'en',
+            name: 'Nail Reinforcement',
+            description: 'Nail reinforcement and strengthening',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/acrilicas.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Extensiones Acrílicas',
+            description: 'Extensiones de uñas acrílicas',
+          },
+          {
+            language: 'en',
+            name: 'Acrylic Extensions',
+            description: 'Acrylic nail extensions',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/polygel.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Extensiones Polygel',
+            description: 'Extensiones de uñas en polygel',
+          },
+          {
+            language: 'en',
+            name: 'Polygel Extensions',
+            description: 'Polygel nail extensions',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/extras-unas.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Extras para tus Uñas',
+            description: 'Servicios adicionales y decoración de uñas',
+          },
+          {
+            language: 'en',
+            name: 'Nail Extras',
+            description: 'Additional nail services and decorations',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/cejas.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Cejas',
+            description: 'Diseño, depilación y tinte de cejas',
+          },
+          {
+            language: 'en',
+            name: 'Eyebrows',
+            description: 'Eyebrow design, waxing and tinting',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/cera.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Depilación con Cera',
+            description: 'Depilación corporal y facial con cera',
+          },
+          {
+            language: 'en',
+            name: 'Waxing',
+            description: 'Body and facial waxing services',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/hilo.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Depilación con Hilo',
+            description: 'Depilación facial con hilo',
+          },
+          {
+            language: 'en',
+            name: 'Threading',
+            description: 'Facial threading services',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/pestanas.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Pestañas',
+            description: 'Lifting y tratamientos de pestañas',
+          },
+          {
+            language: 'en',
+            name: 'Eyelashes',
+            description: 'Eyelash lifting and treatments',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/laser.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Depilación Láser',
+            description: 'Depilación láser por zonas',
+          },
+          {
+            language: 'en',
+            name: 'Laser Hair Removal',
+            description: 'Laser hair removal by areas',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/limpieza-facial.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Limpiezas Faciales',
+            description: 'Higiene y limpieza facial profesional',
+          },
+          {
+            language: 'en',
+            name: 'Facial Cleansing',
+            description: 'Professional facial cleansing services',
+          },
+        ],
+      },
+      {
+        image: 'https://cdn.miapp.com/categories/dermapen.png',
+        translations: [
+          {
+            language: 'es',
+            name: 'Dermapen',
+            description: 'Tratamientos faciales con dermapen',
+          },
+          {
+            language: 'en',
+            name: 'Dermapen',
+            description: 'Facial dermapen treatments',
           },
         ],
       },
@@ -134,54 +306,324 @@ export class SeedService {
     };
   }
 
+  async seedServices() {
+    const services = [
+      {
+        categoryId: 1,
+        translations: [
+          {
+            language: 'es',
+            name: 'Manicura Semipermanente SPA',
+            description:
+              'Manicura con esmaltado semipermanente y tratamiento SPA',
+          },
+          {
+            language: 'en',
+            name: 'SPA Semi-Permanent Manicure',
+            description: 'Semi-permanent manicure with SPA treatment',
+          },
+        ],
+        prices: [{ amount: 30, duration: 60, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 1,
+        translations: [
+          {
+            language: 'es',
+            name: 'Manicura Rusa Semipermanente',
+            description: 'Manicura rusa con esmaltado semipermanente',
+          },
+          {
+            language: 'en',
+            name: 'Russian Semi-Permanent Manicure',
+            description: 'Russian manicure with semi-permanent polish',
+          },
+        ],
+        prices: [{ amount: 38, duration: 75, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 2,
+        translations: [
+          {
+            language: 'es',
+            name: 'Pedicura Semipermanente',
+            description: 'Pedicura completa con esmalte semipermanente',
+          },
+          {
+            language: 'en',
+            name: 'Semi-Permanent Pedicure',
+            description: 'Complete pedicure with semi-permanent polish',
+          },
+        ],
+        prices: [{ amount: 35, duration: 60, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 2,
+        translations: [
+          {
+            language: 'es',
+            name: 'Pedicura Jelly SPA',
+            description: 'Pedicura SPA con tratamiento Jelly',
+          },
+          {
+            language: 'en',
+            name: 'Jelly SPA Pedicure',
+            description: 'SPA pedicure with jelly treatment',
+          },
+        ],
+        prices: [{ amount: 45, duration: 75, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 3,
+        translations: [
+          {
+            language: 'es',
+            name: 'Refuerzo BIAB',
+            description: 'Refuerzo de uña natural con BIAB',
+          },
+          {
+            language: 'en',
+            name: 'BIAB Nail Reinforcement',
+            description: 'Natural nail reinforcement with BIAB',
+          },
+        ],
+        prices: [{ amount: 40, duration: 75, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 3,
+        translations: [
+          {
+            language: 'es',
+            name: 'Refuerzo Fibra',
+            description: 'Refuerzo de uñas con fibra de vidrio',
+          },
+          {
+            language: 'en',
+            name: 'Fiber Nail Reinforcement',
+            description: 'Glass fiber nail reinforcement',
+          },
+        ],
+        prices: [{ amount: 42, duration: 80, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 4,
+        translations: [
+          {
+            language: 'es',
+            name: 'Uñas Acrílicas',
+            description: 'Extensión de uñas acrílicas',
+          },
+          {
+            language: 'en',
+            name: 'Acrylic Nails',
+            description: 'Acrylic nail extensions',
+          },
+        ],
+        prices: [{ amount: 50, duration: 90, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 4,
+        translations: [
+          {
+            language: 'es',
+            name: 'Relleno Acrílico',
+            description: 'Mantenimiento de uñas acrílicas',
+          },
+          {
+            language: 'en',
+            name: 'Acrylic Refill',
+            description: 'Maintenance of acrylic nails',
+          },
+        ],
+        prices: [{ amount: 40, duration: 75, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 5,
+        translations: [
+          {
+            language: 'es',
+            name: 'Uñas Polygel',
+            description: 'Extensión de uñas con polygel',
+          },
+          {
+            language: 'en',
+            name: 'Polygel Nails',
+            description: 'Polygel nail extensions',
+          },
+        ],
+        prices: [{ amount: 48, duration: 90, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 6,
+        translations: [
+          {
+            language: 'es',
+            name: 'Decoración de Uñas',
+            description: 'Decoración artística y nail art',
+          },
+          {
+            language: 'en',
+            name: 'Nail Art Decoration',
+            description: 'Artistic nail decoration',
+          },
+        ],
+        prices: [{ amount: 10, duration: 15, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 7,
+        translations: [
+          {
+            language: 'es',
+            name: 'Lifting y Tinte de Pestañas',
+            description: 'Curvado y tinte de pestañas',
+          },
+          {
+            language: 'en',
+            name: 'Lash Lift and Tint',
+            description: 'Eyelash lifting and tinting',
+          },
+        ],
+        prices: [{ amount: 45, duration: 60, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 8,
+        translations: [
+          {
+            language: 'es',
+            name: 'Diseño de Cejas con Henna',
+            description: 'Diseño y coloración de cejas con henna',
+          },
+          {
+            language: 'en',
+            name: 'Henna Eyebrow Design',
+            description: 'Eyebrow shaping and henna coloring',
+          },
+        ],
+        prices: [{ amount: 30, duration: 45, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+      {
+        categoryId: 9,
+        translations: [
+          {
+            language: 'es',
+            name: 'Limpieza Facial',
+            description: 'Limpieza facial profunda profesional',
+          },
+          {
+            language: 'en',
+            name: 'Facial Cleansing',
+            description: 'Professional deep facial cleansing',
+          },
+        ],
+        prices: [{ amount: 50, duration: 60, currency: 'EUR' }],
+        sedeIds: [1],
+      },
+    ];
+
+    const categoryIds = [
+      ...new Set(services.map((service) => service.categoryId)),
+    ];
+    const categories = await this.prisma.category.findMany({
+      where: { id: { in: categoryIds } },
+    });
+    if (categories.length !== categoryIds.length) {
+      throw new ForbiddenException(
+        'No existen todas las categorías requeridas. Ejecuta primero el seed de categorías.',
+      );
+    }
+
+    const sedeIds = [
+      ...new Set(services.flatMap((service) => service.sedeIds ?? [])),
+    ];
+    if (sedeIds.length) {
+      const sedes = await this.prisma.sede.findMany({
+        where: { id: { in: sedeIds } },
+      });
+
+      if (sedes.length !== sedeIds.length) {
+        throw new ForbiddenException(
+          'Una o más sedes no existen. Ejecuta primero el seed de sedes.',
+        );
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.serviceTranslation.deleteMany();
+      await tx.price.deleteMany();
+      await tx.service.deleteMany();
+
+      for (const service of services) {
+        await tx.service.create({
+          data: {
+            category: { connect: { id: service.categoryId } },
+            sedes: service.sedeIds?.length
+              ? { connect: service.sedeIds.map((id) => ({ id })) }
+              : undefined,
+            translations: {
+              create: service.translations.map((translation) => ({
+                language: translation.language,
+                name: translation.name,
+                description: translation.description,
+              })),
+            },
+            prices: {
+              create: service.prices.map((price) => ({
+                amount: price.amount,
+                duration: price.duration,
+                currency: price.currency ?? 'EUR',
+              })),
+            },
+          } satisfies Prisma.ServiceCreateInput,
+        });
+      }
+    });
+
+    return {
+      message: '✅ Seed de servicios ejecutado correctamente.',
+      total: services.length,
+    };
+  }
+
   async seedSedes() {
     // ✅ Crear sedes con los campos correctos según tu modelo Prisma y DTO
     await this.prisma.sede.createMany({
       data: [
         {
-          nombre: 'Sede Principal Medellín',
-          direccion: 'Calle 10 # 5-20, Medellín',
-          telefono: '+573001112233',
-          latitud: 6.2476,
-          longitud: -75.5658,
-          provincia: 'Antioquia',
+          nombre: 'Glow Benalmádena',
+          direccion:
+            'Calle Medina Azahara, 1, 29631 Benalmádena, Málaga, España',
+          telefono: '+34651026700',
+          latitud: 36.5969,
+          longitud: -4.5426,
+          provincia: 'Málaga',
           horario: {
-            lunes: '08:00-18:00',
-            martes: '08:00-18:00',
-            miércoles: '08:00-18:00',
-            jueves: '08:00-18:00',
-            viernes: '08:00-17:00',
-            sábado: '09:00-13:00',
+            lunes: '10:00-19:00',
+            martes: '10:00-19:00',
+            miércoles: '10:00-19:00',
+            jueves: '10:00-19:00',
+            viernes: '10:00-19:00',
+            sábado: '10:00-19:00',
             domingo: 'Cerrado',
           },
-          diasCerrado: ['2025-12-25', '2026-01-01'],
-          empresaId: 1, // 👈 asegúrate de tener esta empresa creada
-          imagenes: [
-            '/uploads/sedes/1/front.jpg',
-            '/uploads/sedes/1/interior.jpg',
+          diasCerrado: [
+            // no publicados oficialmente
           ],
-        },
-        {
-          nombre: 'Sede Bogotá Norte',
-          direccion: 'Carrera 15 # 80-22, Bogotá',
-          telefono: '+573201556677',
-          latitud: 4.711,
-          longitud: -74.0721,
-          provincia: 'Cundinamarca',
-          horario: {
-            lunes: '09:00-19:00',
-            martes: '09:00-19:00',
-            miércoles: '09:00-19:00',
-            jueves: '09:00-19:00',
-            viernes: '09:00-17:00',
-            sábado: '10:00-14:00',
-            domingo: 'Cerrado',
-          },
-          diasCerrado: ['2025-12-25', '2026-01-01'],
-          empresaId: 1,
+          empresaId: 1, // 👈 ajusta según el ID real de WB Corporation / Glow Experience
           imagenes: [
-            '/uploads/sedes/2/front.jpg',
-            '/uploads/sedes/2/interior.jpg',
+            '/uploads/sedes/benalmadena/front.jpg',
+            '/uploads/sedes/benalmadena/interior.jpg',
           ],
         },
       ],
@@ -266,9 +708,59 @@ export class SeedService {
             'https://d375139ucebi94.cloudfront.net/region2/es/25686/resource_photos/97eaa5d70ade4ccb94dbabde8cc2df-glow-fuengirola-gabriela-5c23aac4295b429ea292f86acc23d6-booksy.jpeg?size=250x250&size=100x100',
         },
       ],
+
       skipDuplicates: true,
     });
 
     return { message: '✅ Seed de profesionales ejecutado correctamente.' };
+  }
+
+  async seedServiceSedeProfesional() {
+    const relations = [
+      {
+        serviceId: 1,
+        sedeId: 2,
+        profesionalId: 2,
+      },
+    ];
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.serviceSedeProfesional.deleteMany();
+
+      for (const relation of relations) {
+        const { serviceId, sedeId, profesionalId } = relation;
+
+        const [service, sede, profesional] = await Promise.all([
+          tx.service.findUnique({ where: { id: serviceId } }),
+          tx.sede.findUnique({ where: { id: sedeId } }),
+          tx.profesional.findUnique({ where: { id: profesionalId } }),
+        ]);
+
+        if (!service) {
+          throw new ForbiddenException(
+            `Servicio con ID ${serviceId} no encontrado. Asegúrate de ejecutar el seed de servicios primero.`,
+          );
+        }
+
+        if (!sede) {
+          throw new ForbiddenException(
+            `Sede con ID ${sedeId} no encontrada. Asegúrate de ejecutar el seed de sedes primero.`,
+          );
+        }
+
+        if (!profesional) {
+          throw new ForbiddenException(
+            `Profesional con ID ${profesionalId} no encontrado. Asegúrate de ejecutar el seed de profesionales primero.`,
+          );
+        }
+
+        await tx.serviceSedeProfesional.create({ data: relation });
+      }
+    });
+
+    return {
+      message: '✅ Seed de Service-Sede-Profesional ejecutado correctamente.',
+      total: relations.length,
+    };
   }
 }
