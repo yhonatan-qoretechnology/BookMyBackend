@@ -125,4 +125,52 @@ export class EmpresaService {
     });
     return { message: `Empresa con ID ${id} eliminada correctamente.` };
   }
+
+  async updateLogo(id: number, file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Debes adjuntar un archivo de logo.');
+    }
+
+    const empresa = await this.prisma.empresa.findUnique({ where: { id } });
+    if (!empresa) {
+      fs.unlinkSync(file.path);
+      throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
+    }
+
+    const newLogoPath = file.path;
+
+    try {
+      const updated = await this.prisma.empresa.update({
+        where: { id },
+        data: {
+          logo: newLogoPath,
+        },
+      });
+
+      if (empresa.logo && empresa.logo !== newLogoPath) {
+        try {
+          fs.unlinkSync(empresa.logo);
+        } catch (error) {
+          console.error(
+            `Error al eliminar el logo anterior: ${empresa.logo}`,
+            error,
+          );
+        }
+      }
+
+      return updated;
+    } catch (error) {
+      fs.unlinkSync(file.path);
+
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new BadRequestException(
+            'El nombre de la empresa ya está en uso.',
+          );
+        }
+      }
+
+      throw error;
+    }
+  }
 }

@@ -51,7 +51,7 @@ export class SeedService {
   async seedEmpresas() {
     const empresas = [
       {
-        nombre: 'Glow Experience',
+        nombre: 'Glow ',
         telefono: '+34651026700',
         email: 'info@glowexperience.eu',
         nit: 'B04940219',
@@ -742,19 +742,17 @@ export class SeedService {
   async seedServiceSedeProfesional() {
     await this.prisma.serviceSedeProfesional.deleteMany();
 
-    const firstService = await this.prisma.service.findFirst({
+    const services = await this.prisma.service.findMany({
+      include: {
+        sedes: {
+          select: { id: true },
+        },
+      },
       orderBy: { id: 'asc' },
     });
-    if (!firstService) {
+    if (services.length === 0) {
       throw new ForbiddenException(
         'No hay servicios registrados. Ejecuta primero el seed de servicios.',
-      );
-    }
-
-    const sedes = await this.prisma.sede.findMany({ orderBy: { id: 'asc' } });
-    if (sedes.length === 0) {
-      throw new ForbiddenException(
-        'No hay sedes registradas. Ejecuta primero el seed de sedes.',
       );
     }
 
@@ -767,17 +765,45 @@ export class SeedService {
       );
     }
 
-    const relation = {
-      serviceId: firstService.id,
-      sedeId: sedes[0].id,
-      profesionalId: profesionales[0].id,
-    } satisfies Prisma.ServiceSedeProfesionalCreateManyInput;
+    const relations: Prisma.ServiceSedeProfesionalCreateManyInput[] = [];
 
-    await this.prisma.serviceSedeProfesional.create({ data: relation });
+    for (const profesional of profesionales) {
+      if (!profesional.sedeId) {
+        continue;
+      }
+
+      const serviceForSede = services.find((service) =>
+        service.sedes.some((sede) => sede.id === profesional.sedeId),
+      );
+
+      if (!serviceForSede) {
+        console.warn(
+          `No se encontró un servicio asociado a la sede ${profesional.sedeId} para el profesional ${profesional.id}.`,
+        );
+        continue;
+      }
+
+      relations.push({
+        serviceId: serviceForSede.id,
+        sedeId: profesional.sedeId,
+        profesionalId: profesional.id,
+      });
+    }
+
+    if (!relations.length) {
+      throw new ForbiddenException(
+        'No se generaron relaciones. Verifica que los servicios estén asociados a sedes.',
+      );
+    }
+
+    await this.prisma.serviceSedeProfesional.createMany({
+      data: relations,
+      skipDuplicates: true,
+    });
 
     return {
       message: '✅ Seed de Service-Sede-Profesional ejecutado correctamente.',
-      total: 1,
+      total: relations.length,
     };
   }
 }

@@ -103,4 +103,31 @@ export class EmpresaController {
   async remove(@Param('id', ParseIntPipe) id: number) {
     return this.empresaService.remove(id);
   }
+
+  @Patch(':id/logo')
+  @ApiOperation({ summary: 'Actualizar únicamente el logo de una empresa' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        logo: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+      required: ['logo'],
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('logo', {
+      dest: './uploads/logos',
+    }),
+  )
+  async updateLogo(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.empresaService.updateLogo(id, file);
+  }
 }
