@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Users {
@@ -210,11 +209,11 @@ model Sede {
   galeria         Galeria[]
   serviceSedeProfesional ServiceSedeProfesional[]
   Appointment Appointment[]
-   HorarioSede HorarioSede[]
+  HorarioSede HorarioSede[]
   DiaCerradoSede DiaCerradoSede[]
-  @@map("sedes")
-  
   Service Service[] @relation("SedeServicios")
+
+  @@map("sedes")
 }
 
 model Profesional {
