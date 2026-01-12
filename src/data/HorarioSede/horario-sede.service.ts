@@ -5,16 +5,25 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AccessControlService } from '../../auth/services/access-control/access-control.service';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateHorarioSedeDto } from './dto/create-horario-sede.dto';
 import { UpdateHorarioSedeDto } from './dto/update-horario-sede.dto';
 
 @Injectable()
 export class HorarioSedeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accessControlService: AccessControlService,
+  ) {}
 
   // Crear horario de sede
-  async create(dto: CreateHorarioSedeDto) {
+  async create(dto: CreateHorarioSedeDto, user?: AuthenticatedUser) {
     const { sedeId, diaSemana, horaApertura, horaCierre, activo } = dto;
+
+    if (user) {
+      await this.accessControlService.ensureSedeAccessForUser(sedeId, user);
+    }
 
     const sede = await this.prisma.sede.findUnique({ where: { id: sedeId } });
     if (!sede)
@@ -68,13 +77,21 @@ export class HorarioSedeService {
   }
 
   // Actualizar horario
-  async update(id: number, dto: UpdateHorarioSedeDto) {
+  async update(
+    id: number,
+    dto: UpdateHorarioSedeDto,
+    user?: AuthenticatedUser,
+  ) {
     const horario = await this.prisma.horarioSede.findUnique({ where: { id } });
     if (!horario)
       throw new NotFoundException(`Horario con id ${id} no encontrado`);
 
     const newSedeId = dto.sedeId ?? horario.sedeId;
     const newDiaSemana = dto.diaSemana ?? horario.diaSemana;
+
+    if (user) {
+      await this.accessControlService.ensureSedeAccessForUser(newSedeId, user);
+    }
 
     // Validar que la sede exista si cambia
     if (dto.sedeId) {
@@ -114,10 +131,17 @@ export class HorarioSedeService {
   }
 
   // Eliminar horario
-  async remove(id: number) {
+  async remove(id: number, user?: AuthenticatedUser) {
     const horario = await this.prisma.horarioSede.findUnique({ where: { id } });
     if (!horario)
       throw new NotFoundException(`Horario con id ${id} no encontrado`);
+
+    if (user) {
+      await this.accessControlService.ensureSedeAccessForUser(
+        horario.sedeId,
+        user,
+      );
+    }
     return this.prisma.horarioSede.delete({ where: { id } });
   }
 }

@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
@@ -115,6 +116,39 @@ export class RegisterDto {
   })
   @IsOptional()
   fotoPerfil?: string;
+
+  @ApiPropertyOptional({
+    description: 'Rol del usuario a registrar',
+    enum: Role,
+    default: Role.CLIENT,
+  })
+  @IsOptional()
+  @IsEnum(Role)
+  role?: Role;
+
+  @ApiPropertyOptional({ description: 'Nombre del administrador' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  firstName?: string;
+
+  @ApiPropertyOptional({ description: 'Apellido del administrador' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  lastName?: string;
+
+  @ApiPropertyOptional({ description: 'ID de la empresa asociada' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  empresaId?: number;
+
+  @ApiPropertyOptional({ description: 'ID de la sede asociada' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  sedeId?: number;
 
   @ApiPropertyOptional({
     example: [1, 5, 10],

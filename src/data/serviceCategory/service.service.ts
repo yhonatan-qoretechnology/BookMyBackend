@@ -1,15 +1,56 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AccessControlService } from '../../auth/services/access-control/access-control.service';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateServiceDto } from '../serviceCategory/dto/create-service.dto';
 import { UpdateServiceDto } from '../serviceCategory/dto/update-service.dto';
 
 @Injectable()
 export class ServiceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accessControlService: AccessControlService,
+  ) {}
 
   // 🟢 Crear servicio con traducciones, precios y sedes opcionales
-  async create(dto: CreateServiceDto) {
+  async create(dto: CreateServiceDto, user?: AuthenticatedUser) {
+    const sedeIds = dto.sedeIds ? [...dto.sedeIds] : [];
+
+    if (user?.role === Role.BRANCH_ADMIN) {
+      if (!user.sedeId) {
+        throw new ForbiddenException(
+          'El administrador de sede no tiene una sede asociada.',
+        );
+      }
+      if (sedeIds.length === 0) {
+        sedeIds.push(user.sedeId);
+      }
+      const invalid = sedeIds.some((id) => id !== user.sedeId);
+      if (invalid) {
+        throw new ForbiddenException(
+          'Solo puede asociar el servicio a su propia sede.',
+        );
+      }
+    }
+
+    if (user?.role === Role.COMPANY_ADMIN) {
+      if (!user.empresaId) {
+        throw new ForbiddenException(
+          'El administrador de empresa no tiene empresa asociada.',
+        );
+      }
+      if (sedeIds.length === 0) {
+        throw new ForbiddenException(
+          'Debe asociar el servicio al menos a una sede de su empresa.',
+        );
+      }
+    }
+
     return this.prisma.$transaction(async (tx) => {
       // Verificar categoría
       const category = await tx.category.findUnique({
@@ -23,16 +64,37 @@ export class ServiceService {
       let sedeConnect:
         | Prisma.SedeCreateNestedManyWithoutServiceInput
         | undefined;
-      if (dto.sedeIds?.length) {
+      if (sedeIds.length) {
         const sedes = await tx.sede.findMany({
-          where: { id: { in: dto.sedeIds } },
+          where: { id: { in: sedeIds } },
+          select: { id: true, empresaId: true },
         });
-        if (sedes.length !== dto.sedeIds.length) {
+        if (sedes.length !== sedeIds.length) {
           throw new NotFoundException('Una o más sedes no existen');
         }
 
+        if (user?.role === Role.COMPANY_ADMIN) {
+          const invalid = sedes.some(
+            (sede) => sede.empresaId !== user.empresaId,
+          );
+          if (invalid) {
+            throw new ForbiddenException(
+              'No puede asociar sedes que no pertenezcan a su empresa.',
+            );
+          }
+        }
+
+        if (user?.role === Role.BRANCH_ADMIN) {
+          const invalid = sedes.some((sede) => sede.id !== user.sedeId);
+          if (invalid) {
+            throw new ForbiddenException(
+              'No puede asociar sedes distintas a la suya.',
+            );
+          }
+        }
+
         sedeConnect = {
-          connect: dto.sedeIds.map((id) => ({ id })),
+          connect: sedeIds.map((id) => ({ id })),
         };
       }
 
@@ -77,13 +139,41 @@ export class ServiceService {
   }
 
   // 🟡 Actualizar servicio
-  async update(id: number, dto: UpdateServiceDto) {
+  async update(id: number, dto: UpdateServiceDto, user?: AuthenticatedUser) {
+    await this.accessControlService.ensureServiceAccessForUser(id, user);
     const existing = await this.findOne(id);
     if (!existing) {
       throw new NotFoundException('El servicio no existe');
     }
 
     return this.prisma.$transaction(async (tx) => {
+      let sedeIds = dto.sedeIds ? [...dto.sedeIds] : undefined;
+
+      if (sedeIds) {
+        if (user?.role === Role.BRANCH_ADMIN) {
+          if (!user.sedeId) {
+            throw new ForbiddenException(
+              'El administrador de sede no tiene una sede asociada.',
+            );
+          }
+          const invalid = sedeIds.some((sedeId) => sedeId !== user.sedeId);
+          if (invalid) {
+            throw new ForbiddenException(
+              'No puede asociar sedes distintas a la suya.',
+            );
+          }
+          sedeIds = [user.sedeId];
+        }
+
+        if (user?.role === Role.COMPANY_ADMIN) {
+          if (!user.empresaId) {
+            throw new ForbiddenException(
+              'El administrador de empresa no tiene empresa asociada.',
+            );
+          }
+        }
+      }
+
       // Actualizar traducciones si se envían
       if (dto.translations) {
         await tx.serviceTranslation.deleteMany({ where: { serviceId: id } });
@@ -114,17 +204,38 @@ export class ServiceService {
       let sedeConnect:
         | Prisma.SedeUpdateManyWithoutServiceNestedInput
         | undefined;
-      if (dto.sedeIds) {
+      if (sedeIds) {
         const sedes = await tx.sede.findMany({
-          where: { id: { in: dto.sedeIds } },
+          where: { id: { in: sedeIds } },
+          select: { id: true, empresaId: true },
         });
 
-        if (sedes.length !== dto.sedeIds.length) {
+        if (sedes.length !== sedeIds.length) {
           throw new NotFoundException('Una o más sedes no existen');
         }
 
+        if (user?.role === Role.COMPANY_ADMIN) {
+          const invalid = sedes.some(
+            (sede) => sede.empresaId !== user.empresaId,
+          );
+          if (invalid) {
+            throw new ForbiddenException(
+              'No puede asociar sedes que no pertenezcan a su empresa.',
+            );
+          }
+        }
+
+        if (user?.role === Role.BRANCH_ADMIN) {
+          const invalid = sedes.some((sede) => sede.id !== user.sedeId);
+          if (invalid) {
+            throw new ForbiddenException(
+              'No puede asociar sedes distintas a la suya.',
+            );
+          }
+        }
+
         sedeConnect = {
-          set: dto.sedeIds.map((id) => ({ id })), // reemplaza todas las sedes previas
+          set: sedeIds.map((id) => ({ id })), // reemplaza todas las sedes previas
         };
       }
 
@@ -192,7 +303,8 @@ export class ServiceService {
   }
 
   // 🔴 Eliminar servicio y dependencias
-  async remove(id: number) {
+  async remove(id: number, user?: AuthenticatedUser) {
+    await this.accessControlService.ensureServiceAccessForUser(id, user);
     const existing = await this.findOne(id);
 
     return this.prisma.$transaction(async (tx) => {

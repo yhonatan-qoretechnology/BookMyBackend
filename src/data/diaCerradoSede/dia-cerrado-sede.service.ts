@@ -5,16 +5,25 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AccessControlService } from '../../auth/services/access-control/access-control.service';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateDiaCerradoSedeDto } from './dto/create-dia-cerrado-sede.dto';
 import { UpdateDiaCerradoSedeDto } from './dto/update-dia-cerrado-sede.dto';
 
 @Injectable()
 export class DiaCerradoSedeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accessControlService: AccessControlService,
+  ) {}
 
   // Crear día cerrado
-  async create(dto: CreateDiaCerradoSedeDto) {
+  async create(dto: CreateDiaCerradoSedeDto, user?: AuthenticatedUser) {
     const { sedeId, fecha, todoElDia, horaInicio, horaFin } = dto;
+
+    if (user) {
+      await this.accessControlService.ensureSedeAccessForUser(sedeId, user);
+    }
 
     // Validar sede
     const sede = await this.prisma.sede.findUnique({ where: { id: sedeId } });
@@ -86,7 +95,11 @@ export class DiaCerradoSedeService {
   }
 
   // Actualizar
-  async update(id: number, dto: UpdateDiaCerradoSedeDto) {
+  async update(
+    id: number,
+    dto: UpdateDiaCerradoSedeDto,
+    user?: AuthenticatedUser,
+  ) {
     const existente = await this.prisma.diaCerradoSede.findUnique({
       where: { id },
     });
@@ -95,6 +108,10 @@ export class DiaCerradoSedeService {
 
     const sedeId = dto.sedeId ?? existente.sedeId;
     const fecha = dto.fecha ?? existente.fecha.toISOString().split('T')[0];
+
+    if (user) {
+      await this.accessControlService.ensureSedeAccessForUser(sedeId, user);
+    }
 
     const duplicado = await this.prisma.diaCerradoSede.findFirst({
       where: { sedeId, fecha: new Date(fecha), NOT: { id } },
@@ -122,11 +139,15 @@ export class DiaCerradoSedeService {
     });
   }
 
-  // Eliminar día cerrado
-  async remove(id: number) {
+  // Eliminar
+  async remove(id: number, user?: AuthenticatedUser) {
     const dia = await this.prisma.diaCerradoSede.findUnique({ where: { id } });
     if (!dia)
       throw new NotFoundException(`Día cerrado con id ${id} no encontrado`);
+
+    if (user) {
+      await this.accessControlService.ensureSedeAccessForUser(dia.sedeId, user);
+    }
     return this.prisma.diaCerradoSede.delete({ where: { id } });
   }
 }

@@ -15,8 +15,23 @@ export class MailService {
 
   async sendUserConfirmation(email: string, otp: string) {
     const url = `${this.configService.get<string>('APP_URL') ?? 'http://localhost:3000'}/confirm?token=${otp}`;
-    const templatePath = join(__dirname, 'templates', 'welcome.hbs');
-    const templateSource = await readFile(templatePath, 'utf-8');
+    const templatePathFromSrc = join(
+      process.cwd(),
+      'src',
+      'data',
+      'email',
+      'templates',
+      'welcome.hbs',
+    );
+
+    let templateSource: string;
+
+    try {
+      templateSource = await readFile(templatePathFromSrc, 'utf-8');
+    } catch {
+      const templatePathFromDist = join(__dirname, 'templates', 'welcome.hbs');
+      templateSource = await readFile(templatePathFromDist, 'utf-8');
+    }
     const template = Handlebars.compile(templateSource);
 
     await this.transporter.sendMail({

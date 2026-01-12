@@ -9,6 +9,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { DiaCerradoSedeService } from './dia-cerrado-sede.service';
 import { CreateDiaCerradoSedeDto } from './dto/create-dia-cerrado-sede.dto';
 import { DiaCerradoSedeDto } from './dto/dia-cerrado-sede.dto';
@@ -22,8 +24,11 @@ export class DiaCerradoSedeController {
   @Post()
   @ApiOperation({ summary: 'Registrar un nuevo día cerrado para una sede' })
   @ApiResponse({ status: 201, type: DiaCerradoSedeDto })
-  create(@Body() dto: CreateDiaCerradoSedeDto) {
-    return this.service.create(dto);
+  create(
+    @Body() dto: CreateDiaCerradoSedeDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.service.create(dto, user);
   }
 
   @Get()
@@ -51,14 +56,18 @@ export class DiaCerradoSedeController {
   @Put(':id')
   @ApiOperation({ summary: 'Actualizar día cerrado por ID' })
   @ApiResponse({ status: 200, type: DiaCerradoSedeDto })
-  update(@Param('id') id: string, @Body() dto: UpdateDiaCerradoSedeDto) {
-    return this.service.update(Number(id), dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateDiaCerradoSedeDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.service.update(Number(id), dto, user);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Eliminar día cerrado por ID' })
   @ApiResponse({ status: 200, description: 'Día cerrado eliminado' })
-  remove(@Param('id') id: string) {
-    return this.service.remove(Number(id));
+  remove(@Param('id') id: string, @AuthUser() user?: AuthenticatedUser) {
+    return this.service.remove(Number(id), user);
   }
 }

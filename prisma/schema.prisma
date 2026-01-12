@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Users {
@@ -16,15 +17,36 @@ model Users {
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
   fotoPerfil     String?        @map("foto_perfil")
+  role           Role           @default(CLIENT) @map("role")
   UserAuth       UserAuth?      @relation("UserToUserAuth")
   UserCategories UserCategory[]
   UserData       UserData?      @relation("UserToUserData")
   UserLocation   UserLocation?  @relation("UserToLocation")
-  resenas        Resena[]     @relation("UserToResena")
+  AdminProfile   AdminProfile?
+  resenas        Resena[]       @relation("UserToResena")
 
   @@index([email])
   @@map("users")
   Appointment Appointment[]
+}
+
+model AdminProfile {
+  id         Int       @id @default(autoincrement()) @map("id")
+  userId     Int       @unique @map("user_id")
+  firstName  String    @map("first_name") @db.VarChar(100)
+  lastName   String    @map("last_name") @db.VarChar(100)
+  phone      String?   @map("phone") @db.VarChar(20)
+  photoUrl   String?   @map("photo_url")
+  empresaId  Int?      @map("empresa_id")
+  sedeId     Int?      @map("sede_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  user    Users    @relation(fields: [userId], references: [id])
+  empresa Empresa? @relation(fields: [empresaId], references: [id])
+  sede    Sede?    @relation(fields: [sedeId], references: [id])
+
+  @@map("admin_profiles")
 }
 
 model UserAuth {
@@ -119,7 +141,6 @@ model CategoryTranslation {
   @@map("category_translation")
 }
 
-
 model Price {
   id        Int     @id @default(autoincrement())
   serviceId Int
@@ -164,6 +185,12 @@ enum ClientState {
   blocked
 }
 
+enum Role {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  BRANCH_ADMIN
+  CLIENT
+}
 
 model Empresa {
   id          Int      @id @default(autoincrement())
@@ -183,6 +210,7 @@ model Empresa {
 
   // Relaciones
   sedes Sede[] // Una empresa puede tener muchas sedes
+  adminProfiles AdminProfile[]
 
   @@map("empresas")
 }
@@ -212,6 +240,7 @@ model Sede {
   HorarioSede HorarioSede[]
   DiaCerradoSede DiaCerradoSede[]
   Service Service[] @relation("SedeServicios")
+  adminProfiles AdminProfile[]
 
   @@map("sedes")
 }
@@ -245,7 +274,6 @@ enum ResenaType {
   SERVICIO
 }
 
-
 model Resena {
   id            Int           @id @default(autoincrement())
   calificacion  Float
@@ -269,8 +297,6 @@ model Resena {
   @@map("resenas")
 }
 
-
-
 model Galeria {
   id          Int      @id @default(autoincrement())
   url         String
@@ -283,8 +309,6 @@ model Galeria {
 
   @@map("galerias")
 }
-
-
 
 model Service {
   id               Int                @id @default(autoincrement())
@@ -303,7 +327,6 @@ model Service {
   Appointment Appointment[]
 }
 
-
 model ServiceTranslation {
   id          Int       @id @default(autoincrement())
   serviceId   Int
@@ -313,8 +336,6 @@ model ServiceTranslation {
   service     Service @relation(fields: [serviceId], references: [id])
 }
 
-// ESTA ES LA TABLA CLAVE que relaciona los datos.
-// Conecta `Sede`, `Service` y `Profesional`.
 model ServiceSedeProfesional {
   id             Int          @id @default(autoincrement())
   
@@ -331,7 +352,6 @@ model ServiceSedeProfesional {
   @@map("service_sede_profesional")
 }
 
-
 enum AppointmentStatus {
   PENDING    // pendiente de confirmación
   CONFIRMED  // confirmada
@@ -339,8 +359,6 @@ enum AppointmentStatus {
   CANCELLED  // cancelada
   NO_SHOW    // el cliente no asistió
 }
-
-
 
 model Appointment {
   id              Int         @id @default(autoincrement())

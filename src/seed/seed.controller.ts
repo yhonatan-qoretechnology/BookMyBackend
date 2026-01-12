@@ -19,6 +19,33 @@ export class SeedController {
     return this.seedService.seedEmpresas();
   }
 
+  @Post('super-admin')
+  @ApiOperation({
+    summary:
+      'Crear o actualizar el usuario SUPER_ADMIN inicial (solo desarrollo)',
+  })
+  async seedSuperAdmin() {
+    return this.seedService.seedSuperAdmin();
+  }
+
+  @Post('company-admin')
+  @ApiOperation({
+    summary:
+      'Crear o actualizar un COMPANY_ADMIN de prueba (requiere empresa creada)',
+  })
+  async seedCompanyAdmin() {
+    return this.seedService.seedCompanyAdmin();
+  }
+
+  @Post('branch-admin')
+  @ApiOperation({
+    summary:
+      'Crear o actualizar un BRANCH_ADMIN de prueba (requiere sede creada)',
+  })
+  async seedBranchAdmin() {
+    return this.seedService.seedBranchAdmin();
+  }
+
   @Post('categories')
   @ApiOperation({ summary: 'Ejecuta el seed de categorías y traducciones' })
   async seedCategories() {

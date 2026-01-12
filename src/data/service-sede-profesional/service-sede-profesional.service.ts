@@ -1,16 +1,22 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
+import { AccessControlService } from '../../auth/services/access-control/access-control.service';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateServiceSedeProfesionalDto } from './dto/create-service-sede-profesional.dto';
 import { UpdateServiceSedeProfesionalDto } from './dto/update-service-sede-profesional.dto';
 
 @Injectable()
 export class ServiceSedeProfesionalService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accessControlService: AccessControlService,
+  ) {}
 
   /**
    * Crea una nueva relación en la tabla ServiceSedeProfesional.
@@ -18,17 +24,28 @@ export class ServiceSedeProfesionalService {
    * @param createDto DTO con los IDs de servicio, sede y profesional.
    * @returns La nueva relación creada.
    */
-  async create(createDto: CreateServiceSedeProfesionalDto) {
+  async create(
+    createDto: CreateServiceSedeProfesionalDto,
+    user: AuthenticatedUser,
+  ) {
+    if (!user) {
+      throw new ForbiddenException('Usuario no autenticado.');
+    }
+
     const { sedeId, serviceId, profesionalId } = createDto;
 
     // 1. Validar que la sede, el servicio y el profesional existan.
-    const sede = await this.prisma.sede.findUnique({ where: { id: sedeId } });
+    const sede = await this.prisma.sede.findUnique({
+      where: { id: sedeId },
+      select: { id: true, empresaId: true },
+    });
     if (!sede) {
       throw new NotFoundException(`Sede con ID ${sedeId} no encontrada.`);
     }
 
     const service = await this.prisma.service.findUnique({
       where: { id: serviceId },
+      include: { sedes: { select: { id: true, empresaId: true } } },
     });
     if (!service) {
       throw new NotFoundException(
@@ -38,11 +55,54 @@ export class ServiceSedeProfesionalService {
 
     const profesional = await this.prisma.profesional.findUnique({
       where: { id: profesionalId },
+      select: { id: true, sedeId: true, sede: { select: { empresaId: true } } },
     });
     if (!profesional) {
       throw new NotFoundException(
         `Profesional con ID ${profesionalId} no encontrado.`,
       );
+    }
+
+    if (user.role === Role.COMPANY_ADMIN) {
+      if (!user.empresaId) {
+        throw new ForbiddenException(
+          'El administrador de empresa no tiene empresa asociada.',
+        );
+      }
+
+      const recursosEmpresa = [
+        sede.empresaId,
+        ...service.sedes.map((s) => s.empresaId),
+        profesional.sede?.empresaId,
+      ];
+
+      const pertenece = recursosEmpresa.every(
+        (empresaId) => empresaId === user.empresaId,
+      );
+
+      if (!pertenece) {
+        throw new ForbiddenException(
+          'Solo puede asociar recursos de su empresa.',
+        );
+      }
+    }
+
+    if (user.role === Role.BRANCH_ADMIN) {
+      if (!user.sedeId) {
+        throw new ForbiddenException('No tiene una sede asociada.');
+      }
+
+      const sedesServicio = service.sedes.map((s) => s.id);
+
+      if (
+        sede.id !== user.sedeId ||
+        profesional.sedeId !== user.sedeId ||
+        !sedesServicio.includes(user.sedeId)
+      ) {
+        throw new ForbiddenException(
+          'No puede asociar recursos fuera de su sede.',
+        );
+      }
     }
 
     // 2. Crear el registro en la tabla de relación.
@@ -98,8 +158,37 @@ export class ServiceSedeProfesionalService {
    * @returns La relación actualizada.
    * @throws NotFoundException si la relación no existe.
    */
-  async update(id: number, updateDto: UpdateServiceSedeProfesionalDto) {
+  async update(
+    id: number,
+    updateDto: UpdateServiceSedeProfesionalDto,
+    user: AuthenticatedUser,
+  ) {
+    if (!user) {
+      throw new ForbiddenException('Usuario no autenticado.');
+    }
+
     await this.findOne(id); // Validar que la relación existe
+
+    if (updateDto.sedeId) {
+      await this.accessControlService.ensureSedeAccessForUser(
+        updateDto.sedeId,
+        user,
+      );
+    }
+
+    if (updateDto.profesionalId) {
+      await this.accessControlService.ensureProfessionalAccessForUser(
+        updateDto.profesionalId,
+        user,
+      );
+    }
+
+    if (updateDto.serviceId) {
+      await this.accessControlService.ensureServiceAccessForUser(
+        updateDto.serviceId,
+        user,
+      );
+    }
 
     try {
       return await this.prisma.serviceSedeProfesional.update({
@@ -122,8 +211,42 @@ export class ServiceSedeProfesionalService {
    * @returns La relación eliminada.
    * @throws NotFoundException si la relación no existe.
    */
-  async remove(id: number) {
+  async remove(id: number, user: AuthenticatedUser) {
+    if (!user) {
+      throw new ForbiddenException('Usuario no autenticado.');
+    }
+
     await this.findOne(id); // Validar que la relación existe
+
+    if (user.role !== Role.SUPER_ADMIN) {
+      const relacion = await this.prisma.serviceSedeProfesional.findUnique({
+        where: { id },
+        select: {
+          sedeId: true,
+          serviceId: true,
+          profesionalId: true,
+        },
+      });
+
+      if (!relacion) {
+        throw new NotFoundException('Relación no encontrada.');
+      }
+
+      await this.accessControlService.ensureSedeAccessForUser(
+        relacion.sedeId,
+        user,
+      );
+      await this.accessControlService.ensureServiceAccessForUser(
+        relacion.serviceId,
+        user,
+      );
+      if (relacion.profesionalId !== null) {
+        await this.accessControlService.ensureProfessionalAccessForUser(
+          relacion.profesionalId,
+          user,
+        );
+      }
+    }
 
     return await this.prisma.serviceSedeProfesional.delete({ where: { id } });
   }

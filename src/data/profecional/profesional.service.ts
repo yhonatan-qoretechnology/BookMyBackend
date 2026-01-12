@@ -1,26 +1,34 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AppointmentStatus, Prisma } from '@prisma/client';
+import { AppointmentStatus, Prisma, Role } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
+import { AccessControlService } from '../../auth/services/access-control/access-control.service';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProfesionalDto } from './dto/create-profesional.dto';
 import { UpdateProfesionalDto } from './dto/update-profesional.dto';
 
 @Injectable()
 export class ProfesionalService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly accessControlService: AccessControlService,
+  ) {}
 
   async create(
     createProfesionalDto: CreateProfesionalDto,
+    user?: AuthenticatedUser,
     file?: Express.Multer.File,
   ) {
     // 1. Verificar si la sede existe
     const sede = await this.prisma.sede.findUnique({
       where: { id: createProfesionalDto.sedeId },
+      select: { id: true, empresaId: true },
     });
     if (!sede) {
       if (file) {
@@ -29,6 +37,28 @@ export class ProfesionalService {
       throw new NotFoundException(
         `Sede con ID ${createProfesionalDto.sedeId} no encontrada.`,
       );
+    }
+
+    if (user?.role === Role.BRANCH_ADMIN) {
+      if (!user.sedeId || user.sedeId !== sede.id) {
+        if (file) {
+          fs.unlinkSync(file.path);
+        }
+        throw new ForbiddenException(
+          'No puede crear profesionales en otra sede.',
+        );
+      }
+    }
+
+    if (user?.role === Role.COMPANY_ADMIN) {
+      if (!user.empresaId || user.empresaId !== sede.empresaId) {
+        if (file) {
+          fs.unlinkSync(file.path);
+        }
+        throw new ForbiddenException(
+          'No puede crear profesionales fuera de su empresa.',
+        );
+      }
     }
 
     try {
@@ -216,7 +246,21 @@ export class ProfesionalService {
     };
   }
 
-  async update(id: number, updateProfesionalDto: UpdateProfesionalDto) {
+  async update(
+    id: number,
+    updateProfesionalDto: UpdateProfesionalDto,
+    user?: AuthenticatedUser,
+  ) {
+    await this.accessControlService.ensureProfessionalAccessForUser(id, user);
+    if (
+      updateProfesionalDto.sedeId &&
+      user &&
+      user.role !== Role.SUPER_ADMIN &&
+      user.role !== Role.COMPANY_ADMIN
+    ) {
+      throw new ForbiddenException('No puede cambiar la sede asignada.');
+    }
+
     const profesional = await this.prisma.profesional.findUnique({
       where: { id },
     });
@@ -230,7 +274,12 @@ export class ProfesionalService {
     });
   }
 
-  async updateImage(id: number, file: Express.Multer.File) {
+  async updateImage(
+    id: number,
+    user: AuthenticatedUser | undefined,
+    file: Express.Multer.File,
+  ) {
+    await this.accessControlService.ensureProfessionalAccessForUser(id, user);
     const profesional = await this.prisma.profesional.findUnique({
       where: { id },
     });
@@ -259,7 +308,8 @@ export class ProfesionalService {
     });
   }
 
-  async remove(id: number) {
+  async remove(id: number, user?: AuthenticatedUser) {
+    await this.accessControlService.ensureProfessionalAccessForUser(id, user);
     const profesional = await this.prisma.profesional.findUnique({
       where: { id },
     });

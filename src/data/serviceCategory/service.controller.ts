@@ -17,6 +17,8 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateServiceDto } from '../serviceCategory/dto/create-service.dto';
 import { UpdateServiceDto } from '../serviceCategory/dto/update-service.dto';
 import { ServiceService } from '../serviceCategory/service.service';
@@ -34,8 +36,8 @@ export class ServiceController {
   @ApiBody({ type: CreateServiceDto })
   @ApiResponse({ status: 201, description: 'Servicio creado correctamente' })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
-  create(@Body() dto: CreateServiceDto) {
-    return this.serviceService.create(dto);
+  create(@Body() dto: CreateServiceDto, @AuthUser() user?: AuthenticatedUser) {
+    return this.serviceService.create(dto, user);
   }
 
   // 🟡 Actualizar un servicio
@@ -48,8 +50,12 @@ export class ServiceController {
   @ApiBody({ type: UpdateServiceDto })
   @ApiResponse({ status: 200, description: 'Servicio actualizado' })
   @ApiResponse({ status: 404, description: 'Servicio no encontrado' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateServiceDto) {
-    return this.serviceService.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateServiceDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.serviceService.update(id, dto, user);
   }
 
   // 🔵 Listar todos los servicios (filtrando idioma)
@@ -96,8 +102,11 @@ export class ServiceController {
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID del servicio' })
   @ApiResponse({ status: 200, description: 'Servicio eliminado correctamente' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.serviceService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.serviceService.remove(id, user);
   }
 
   // 🧩 Endpoint opcional: actualizar solo las sedes del servicio
@@ -123,9 +132,10 @@ export class ServiceController {
   async updateSedes(
     @Param('id', ParseIntPipe) id: number,
     @Body('sedeIds') sedeIds: number[],
+    @AuthUser() user?: AuthenticatedUser,
   ) {
     const dto = { sedeIds };
-    return this.serviceService.update(id, dto as any);
+    return this.serviceService.update(id, dto as any, user);
   }
 
   // 🔵 Listar servicios por categoría (filtrando idioma)

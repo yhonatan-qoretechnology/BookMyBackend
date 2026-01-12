@@ -9,10 +9,12 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { HorarioSedeService } from './horario-sede.service';
+import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateHorarioSedeDto } from './dto/create-horario-sede.dto';
-import { UpdateHorarioSedeDto } from './dto/update-horario-sede.dto';
 import { HorarioSedeDto } from './dto/horario-sede.dto';
+import { UpdateHorarioSedeDto } from './dto/update-horario-sede.dto';
+import { HorarioSedeService } from './horario-sede.service';
 
 @ApiTags('HorarioSede')
 @Controller('horario-sede')
@@ -26,8 +28,11 @@ export class HorarioSedeController {
     description: 'Horario creado',
     type: HorarioSedeDto,
   })
-  create(@Body() dto: CreateHorarioSedeDto) {
-    return this.service.create(dto);
+  create(
+    @Body() dto: CreateHorarioSedeDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.service.create(dto, user);
   }
 
   @Get()
@@ -58,14 +63,18 @@ export class HorarioSedeController {
     description: 'Horario actualizado',
     type: HorarioSedeDto,
   })
-  update(@Param('id') id: string, @Body() dto: UpdateHorarioSedeDto) {
-    return this.service.update(Number(id), dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateHorarioSedeDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.service.update(Number(id), dto, user);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Eliminar horario por ID' })
   @ApiResponse({ status: 200, description: 'Horario eliminado' })
-  remove(@Param('id') id: string) {
-    return this.service.remove(Number(id));
+  remove(@Param('id') id: string, @AuthUser() user?: AuthenticatedUser) {
+    return this.service.remove(Number(id), user);
   }
 }

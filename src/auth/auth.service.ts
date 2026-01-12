@@ -1,10 +1,11 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UserAuth } from '@prisma/client';
+import { Role, UserAuth } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
@@ -20,6 +21,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { ValidatePasswordOtpDto } from './dto/validate-password-otp.dto';
 import { ValidatePhoneDto } from './dto/validate-phone.dto';
 import { HashService } from './services/hash/hash.service';
+import { AuthenticatedUser } from './types/authenticated-user.interface';
 
 type UserAuthContext = {
   userId: number;
@@ -170,9 +172,30 @@ export class AuthService {
     if (!user) throw new NotFoundException(`User ${userId} not found`);
   }
 
-  async register(dto: RegisterDto, file?: Express.Multer.File) {
+  async register(
+    dto: RegisterDto,
+    file?: Express.Multer.File,
+    currentUser?: AuthenticatedUser,
+  ) {
+    let createdUserId: number | null = null;
+    let fotoPerfilPath: string | null = null;
     try {
       const hashedPassword = await bcrypt.hash(dto.password, 10);
+      const role = dto.role ?? Role.CLIENT;
+
+      if (role !== Role.CLIENT) {
+        if (!currentUser || currentUser.role !== Role.SUPER_ADMIN) {
+          throw new ForbiddenException(
+            'Solo un SUPER_ADMIN puede crear administradores. Usa los endpoints de /admin.',
+          );
+        }
+
+        if (!dto.firstName || !dto.lastName) {
+          throw new BadRequestException(
+            'Debe proporcionar nombre y apellido para crear un administrador.',
+          );
+        }
+      }
 
       // 1. Validar que el país exista
       const country = await this.prisma.country.findUnique({
@@ -184,8 +207,54 @@ export class AuthService {
         );
       }
 
+      let empresaIdForAdmin: number | null = null;
+      let sedeIdForAdmin: number | null = null;
+
+      if (role === Role.COMPANY_ADMIN) {
+        if (!dto.empresaId) {
+          throw new BadRequestException(
+            'Debe proporcionar la empresa asociada para un administrador de empresa.',
+          );
+        }
+
+        const empresaExists = await this.prisma.empresa.findUnique({
+          where: { id: dto.empresaId },
+        });
+
+        if (!empresaExists) {
+          throw new BadRequestException('La empresa asociada no existe.');
+        }
+
+        empresaIdForAdmin = dto.empresaId;
+      }
+
+      if (role === Role.BRANCH_ADMIN) {
+        if (!dto.sedeId) {
+          throw new BadRequestException(
+            'Debe proporcionar la sede asociada para un administrador de sede.',
+          );
+        }
+
+        const sede = await this.prisma.sede.findUnique({
+          where: { id: dto.sedeId },
+          select: { id: true, empresaId: true },
+        });
+
+        if (!sede) {
+          throw new BadRequestException('La sede asociada no existe.');
+        }
+
+        sedeIdForAdmin = sede.id;
+        empresaIdForAdmin = dto.empresaId ?? sede.empresaId;
+
+        if (dto.empresaId && dto.empresaId !== sede.empresaId) {
+          throw new BadRequestException(
+            'La sede seleccionada no pertenece a la empresa indicada.',
+          );
+        }
+      }
+
       // 2. Crear el usuario solo si las validaciones pasan
-      let fotoPerfilPath: string | null = null;
       if (file) {
         const userUploadsDir = path.join('uploads', 'users');
         if (!fs.existsSync(userUploadsDir)) {
@@ -201,9 +270,11 @@ export class AuthService {
         data: {
           email: dto.email,
           clientType: dto.clientType,
+          state: dto.state,
           acceptTerms: dto.acceptTerms,
           acceptPolitics: dto.acceptPolitics,
           fotoPerfil: fotoPerfilPath,
+          role,
           UserAuth: {
             create: {
               email: dto.email,
@@ -222,10 +293,22 @@ export class AuthService {
             },
           },
         },
-        include: {
-          UserData: true,
-        },
       });
+      createdUserId = user.id;
+
+      if (role !== Role.CLIENT) {
+        await this.prisma.adminProfile.create({
+          data: {
+            userId: user.id,
+            firstName: dto.firstName ?? dto.name,
+            lastName: dto.lastName ?? '',
+            phone: dto.phone,
+            photoUrl: fotoPerfilPath ?? undefined,
+            empresaId: empresaIdForAdmin ?? undefined,
+            sedeId: sedeIdForAdmin ?? undefined,
+          },
+        });
+      }
 
       // 3. Asociar categorías al usuario (si se enviaron en el registro)
       if (dto.categoryIds && dto.categoryIds.length > 0) {
@@ -259,10 +342,31 @@ export class AuthService {
         });
       }
 
-      return user;
+      return this.prisma.users.findUnique({
+        where: { id: user.id },
+        include: {
+          UserData: true,
+          AdminProfile: true,
+        },
+      });
     } catch (error) {
       if (file && fs.existsSync(file.path)) {
         fs.unlinkSync(file.path);
+      }
+
+      if (fotoPerfilPath) {
+        const normalizedPath = path.resolve(fotoPerfilPath);
+        if (fs.existsSync(normalizedPath)) {
+          fs.unlinkSync(normalizedPath);
+        }
+      }
+
+      if (createdUserId) {
+        try {
+          await this.prisma.users.delete({ where: { id: createdUserId } });
+        } catch (cleanupError) {
+          // noop: si no se puede limpiar, continuamos con el error original
+        }
       }
       if (error.code === 'P2002') {
         const target = Array.isArray((error as any).meta?.target)
@@ -456,18 +560,19 @@ export class AuthService {
     return { message: 'Contraseña actualizada correctamente.' };
   }
 
-  async findAllUsers() {
+  async findAllUsers(_user?: AuthenticatedUser) {
     return this.prisma.users.findMany({
       include: {
         UserData: true,
         UserCategories: {
           include: { category: true },
         },
+        AdminProfile: true,
       },
     });
   }
 
-  async findUserById(userId: number) {
+  async findUserById(userId: number, _user?: AuthenticatedUser) {
     const user = await this.prisma.users.findUnique({
       where: { id: userId },
       include: {
@@ -475,6 +580,7 @@ export class AuthService {
         UserCategories: {
           include: { category: true },
         },
+        AdminProfile: true,
       },
     });
 
@@ -497,6 +603,7 @@ export class AuthService {
         user: {
           select: {
             id: true,
+            email: true,
             clientType: true,
             state: true,
             acceptTerms: true,
@@ -504,6 +611,7 @@ export class AuthService {
             createdAt: true,
             updatedAt: true,
             fotoPerfil: true,
+            role: true,
             UserData: {
               select: {
                 id: true,
@@ -519,6 +627,17 @@ export class AuthService {
                     isoCode: true,
                   },
                 },
+              },
+            },
+            AdminProfile: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                photoUrl: true,
+                empresaId: true,
+                sedeId: true,
               },
             },
           },
@@ -548,15 +667,20 @@ export class AuthService {
     const { password: _, ...userData } = userAuth;
 
     // Generar token con los datos del usuario
+    const adminProfile = userAuth.user.AdminProfile;
+
     const token = await this.generateToken({
       id: userAuth.user.id,
-      email, // correo del usuario
+      email: userAuth.user.email,
       name: userAuth.user.UserData?.name,
       gender: userAuth.user.UserData?.gender,
       birthdate: userAuth.user.UserData?.birthdate,
       phone: userAuth.user.UserData?.phone,
       idioma: userAuth.user.UserData?.idioma,
       country: userAuth.user.UserData?.country,
+      role: userAuth.user.role,
+      empresaId: adminProfile?.empresaId ?? null,
+      sedeId: adminProfile?.sedeId ?? null,
     });
 
     return {
@@ -575,6 +699,9 @@ export class AuthService {
       phone: user.phone,
       idioma: user.idioma,
       country: user.country,
+      role: user.role,
+      empresaId: user.empresaId ?? null,
+      sedeId: user.sedeId ?? null,
     };
 
     const token = this.jwtService.sign(payload, { expiresIn: '1d' });

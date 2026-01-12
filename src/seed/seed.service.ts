@@ -1,5 +1,6 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { Prisma, Role } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -8,12 +9,268 @@ export enum LanguageCode {
   ES = 'es',
   EN = 'en',
 }
+
+type AdminSeedConfig = {
+  email: string;
+  password: string;
+  role: Role;
+  firstName: string;
+  lastName?: string;
+  phone: string;
+  countryId: number;
+  idioma?: string;
+  gender?: string;
+  empresaId?: number | null;
+  sedeId?: number | null;
+};
+
+type AdminSeedResult = {
+  userId: number;
+};
 @Injectable()
 export class SeedService {
+  private readonly logger = new Logger(SeedService.name);
+
   constructor(private prisma: PrismaService) {}
 
+  async seedSuperAdmin() {
+    const email = 'superadmin@bookmy.com';
+    const password = 'SuperAdmin123$';
+    const countryId = await this.ensureDefaultCountryId();
+
+    try {
+      const { userId } = await this.upsertAdmin({
+        email,
+        password,
+        role: Role.SUPER_ADMIN,
+        firstName: 'Super',
+        lastName: 'Admin',
+        phone: '+34999999999',
+        countryId,
+        idioma: 'es',
+        gender: 'no especificado',
+      });
+
+      return {
+        message: 'Usuario SUPER_ADMIN sembrado correctamente.',
+        credentials: {
+          email,
+          password,
+        },
+        userId,
+      };
+    } catch (error) {
+      this.logger.error('Error al sembrar el SUPER_ADMIN', error as Error);
+      throw error;
+    }
+  }
+
+  async seedCompanyAdmin() {
+    const email = 'company.admin@bookmy.com';
+    const password = 'CompanyAdmin123$';
+    const countryId = await this.ensureDefaultCountryId();
+
+    const empresa = await this.prisma.empresa.findFirst({
+      orderBy: { id: 'asc' },
+    });
+
+    if (!empresa) {
+      throw new ForbiddenException(
+        'No hay empresas registradas. Ejecuta primero el seed de empresas.',
+      );
+    }
+
+    const { userId } = await this.upsertAdmin({
+      email,
+      password,
+      role: Role.COMPANY_ADMIN,
+      firstName: 'Company',
+      lastName: 'Admin',
+      phone: '+34999999991',
+      countryId,
+      idioma: 'es',
+      gender: 'no especificado',
+      empresaId: empresa.id,
+    });
+
+    return {
+      message: 'Usuario COMPANY_ADMIN sembrado correctamente.',
+      credentials: {
+        email,
+        password,
+      },
+      userId,
+      empresaId: empresa.id,
+    };
+  }
+
+  async seedBranchAdmin() {
+    const email = 'branch.admin@bookmy.com';
+    const password = 'BranchAdmin123$';
+    const countryId = await this.ensureDefaultCountryId();
+
+    const sede = await this.prisma.sede.findFirst({
+      orderBy: { id: 'asc' },
+    });
+
+    if (!sede) {
+      throw new ForbiddenException(
+        'No hay sedes registradas. Ejecuta primero el seed de sedes.',
+      );
+    }
+
+    const { userId } = await this.upsertAdmin({
+      email,
+      password,
+      role: Role.BRANCH_ADMIN,
+      firstName: 'Branch',
+      lastName: 'Admin',
+      phone: '+34999999992',
+      countryId,
+      idioma: 'es',
+      gender: 'no especificado',
+      empresaId: sede.empresaId,
+      sedeId: sede.id,
+    });
+
+    return {
+      message: 'Usuario BRANCH_ADMIN sembrado correctamente.',
+      credentials: {
+        email,
+        password,
+      },
+      userId,
+      empresaId: sede.empresaId,
+      sedeId: sede.id,
+    };
+  }
+
+  private async ensureDefaultCountryId(): Promise<number> {
+    let country = await this.prisma.country.findFirst({
+      orderBy: { id: 'asc' },
+    });
+
+    if (country) {
+      return country.id;
+    }
+
+    await this.createSeed();
+
+    country = await this.prisma.country.findFirst({
+      orderBy: { id: 'asc' },
+    });
+
+    if (!country) {
+      throw new ForbiddenException(
+        'No se encontraron países. Ejecuta el seed de países antes de crear administradores.',
+      );
+    }
+
+    return country.id;
+  }
+
+  private async upsertAdmin(config: AdminSeedConfig): Promise<AdminSeedResult> {
+    const hashedPassword = await bcrypt.hash(config.password, 12);
+
+    const user = await this.prisma.users.upsert({
+      where: { email: config.email },
+      update: {
+        role: config.role,
+        clientType: 'business',
+        state: 'enabled',
+        acceptTerms: true,
+        acceptPolitics: true,
+        UserAuth: {
+          upsert: {
+            update: { password: hashedPassword },
+            create: {
+              email: config.email,
+              password: hashedPassword,
+            },
+          },
+        },
+        UserData: {
+          upsert: {
+            update: {
+              name: config.firstName,
+              phone: config.phone,
+              email: config.email,
+              countryId: config.countryId,
+              idioma: config.idioma ?? 'es',
+              gender: config.gender ?? 'no especificado',
+            },
+            create: {
+              name: config.firstName,
+              phone: config.phone,
+              email: config.email,
+              countryId: config.countryId,
+              idioma: config.idioma ?? 'es',
+              gender: config.gender ?? 'no especificado',
+            },
+          },
+        },
+        AdminProfile: {
+          upsert: {
+            update: {
+              firstName: config.firstName,
+              lastName: config.lastName ?? '',
+              phone: config.phone,
+              empresaId: config.empresaId ?? null,
+              sedeId: config.sedeId ?? null,
+            },
+            create: {
+              firstName: config.firstName,
+              lastName: config.lastName ?? '',
+              phone: config.phone,
+              empresaId: config.empresaId ?? null,
+              sedeId: config.sedeId ?? null,
+            },
+          },
+        },
+      },
+      create: {
+        email: config.email,
+        clientType: 'business',
+        state: 'enabled',
+        acceptTerms: true,
+        acceptPolitics: true,
+        role: config.role,
+        UserAuth: {
+          create: {
+            email: config.email,
+            password: hashedPassword,
+          },
+        },
+        UserData: {
+          create: {
+            name: config.firstName,
+            phone: config.phone,
+            email: config.email,
+            countryId: config.countryId,
+            idioma: config.idioma ?? 'es',
+            gender: config.gender ?? 'no especificado',
+          },
+        },
+        AdminProfile: {
+          create: {
+            firstName: config.firstName,
+            lastName: config.lastName ?? '',
+            phone: config.phone,
+            empresaId: config.empresaId ?? null,
+            sedeId: config.sedeId ?? null,
+          },
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return { userId: user.id };
+  }
+
   async createSeed() {
-    const filePath = path.resolve(__dirname, '../../prisma/seed-data.json');
+    const filePath = path.resolve(process.cwd(), 'prisma', 'seed-data.json');
     const rawData = fs.readFileSync(filePath, 'utf-8');
     const data = JSON.parse(rawData);
 

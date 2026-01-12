@@ -7,8 +7,14 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
+import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateServiceSedeProfesionalDto } from './dto/create-service-sede-profesional.dto';
 import { UpdateServiceSedeProfesionalDto } from './dto/update-service-sede-profesional.dto';
 import { ServiceSedeProfesionalService } from './service-sede-profesional.service';
@@ -21,6 +27,8 @@ export class ServiceSedeProfesionalController {
   ) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
   @ApiOperation({
     summary: 'Crea una nueva relación entre servicio, sede y profesional.',
   })
@@ -28,9 +36,11 @@ export class ServiceSedeProfesionalController {
   create(
     @Body()
     createServiceSedeProfesionalDto: CreateServiceSedeProfesionalDto,
+    @AuthUser() user: AuthenticatedUser,
   ) {
     return this.serviceSedeProfesionalService.create(
       createServiceSedeProfesionalDto,
+      user,
     );
   }
 
@@ -48,23 +58,32 @@ export class ServiceSedeProfesionalController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
   @ApiOperation({ summary: 'Actualiza una relación por su ID.' })
   @ApiResponse({ status: 200, description: 'Relación actualizada.' })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body()
     updateServiceSedeProfesionalDto: UpdateServiceSedeProfesionalDto,
+    @AuthUser() user: AuthenticatedUser,
   ) {
     return this.serviceSedeProfesionalService.update(
       id,
       updateServiceSedeProfesionalDto,
+      user,
     );
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
   @ApiOperation({ summary: 'Elimina una relación por su ID.' })
   @ApiResponse({ status: 200, description: 'Relación eliminada.' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.serviceSedeProfesionalService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.serviceSedeProfesionalService.remove(id, user);
   }
 }

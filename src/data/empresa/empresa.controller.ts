@@ -22,12 +22,15 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
 import { CreateEmpresaWithFileDto } from '../empresa/dto/create-empresa-with-file.dto';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
 import { EmpresaService } from './empresa.service';
 
 @ApiTags('Empresas')
+@Roles(Role.SUPER_ADMIN)
 @Controller('empresas')
 export class EmpresaController {
   constructor(private readonly empresaService: EmpresaService) {}

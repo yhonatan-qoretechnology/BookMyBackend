@@ -24,6 +24,8 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateProfesionalWithImageDto } from './dto/create-profesional-with-image.dto';
 import { CreateProfesionalDto } from './dto/create-profesional.dto';
 import { UpdateProfesionalDto } from './dto/update-profesional.dto';
@@ -48,8 +50,9 @@ export class ProfesionalController {
   async create(
     @Body() createProfesionalDto: CreateProfesionalDto,
     @UploadedFile() file?: Express.Multer.File,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
-    return this.profesionalService.create(createProfesionalDto, file);
+    return this.profesionalService.create(createProfesionalDto, user, file);
   }
 
   @Get()
@@ -98,8 +101,9 @@ export class ProfesionalController {
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateProfesionalDto: UpdateProfesionalDto,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
-    return this.profesionalService.update(id, updateProfesionalDto);
+    return this.profesionalService.update(id, updateProfesionalDto, user);
   }
 
   @Patch(':id/imagen')
@@ -125,11 +129,12 @@ export class ProfesionalController {
   async updateImage(
     @Param('id', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
     if (!file) {
       throw new BadRequestException('Debe subir un archivo de imagen.');
     }
-    return this.profesionalService.updateImage(id, file);
+    return this.profesionalService.updateImage(id, user, file);
   }
 
   @Delete(':id')
@@ -140,8 +145,11 @@ export class ProfesionalController {
     description: 'Profesional eliminado exitosamente.',
   })
   @ApiNotFoundResponse({ description: 'Profesional no encontrado.' })
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    return this.profesionalService.remove(id);
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.profesionalService.remove(id, user);
   }
 
   @Get('by-sede/:sedeId')

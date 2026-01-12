@@ -1,19 +1,37 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AccessControlService } from '../../auth/services/access-control/access-control.service';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateDisponibilidadProfesionalDto } from './dto/create-disponibilidad-profesional.dto';
 import { UpdateDisponibilidadProfesionalDto } from './dto/update-disponibilidad-profesional.dto';
 
 @Injectable()
 export class DisponibilidadProfesionalService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accessControlService: AccessControlService,
+  ) {}
 
   // Crear registro de disponibilidad o ausencia para un día específico
-  async create(dto: CreateDisponibilidadProfesionalDto) {
+  async create(
+    dto: CreateDisponibilidadProfesionalDto,
+    user: AuthenticatedUser,
+  ) {
+    if (!user) {
+      throw new ForbiddenException('Usuario no autenticado.');
+    }
+
+    await this.accessControlService.ensureProfessionalAccessForUser(
+      dto.profesionalId,
+      user,
+    );
+
     const { profesionalId, fecha, disponible, horaInicio, horaFin, motivo } =
       dto;
 
@@ -98,18 +116,34 @@ export class DisponibilidadProfesionalService {
   }
 
   // Obtener uno
-  async findOne(id: number) {
+  async findOne(id: number, user?: AuthenticatedUser) {
     const rec = await this.prisma.disponibilidadProfesional.findUnique({
       where: { id },
       include: { profesional: { select: { id: true, nombre: true } } },
     });
     if (!rec)
       throw new NotFoundException(`Disponibilidad con id ${id} no encontrada`);
+
+    if (user) {
+      await this.accessControlService.ensureProfessionalAccessForUser(
+        rec.profesionalId,
+        user,
+      );
+    }
+
     return rec;
   }
 
   // Actualizar
-  async update(id: number, dto: UpdateDisponibilidadProfesionalDto) {
+  async update(
+    id: number,
+    dto: UpdateDisponibilidadProfesionalDto,
+    user: AuthenticatedUser,
+  ) {
+    if (!user) {
+      throw new ForbiddenException('Usuario no autenticado.');
+    }
+
     const existing = await this.prisma.disponibilidadProfesional.findUnique({
       where: { id },
     });
@@ -117,6 +151,12 @@ export class DisponibilidadProfesionalService {
       throw new NotFoundException(`Disponibilidad con id ${id} no encontrada`);
 
     const newProfesionalId = dto.profesionalId ?? existing.profesionalId;
+
+    await this.accessControlService.ensureProfessionalAccessForUser(
+      newProfesionalId,
+      user,
+    );
+
     const newFecha = dto.fecha ? new Date(dto.fecha) : existing.fecha;
 
     // Si cambia a otro profesional o fecha, validar unicidad
@@ -162,12 +202,21 @@ export class DisponibilidadProfesionalService {
   }
 
   // Eliminar
-  async remove(id: number) {
+  async remove(id: number, user: AuthenticatedUser) {
+    if (!user) {
+      throw new ForbiddenException('Usuario no autenticado.');
+    }
+
     const existing = await this.prisma.disponibilidadProfesional.findUnique({
       where: { id },
     });
     if (!existing)
       throw new NotFoundException(`Disponibilidad con id ${id} no encontrada`);
+
+    await this.accessControlService.ensureProfessionalAccessForUser(
+      existing.profesionalId,
+      user,
+    );
     return this.prisma.disponibilidadProfesional.delete({ where: { id } });
   }
 }

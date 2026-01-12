@@ -25,6 +25,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { AuthUser } from './common/decorators/auth-user.decorator';
 import { ChangePasswordByAdminDto } from './dto/change-password-by-admin.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -34,6 +35,7 @@ import { UpdatePassDto } from './dto/update-pass.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ValidatePasswordOtpDto } from './dto/validate-password-otp.dto';
 import { ValidatePhoneDto } from './dto/validate-phone.dto';
+import { AuthenticatedUser } from './types/authenticated-user.interface';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -42,15 +44,18 @@ export class AuthController {
 
   @Get('users')
   @ApiOperation({ summary: 'Listar todos los usuarios' })
-  async findAllUsers() {
-    return this.authService.findAllUsers();
+  async findAllUsers(@AuthUser() user: AuthenticatedUser) {
+    return this.authService.findAllUsers(user);
   }
 
   @Get('users/:id')
   @ApiOperation({ summary: 'Obtener un usuario por ID' })
   @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
-  async findUserById(@Param('id', ParseIntPipe) id: number) {
-    return this.authService.findUserById(id);
+  async findUserById(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.authService.findUserById(id, user);
   }
 
   @Post('register')
@@ -69,12 +74,13 @@ export class AuthController {
   )
   async register(
     @Body() dto: RegisterDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
-    const user = await this.authService.register(dto, file);
+    const result = await this.authService.register(dto, file, user);
     return {
       message: 'User registered successfully',
-      user,
+      user: result,
     };
   }
 
