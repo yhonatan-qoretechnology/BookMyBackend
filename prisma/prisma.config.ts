@@ -4,4 +4,11 @@ import { defineConfig } from 'prisma/config';
 export default defineConfig({
   earlyAccess: true,
   schema: 'prisma/schema.prisma',
+  datasources: {
+    db: {
+      url: {
+        fromEnvVar: 'DATABASE_URL',
+      },
+    },
+  },
 });
