@@ -16,7 +16,6 @@ import { AdminManagementService } from '../services/admin-management/admin-manag
 @ApiTags('Administración de Administradores')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Roles(Role.SUPER_ADMIN)
 @Controller('admin')
 export class AdminManagementController {
   constructor(

@@ -25,11 +25,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import * as fs from 'fs';
-import { Roles } from '../../auth/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CreateSedeWithImagesDto } from './dto/create-sede-with-images.dto';
 import { CreateSedeDto } from './dto/create-sede.dto';
@@ -38,7 +36,6 @@ import { SedeService } from './sede.service';
 
 @ApiTags('Sedes')
 @UseGuards(JwtAuthGuard)
-@Roles(Role.SUPER_ADMIN)
 @Controller('sedes')
 export class SedeController {
   constructor(private readonly sedeService: SedeService) {}
