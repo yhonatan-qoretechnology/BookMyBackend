@@ -324,15 +324,19 @@ export class SeedService {
       },
     ];
 
-    await this.prisma.empresa.createMany({
-      data: empresas,
-      skipDuplicates: true,
-    });
+    try {
+      await this.prisma.empresa.createMany({
+        data: empresas,
+        skipDuplicates: true,
+      });
 
-    return {
-      message: 'Seed ejecutado correctamente.',
-      total: empresas.length,
-    };
+      return {
+        message: 'Seed ejecutado correctamente.',
+        total: empresas.length,
+      };
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   async seedCategories() {
