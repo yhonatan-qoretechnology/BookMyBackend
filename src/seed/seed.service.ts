@@ -334,8 +334,13 @@ export class SeedService {
         message: 'Seed ejecutado correctamente.',
         total: empresas.length,
       };
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error('Error al sembrar empresas:', {
+        code: err?.code,
+        meta: err?.meta,
+        message: err?.message,
+      });
+      throw err;
     }
   }
 

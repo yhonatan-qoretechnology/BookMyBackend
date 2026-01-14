@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Users {
@@ -17,33 +18,32 @@ model Users {
   updatedAt      DateTime       @updatedAt @map("updated_at")
   fotoPerfil     String?        @map("foto_perfil")
   role           Role           @default(CLIENT) @map("role")
+  Appointment    Appointment[]
+  AdminProfile   AdminProfile?
+  resenas        Resena[]       @relation("UserToResena")
   UserAuth       UserAuth?      @relation("UserToUserAuth")
   UserCategories UserCategory[]
   UserData       UserData?      @relation("UserToUserData")
   UserLocation   UserLocation?  @relation("UserToLocation")
-  AdminProfile   AdminProfile?
-  resenas        Resena[]       @relation("UserToResena")
 
   @@index([email])
   @@map("users")
-  Appointment Appointment[]
 }
 
 model AdminProfile {
-  id         Int       @id @default(autoincrement()) @map("id")
-  userId     Int       @unique @map("user_id")
-  firstName  String    @map("first_name") @db.VarChar(100)
-  lastName   String    @map("last_name") @db.VarChar(100)
-  phone      String?   @map("phone") @db.VarChar(20)
-  photoUrl   String?   @map("photo_url")
-  empresaId  Int?      @map("empresa_id")
-  sedeId     Int?      @map("sede_id")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
-
-  user    Users    @relation(fields: [userId], references: [id])
-  empresa Empresa? @relation(fields: [empresaId], references: [id])
-  sede    Sede?    @relation(fields: [sedeId], references: [id])
+  id        Int      @id @default(autoincrement()) @map("id")
+  userId    Int      @unique @map("user_id")
+  firstName String   @map("first_name") @db.VarChar(100)
+  lastName  String   @map("last_name") @db.VarChar(100)
+  phone     String?  @map("phone") @db.VarChar(20)
+  photoUrl  String?  @map("photo_url")
+  empresaId Int?     @map("empresa_id")
+  sedeId    Int?     @map("sede_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+  sede      Sede?    @relation(fields: [sedeId], references: [id])
+  user      Users    @relation(fields: [userId], references: [id])
 
   @@map("admin_profiles")
 }
@@ -61,17 +61,17 @@ model UserAuth {
 }
 
 model UserData {
-  id        Int     @id @default(autoincrement()) @map("id")
-  name      String  @map("name") @db.VarChar(50)
-  phone     String    @unique @map("phone") @db.VarChar(20) // Campo phone en UserData
+  id        Int       @id @default(autoincrement()) @map("id")
+  name      String    @map("name") @db.VarChar(50)
+  phone     String    @unique @map("phone") @db.VarChar(20)
   email     String    @unique @map("email")
-  userId    Int     @unique @map("user_id")
-  countryId Int     @map("country_id")
-  idioma    String  @map("idioma") @db.VarChar(50)
-  gender    String  @db.VarChar(50)
+  userId    Int       @unique @map("user_id")
+  countryId Int       @map("country_id")
+  idioma    String    @map("idioma") @db.VarChar(50)
+  gender    String    @db.VarChar(50)
   birthdate DateTime?
-  country   Country @relation(fields: [countryId], references: [id])
-  user      Users   @relation("UserToUserData", fields: [userId], references: [id])
+  country   Country   @relation(fields: [countryId], references: [id])
+  user      Users     @relation("UserToUserData", fields: [userId], references: [id])
 
   @@map("user_data")
 }
@@ -110,7 +110,7 @@ model DocumentTypeByCountry {
 
 model Otp {
   id        Int      @id @default(autoincrement())
-  email     String     @map("email")
+  email     String   @map("email")
   code      String
   createdAt DateTime @default(now())
   expiresAt DateTime
@@ -121,9 +121,9 @@ model Category {
   id             Int                   @id @default(autoincrement())
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
-   image          String?  
-  services       Service[]
+  image          String?
   translations   CategoryTranslation[]
+  services       Service[]
   UserCategories UserCategory[]
 }
 
@@ -173,9 +173,232 @@ model UserLocation {
   @@map("user_locations")
 }
 
+model Empresa {
+  id               Int            @id @default(autoincrement())
+  nombre           String         @unique
+  telefono         String?        @map("telefono")
+  email            String?        @map("email")
+  nit              String?        @map("nit")
+  logo             String?        @map("logo_url")
+  descripcion      String?        @map("descripcion")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  descripcionLarga String?        @map("descripcion_larga")
+  facebookUrl      String?        @map("facebook_url")
+  instagramUrl     String?        @map("instagram_url")
+  tiktokUrl        String?        @map("tiktok_url")
+  webUrl           String?        @map("web_url")
+  adminProfiles    AdminProfile[]
+  sedes            Sede[]
+
+  @@map("empresas")
+}
+
+model Sede {
+  id                     Int                      @id @default(autoincrement())
+  nombre                 String
+  direccion              String
+  telefono               String?
+  latitud                Float?
+  longitud               Float?
+  provincia              String?
+  horario                Json?
+  diasCerrado            Json?
+  imagenes               String[]
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  empresaId              Int
+  Appointment            Appointment[]
+  adminProfiles          AdminProfile[]
+  DiaCerradoSede         DiaCerradoSede[]
+  galeria                Galeria[]
+  HorarioSede            HorarioSede[]
+  profesionales          Profesional[]
+  resenas                Resena[]
+  empresa                Empresa                  @relation(fields: [empresaId], references: [id])
+  serviceSedeProfesional ServiceSedeProfesional[]
+  Service                Service[]                @relation("SedeServicios")
+
+  @@map("sedes")
+}
+
+model Profesional {
+  id                        Int                         @id @default(autoincrement())
+  nombre                    String
+  biografia                 String?
+  imagen                    String?
+  phone                     String                      @unique @map("phone") @db.VarChar(20)
+  state                     ClientState                 @default(enabled) @map("state")
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
+  sedeId                    Int
+  Appointment               Appointment[]
+  DisponibilidadProfesional DisponibilidadProfesional[]
+  sede                      Sede                        @relation(fields: [sedeId], references: [id])
+  serviceSedeProfesional    ServiceSedeProfesional[]
+  servicios                 Service[]                   @relation("ProfesionalToService")
+
+  @@map("profesionales")
+}
+
+model Resena {
+  id           Int         @id @default(autoincrement())
+  calificacion Float
+  comentario   String?
+  aprobado     Boolean     @default(false)
+  estado       ResenaState
+  tipo         ResenaType
+  sedeId       Int?
+  usuarioId    Int
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  sede         Sede?       @relation(fields: [sedeId], references: [id])
+  usuario      Users       @relation("UserToResena", fields: [usuarioId], references: [id])
+
+  @@index([sedeId])
+  @@map("resenas")
+}
+
+model Galeria {
+  id          Int      @id @default(autoincrement())
+  url         String
+  descripcion String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  sedeId      Int
+  sede        Sede     @relation(fields: [sedeId], references: [id])
+
+  @@map("galerias")
+}
+
+model Service {
+  id                     Int                      @id @default(autoincrement())
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  categoryId             Int
+  imagenes               String[]
+  Appointment            Appointment[]
+  prices                 Price[]
+  translations           ServiceTranslation[]
+  serviceSedeProfesional ServiceSedeProfesional[]
+  category               Category                 @relation(fields: [categoryId], references: [id])
+  profesionales          Profesional[]            @relation("ProfesionalToService")
+  sedes                  Sede[]                   @relation("SedeServicios")
+
+  @@index([categoryId])
+  @@map("servicios")
+}
+
+model ServiceTranslation {
+  id          Int     @id @default(autoincrement())
+  serviceId   Int
+  language    String
+  name        String
+  description String?
+  service     Service @relation(fields: [serviceId], references: [id])
+}
+
+model ServiceSedeProfesional {
+  id            Int          @id @default(autoincrement())
+  sedeId        Int
+  serviceId     Int
+  profesionalId Int?
+  profesional   Profesional? @relation(fields: [profesionalId], references: [id])
+  sede          Sede         @relation(fields: [sedeId], references: [id])
+  service       Service      @relation(fields: [serviceId], references: [id])
+
+  @@unique([sedeId, serviceId, profesionalId])
+  @@map("service_sede_profesional")
+}
+
+model Appointment {
+  id            Int               @id @default(autoincrement())
+  fecha         DateTime
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  sedeId        Int
+  serviceId     Int
+  profesionalId Int
+  duracion      Int
+  estado        AppointmentStatus @default(PENDING)
+  horaFin       DateTime
+  horaInicio    DateTime
+  notas         String?
+  userId        Int
+  profesional   Profesional       @relation(fields: [profesionalId], references: [id])
+  sede          Sede              @relation(fields: [sedeId], references: [id])
+  service       Service           @relation(fields: [serviceId], references: [id])
+  user          Users             @relation(fields: [userId], references: [id])
+  Payment       Payment?
+
+  @@unique([profesionalId, horaInicio])
+  @@index([fecha])
+  @@index([profesionalId, fecha])
+  @@index([sedeId, fecha])
+}
+
+model HorarioSede {
+  id           Int     @id @default(autoincrement())
+  sedeId       Int
+  diaSemana    Int
+  horaApertura String
+  horaCierre   String
+  activo       Boolean @default(true)
+  sede         Sede    @relation(fields: [sedeId], references: [id])
+
+  @@unique([sedeId, diaSemana])
+  @@map("horario_sede")
+}
+
+model DiaCerradoSede {
+  id         Int      @id @default(autoincrement())
+  sedeId     Int
+  fecha      DateTime
+  motivo     String?
+  todoElDia  Boolean  @default(true)
+  horaInicio String?
+  horaFin    String?
+  sede       Sede     @relation(fields: [sedeId], references: [id])
+
+  @@index([sedeId, fecha])
+  @@map("dias_cerrados_sede")
+}
+
+model DisponibilidadProfesional {
+  id            Int         @id @default(autoincrement())
+  profesionalId Int
+  fecha         DateTime
+  disponible    Boolean     @default(true)
+  horaInicio    String?
+  horaFin       String?
+  motivo        String?
+  profesional   Profesional @relation(fields: [profesionalId], references: [id])
+
+  @@unique([profesionalId, fecha])
+  @@index([profesionalId, fecha])
+  @@map("disponibilidad_profesional")
+}
+
+model Payment {
+  id             Int           @id @default(autoincrement())
+  appointmentId  Int           @unique
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  totalAmount    Float
+  reservedAmount Float?
+  paidAmount     Float?
+  transactionId  String?
+  bankResponse   Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  appointment    Appointment   @relation(fields: [appointmentId], references: [id])
+
+  @@map("payments")
+}
+
 enum ClientType {
-  people // usuario persona
-  business // usuario empresa
+  people
+  business
 }
 
 enum ClientState {
@@ -191,250 +414,24 @@ enum Role {
   CLIENT
 }
 
-model Empresa {
-  id          Int      @id @default(autoincrement())
-  nombre      String   @unique
-  telefono    String?  @map("telefono")
-  email       String?  @map("email")
-  nit         String?  @map("nit")
-  logo        String?  @map("logo_url") // URL del logo
-  descripcion String?  @map("descripcion")
-  descripcionLarga String?  @map("descripcion_larga")
-  facebookUrl      String?  @map("facebook_url")
-  instagramUrl     String?  @map("instagram_url")
-  tiktokUrl        String?  @map("tiktok_url")
-  webUrl           String?  @map("web_url")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  // Relaciones
-  sedes Sede[] // Una empresa puede tener muchas sedes
-  adminProfiles AdminProfile[]
-
-  @@map("empresas")
-}
-
-model Sede {
-  id              Int      @id @default(autoincrement())
-  nombre          String
-  direccion       String
-  telefono        String?
-  latitud         Float?
-  longitud        Float?
-  provincia       String?
-  horario         Json?
-  diasCerrado     Json?
-  imagenes        String[]
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  empresaId       Int
-  empresa         Empresa  @relation(fields: [empresaId], references: [id])
-  
-  profesionales   Profesional[]
-  resenas         Resena[]
-  galeria         Galeria[]
-  serviceSedeProfesional ServiceSedeProfesional[]
-  Appointment Appointment[]
-  HorarioSede HorarioSede[]
-  DiaCerradoSede DiaCerradoSede[]
-  Service Service[] @relation("SedeServicios")
-  adminProfiles AdminProfile[]
-
-  @@map("sedes")
-}
-
-model Profesional {
-  id           Int      @id @default(autoincrement())
-  nombre       String
-  biografia    String?
-  imagen       String?
-  phone        String    @unique @map("phone") @db.VarChar(20) 
-  state        ClientState    @default(enabled) @map("state")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt  
-  sedeId       Int
-  sede         Sede     @relation(fields: [sedeId], references: [id])
- servicios   Service[] // Relación de muchos a muchos
- serviceSedeProfesional ServiceSedeProfesional[]
- Appointment Appointment[]
-  DisponibilidadProfesional DisponibilidadProfesional[]
-  @@map("profesionales")
-  
-}
-
 enum ResenaState {
   PENDIENTE
   APROBADA
   RECHAZADA
 }
+
 enum ResenaType {
   SEDE
   SERVICIO
 }
 
-model Resena {
-  id            Int           @id @default(autoincrement())
-  calificacion  Float
-  comentario    String?
-  aprobado      Boolean       @default(false)
-  estado        ResenaState
-  tipo          ResenaType
-  
-  sedeId        Int?
-  sede          Sede?         @relation(fields: [sedeId], references: [id], onDelete: SetNull)
-
-   usuarioId    Int
-  usuario      Users    @relation("UserToResena", fields: [usuarioId], references: [id])
-
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-
-  // Se asegura de que solo uno de los campos de relación (sedeId, serviceId) esté presente
-  @@index([sedeId])
-  
-  @@map("resenas")
-}
-
-model Galeria {
-  id          Int      @id @default(autoincrement())
-  url         String
-  descripcion String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  sedeId      Int
-  sede        Sede     @relation(fields: [sedeId], references: [id])
-
-  @@map("galerias")
-}
-
-model Service {
-  id               Int                @id @default(autoincrement())
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  categoryId       Int
-  prices           Price[]
-  category         Category           @relation(fields: [categoryId], references: [id])
-  translations     ServiceTranslation[]
-  imagenes         String[]
-  profesionales    Profesional[] // Relación de muchos a muchos
-  serviceSedeProfesional ServiceSedeProfesional[]
-  sedes            Sede[]               @relation("SedeServicios")
-  @@index([categoryId])
-  @@map("servicios")
-  Appointment Appointment[]
-}
-
-model ServiceTranslation {
-  id          Int       @id @default(autoincrement())
-  serviceId   Int
-  language    String
-  name        String
-  description String?
-  service     Service @relation(fields: [serviceId], references: [id])
-}
-
-model ServiceSedeProfesional {
-  id             Int          @id @default(autoincrement())
-  
-  sedeId         Int
-  sede           Sede         @relation(fields: [sedeId], references: [id])
-  
-  serviceId      Int
-  service        Service      @relation(fields: [serviceId], references: [id])
-  
-  profesionalId  Int?
-  profesional    Profesional? @relation(fields: [profesionalId], references: [id])
-  
-  @@unique([sedeId, serviceId, profesionalId]) // Esto evita duplicados
-  @@map("service_sede_profesional")
-}
-
 enum AppointmentStatus {
-  PENDING    // pendiente de confirmación
-  CONFIRMED  // confirmada
-  COMPLETED  // completada
-  CANCELLED  // cancelada
-  NO_SHOW    // el cliente no asistió
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
 }
-
-model Appointment {
-  id              Int         @id @default(autoincrement())
-  fecha           DateTime
-  horaInicio      DateTime          // inicio
-  horaFin         DateTime          // fin
-  duracion        Int               // minutos
-  estado          AppointmentStatus @default(PENDING)
-  notas           String?           // notas opcionales
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-
-  sedeId          Int
-  sede            Sede        @relation(fields: [sedeId], references: [id])
-
-  serviceId       Int
-  service         Service     @relation(fields: [serviceId], references: [id])
-
-  profesionalId   Int
-  profesional     Profesional @relation(fields: [profesionalId], references: [id])
-
-   userId          Int
-   user            Users             @relation(fields: [userId], references: [id])
-
-  @@index([fecha])
-  @@index([profesionalId, fecha])
-  @@index([sedeId, fecha])
-  @@unique([profesionalId, horaInicio]) // evita doble reserva a la misma hora
-
-   Payment Payment[]
-}
-
-model HorarioSede {
-  id        Int      @id @default(autoincrement())
-  sedeId    Int
-  diaSemana Int      // 0=Domingo, 1=Lunes, etc.
-  horaApertura String
-  horaCierre   String
-  activo    Boolean  @default(true)
-
-  sede      Sede     @relation(fields: [sedeId], references: [id])
-
-  @@unique([sedeId, diaSemana])
-  @@map("horario_sede")
-}
-
-model DiaCerradoSede {
-  id          Int      @id @default(autoincrement())
-  sedeId      Int
-  fecha       DateTime // fecha cerrada
-  motivo      String?
-  todoElDia   Boolean  @default(true)
-  horaInicio  String?
-  horaFin     String?
-
-  sede        Sede     @relation(fields: [sedeId], references: [id])
-
-  @@index([sedeId, fecha])
-  @@map("dias_cerrados_sede")
-}
-
-model DisponibilidadProfesional {
-  id             Int      @id @default(autoincrement())
-  profesionalId  Int
-  fecha          DateTime // día específico
-  disponible     Boolean  @default(true)
-  horaInicio     String?  // rango inicio
-  horaFin        String?  // rango fin
-  motivo         String?  // motivo (vacaciones, enfermedad, etc.)
-
-  profesional    Profesional @relation(fields: [profesionalId], references: [id])
-
-  @@index([profesionalId, fecha])
-  @@unique([profesionalId, fecha])
-  @@map("disponibilidad_profesional")
-}
-
 
 enum PaymentMethod {
   CARD
@@ -447,21 +444,4 @@ enum PaymentStatus {
   PAID
   FAILED
   CANCELLED
-}
-
-model Payment {
-  id               Int             @id @default(autoincrement())
-  appointmentId    Int             @unique
-  appointment      Appointment     @relation(fields: [appointmentId], references: [id])
-  method           PaymentMethod
-  status           PaymentStatus   @default(PENDING)
-  totalAmount      Float
-  reservedAmount   Float?          // monto parcial si es pago en establecimiento
-  paidAmount       Float?          // cuánto se ha pagado
-  transactionId    String?
-  bankResponse     Json?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-
-  @@map("payments")
 }
