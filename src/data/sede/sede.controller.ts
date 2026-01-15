@@ -12,7 +12,6 @@ import {
   Post,
   UploadedFile,
   UploadedFiles,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
@@ -28,14 +27,12 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import * as fs from 'fs';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CreateSedeWithImagesDto } from './dto/create-sede-with-images.dto';
 import { CreateSedeDto } from './dto/create-sede.dto';
 import { UpdateSedeDto } from './dto/update-sede.dto';
 import { SedeService } from './sede.service';
 
 @ApiTags('Sedes')
-@UseGuards(JwtAuthGuard)
 @Controller('sedes')
 export class SedeController {
   constructor(private readonly sedeService: SedeService) {}
@@ -60,10 +57,8 @@ export class SedeController {
   ) {
     const parsedBody = {
       ...body,
-      horario: body.horario ? JSON.parse(body.horario) : undefined,
-      diasCerrado: body.diasCerrado
-        ? body.diasCerrado.split(',').map((s) => s.trim())
-        : undefined,
+      horario: this.parseHorario(body.horario),
+      diasCerrado: this.parseDiasCerrado(body.diasCerrado),
     };
 
     const createSedeDto = plainToInstance(CreateSedeDto, parsedBody);
@@ -78,6 +73,61 @@ export class SedeController {
       throw new BadRequestException(errors);
     }
     return this.sedeService.create(createSedeDto, files);
+  }
+
+  private parseHorario(value: unknown) {
+    if (!value) {
+      return undefined;
+    }
+
+    if (typeof value === 'object') {
+      return value;
+    }
+
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      const normalized = trimmed
+        .replace(/([A-Za-zÁÉÍÓÚÜáéíóúüñÑ]+)\s*:/g, '"$1":')
+        .replace(/'([^']*)'/g, '"$1"');
+      try {
+        return JSON.parse(normalized);
+      } catch {
+        throw new BadRequestException(
+          'Formato de horario inválido. Envía un JSON válido.',
+        );
+      }
+    }
+  }
+
+  private parseDiasCerrado(value: unknown) {
+    if (!value) {
+      return undefined;
+    }
+
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const items = value
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    return items.length > 0 ? items : undefined;
   }
 
   // 🟢 Obtener todas las sedes
