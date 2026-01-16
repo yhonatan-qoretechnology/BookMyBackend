@@ -26,12 +26,8 @@ export class ServiceSedeProfesionalService {
    */
   async create(
     createDto: CreateServiceSedeProfesionalDto,
-    user: AuthenticatedUser,
+    user?: AuthenticatedUser,
   ) {
-    if (!user) {
-      throw new ForbiddenException('Usuario no autenticado.');
-    }
-
     const { sedeId, serviceId, profesionalId } = createDto;
 
     // 1. Validar que la sede, el servicio y el profesional existan.
@@ -63,7 +59,7 @@ export class ServiceSedeProfesionalService {
       );
     }
 
-    if (user.role === Role.COMPANY_ADMIN) {
+    if (user?.role === Role.COMPANY_ADMIN) {
       if (!user.empresaId) {
         throw new ForbiddenException(
           'El administrador de empresa no tiene empresa asociada.',
@@ -87,7 +83,7 @@ export class ServiceSedeProfesionalService {
       }
     }
 
-    if (user.role === Role.BRANCH_ADMIN) {
+    if (user?.role === Role.BRANCH_ADMIN) {
       if (!user.sedeId) {
         throw new ForbiddenException('No tiene una sede asociada.');
       }

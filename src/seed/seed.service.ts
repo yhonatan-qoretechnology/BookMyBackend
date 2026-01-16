@@ -320,7 +320,7 @@ export class SeedService {
         instagramUrl: 'https://www.instagram.com/glowexperience.eu',
         tiktokUrl: 'https://www.tiktok.com/@glowexperience',
         webUrl: 'https://byglow.es',
-        logo: '/uploads/logos/glow-experience.png',
+        logo: '',
       },
     ];
 
@@ -870,9 +870,9 @@ export class SeedService {
           direccion:
             'Calle Medina Azahara, 1, 29631 Benalmádena, Málaga, España',
           telefono: '+34651026700',
-          latitud: 36.5969,
-          longitud: -4.5426,
-          provincia: 'Málaga',
+          latitud: 36.60546878004542,
+          longitud: -4.532211836176817,
+          provincia: 'Benalmádena',
           horario: {
             lunes: '10:00-19:00',
             martes: '10:00-19:00',
@@ -886,10 +886,7 @@ export class SeedService {
             // no publicados oficialmente
           ],
           empresaId: 1, // 👈 ajusta según el ID real de WB Corporation / Glow Experience
-          imagenes: [
-            '/uploads/sedes/benalmadena/front.jpg',
-            '/uploads/sedes/benalmadena/interior.jpg',
-          ],
+          imagenes: [],
         },
         {
           nombre: 'Glow Fuengirola',
@@ -897,7 +894,7 @@ export class SeedService {
           telefono: '+34651026701',
           latitud: 36.5406,
           longitud: -4.6247,
-          provincia: 'Málaga',
+          provincia: 'Fuengirola',
           horario: {
             lunes: '10:00-19:00',
             martes: '10:00-19:00',
@@ -911,10 +908,7 @@ export class SeedService {
             // no publicados oficialmente
           ],
           empresaId: 1,
-          imagenes: [
-            '/uploads/sedes/fuengirola/front.jpg',
-            '/uploads/sedes/fuengirola/interior.jpg',
-          ],
+          imagenes: [],
         },
       ],
       skipDuplicates: true,

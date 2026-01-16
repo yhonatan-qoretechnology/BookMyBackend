@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { AppointmentStatus, ClientState } from '@prisma/client';
@@ -10,10 +11,12 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
 @Injectable()
 export class AppointmentService {
+  private readonly logger = new Logger(AppointmentService.name);
+
   constructor(private prisma: PrismaService) {}
 
   private getMinutesFromDate(date: Date) {
-    return date.getUTCHours() * 60 + date.getUTCMinutes();
+    return date.getHours() * 60 + date.getMinutes();
   }
 
   private getMinutesFromHourString(hour: string) {
@@ -107,6 +110,20 @@ export class AppointmentService {
         'Las fechas y horas proporcionadas son inválidas',
       );
     }
+
+    const debugPayload = {
+      userId: data.userId,
+      sedeId: data.sedeId,
+      serviceId: data.serviceId,
+      profesionalId: data.profesionalId,
+      duracion: data.duracion,
+      fecha: fecha.toISOString(),
+      horaInicio: horaInicio.toISOString(),
+      horaFin: horaFin.toISOString(),
+    };
+    this.logger.log(
+      `Intento de crear cita con payload: ${JSON.stringify(debugPayload)}`,
+    );
 
     const appointmentDay = fecha.toISOString().slice(0, 10);
     const inicioDia = horaInicio.toISOString().slice(0, 10);
@@ -202,7 +219,7 @@ export class AppointmentService {
       ...appointmentData
     } = data;
 
-    const dayOfWeek = horaInicio.getUTCDay();
+    const dayOfWeek = horaInicio.getDay();
     const horarioRegistro = sede.HorarioSede.find(
       (registro) => registro.diaSemana === dayOfWeek && registro.activo,
     );
@@ -236,6 +253,16 @@ export class AppointmentService {
     }
 
     if (!scheduleRanges.length) {
+      this.logger.warn(
+        `Sede sin horario activo para la fecha solicitada: sedeId=${sede.id}, diaSemana=${dayOfWeek}, fecha=${horaInicio.toISOString()}, horariosConfigurados=${JSON.stringify(
+          sede.HorarioSede.map((registro) => ({
+            diaSemana: registro.diaSemana,
+            activo: registro.activo,
+            apertura: registro.horaApertura,
+            cierre: registro.horaCierre,
+          })),
+        )}`,
+      );
       throw new BadRequestException('La sede está cerrada el día seleccionado');
     }
 
@@ -247,6 +274,11 @@ export class AppointmentService {
     );
 
     if (!fitsWithinSchedule) {
+      this.logger.warn(
+        `Horario fuera de rango para cita: inicio=${horaInicio.toISOString()} (${inicio} min), fin=${horaFin.toISOString()} (${fin} min), rangos=${JSON.stringify(
+          scheduleRanges,
+        )}, sedeId=${sede.id}`,
+      );
       throw new BadRequestException(
         'La cita se encuentra fuera del horario operativo de la sede',
       );
@@ -281,6 +313,9 @@ export class AppointmentService {
         );
         const cierreFin = this.getMinutesFromHourString(cierreParcial.horaFin);
         if (this.rangesOverlap(inicio, fin, cierreInicio, cierreFin)) {
+          this.logger.warn(
+            `Cita solapada con cierre parcial: inicio=${horaInicio.toISOString()} (${inicio} min), fin=${horaFin.toISOString()} (${fin} min), cierreInicio=${cierreParcial.horaInicio}, cierreFin=${cierreParcial.horaFin}, sedeId=${sede.id}`,
+          );
           throw new BadRequestException(
             'La cita se solapa con un cierre parcial de la sede',
           );
@@ -333,7 +368,7 @@ export class AppointmentService {
       );
     }
 
-    return this.prisma.appointment.create({
+    const appointment = await this.prisma.appointment.create({
       data: {
         ...appointmentData,
         fecha,
@@ -341,6 +376,12 @@ export class AppointmentService {
         horaFin,
       },
     });
+
+    this.logger.log(
+      `Cita creada: id=${appointment.id}, sedeId=${appointment.sedeId}, profesionalId=${appointment.profesionalId}, userId=${appointment.userId}, inicio=${appointment.horaInicio.toISOString()}, fin=${appointment.horaFin.toISOString()}`,
+    );
+
+    return appointment;
   }
 
   async getUserServices(userId: number) {

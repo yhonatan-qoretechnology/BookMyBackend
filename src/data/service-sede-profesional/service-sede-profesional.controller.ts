@@ -12,6 +12,7 @@ import {
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { Public } from '../../auth/common/decorators/public.decorator';
 import { Roles } from '../../auth/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
@@ -27,7 +28,7 @@ export class ServiceSedeProfesionalController {
   ) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @Public()
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
   @ApiOperation({
     summary: 'Crea una nueva relación entre servicio, sede y profesional.',
@@ -36,7 +37,7 @@ export class ServiceSedeProfesionalController {
   create(
     @Body()
     createServiceSedeProfesionalDto: CreateServiceSedeProfesionalDto,
-    @AuthUser() user: AuthenticatedUser,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
     return this.serviceSedeProfesionalService.create(
       createServiceSedeProfesionalDto,
