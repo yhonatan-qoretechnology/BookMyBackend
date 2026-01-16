@@ -269,9 +269,20 @@ export class AppointmentService {
     const inicio = this.getMinutesFromDate(horaInicio);
     const fin = this.getMinutesFromDate(horaFin);
 
-    const fitsWithinSchedule = scheduleRanges.some(
-      (range) => inicio >= range.start && fin <= range.end,
-    );
+    const fitsWithinSchedule = scheduleRanges.some((range) => {
+      const rangeLength = range.end - range.start;
+      if (durationMinutes > rangeLength) {
+        this.logger.warn(
+          `Duración ${durationMinutes} min excede rango disponible (${rangeLength} min) para sedeId=${sede.id}, rango=${JSON.stringify(
+            range,
+          )}`,
+        );
+        return false;
+      }
+
+      const adjustedEnd = range.end + durationMinutes;
+      return inicio >= range.start && inicio <= range.end && fin <= adjustedEnd;
+    });
 
     if (!fitsWithinSchedule) {
       this.logger.warn(
