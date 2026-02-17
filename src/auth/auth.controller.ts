@@ -1,31 +1,32 @@
 import {
-  BadRequestException,
-  Body,
-  Controller,
-  Get,
-  HttpException,
-  HttpStatus,
-  Param,
-  ParseIntPipe,
-  Patch,
-  Post,
-  Req,
-  UploadedFile,
-  UseInterceptors,
+    BadRequestException,
+    Body,
+    Controller,
+    Get,
+    HttpException,
+    HttpStatus,
+    Param,
+    ParseIntPipe,
+    Patch,
+    Post,
+    Req,
+    UploadedFile,
+    UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  ApiBadRequestResponse,
-  ApiBody,
-  ApiConsumes,
-  ApiHeader,
-  ApiNotFoundResponse,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
+    ApiBadRequestResponse,
+    ApiBody,
+    ApiConsumes,
+    ApiHeader,
+    ApiNotFoundResponse,
+    ApiOperation,
+    ApiResponse,
+    ApiTags,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { AuthUser } from './common/decorators/auth-user.decorator';
+import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
 import { ChangePasswordByAdminDto } from './dto/change-password-by-admin.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -87,6 +88,16 @@ export class AuthController {
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @Post('bootstrap-super-admin')
+  @ApiOperation({
+    summary:
+      'Crear un usuario SUPER_ADMIN solo en entornos no productivos (bootstrap)',
+  })
+  @ApiBadRequestResponse({ description: 'Datos inválidos o SUPER_ADMIN ya existe.' })
+  async bootstrapSuperAdmin(@Body() dto: BootstrapSuperAdminDto) {
+    return this.authService.bootstrapSuperAdmin(dto);
   }
 
   @Post('reset-password')

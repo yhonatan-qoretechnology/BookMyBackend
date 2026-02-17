@@ -1,10 +1,10 @@
 import {
-  Body,
-  Controller,
-  Param,
-  ParseIntPipe,
-  Post,
-  UseGuards,
+    Body,
+    Controller,
+    Param,
+    ParseIntPipe,
+    Post,
+    UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
@@ -23,6 +23,7 @@ export class AdminManagementController {
   ) {}
 
   @Post('companies/:empresaId/admins')
+  @Roles(Role.SUPER_ADMIN)
   @ApiOperation({
     summary:
       'Crear un administrador de empresa (COMPANY_ADMIN) para la empresa indicada',
@@ -35,6 +36,7 @@ export class AdminManagementController {
   }
 
   @Post('branches/:sedeId/admins')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
   @ApiOperation({
     summary:
       'Crear un administrador de sede (BRANCH_ADMIN) para la sede indicada',

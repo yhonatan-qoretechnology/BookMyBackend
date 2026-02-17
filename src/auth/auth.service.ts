@@ -12,6 +12,7 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import * as path from 'path';
 import { OtpService } from '../data/otp/otp.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
 import { ChangePasswordByAdminDto } from './dto/change-password-by-admin.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -38,6 +39,65 @@ export class AuthService {
     private hashService: HashService,
     private otpService: OtpService,
   ) {}
+
+  async bootstrapSuperAdmin(dto: BootstrapSuperAdminDto) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException('Este endpoint no está disponible en producción.');
+    }
+
+    const existingSuperAdmin = await this.prisma.users.findFirst({
+      where: { role: Role.SUPER_ADMIN },
+      select: { id: true },
+    });
+
+    if (existingSuperAdmin) {
+      throw new BadRequestException('Ya existe al menos un usuario SUPER_ADMIN.');
+    }
+
+    const phoneNumber = parsePhoneNumberFromString(dto.phone ?? '');
+    if (!phoneNumber || !phoneNumber.isValid()) {
+      throw new BadRequestException('El número de teléfono proporcionado no es válido.');
+    }
+
+    const hashedPassword = await this.hashService.hash(dto.password);
+
+    const user = await this.prisma.users.create({
+      data: {
+        email: dto.email,
+        clientType: dto.clientType,
+        state: dto.state,
+        acceptTerms: true,
+        acceptPolitics: true,
+        fotoPerfil: null,
+        role: Role.SUPER_ADMIN,
+        UserAuth: {
+          create: {
+            email: dto.email,
+            password: hashedPassword,
+          },
+        },
+        UserData: {
+          create: {
+            name: dto.name,
+            phone: phoneNumber.number,
+            email: dto.email,
+            gender: dto.gender,
+            idioma: dto.idioma,
+            countryId: dto.countryId,
+            birthdate: dto.birthdate ? new Date(dto.birthdate) : null,
+          },
+        },
+      },
+      include: {
+        UserData: true,
+      },
+    });
+
+    return {
+      message: 'SUPER_ADMIN creado correctamente (solo entorno no productivo).',
+      user,
+    };
+  }
 
   private async getUserAuthContextByIdOrThrow(
     userId: number,
