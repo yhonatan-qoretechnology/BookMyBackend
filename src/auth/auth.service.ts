@@ -31,7 +31,7 @@ type UserAuthContext = {
 
 @Injectable()
 export class AuthService {
-  EXPIRATION_TOKEN_TIME = '15m';
+  EXPIRATION_TOKEN_TIME = process.env.JWT_EXPIRATION ?? '12h';
 
   constructor(
     private prisma: PrismaService,
