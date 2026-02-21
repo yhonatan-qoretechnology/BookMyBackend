@@ -57,7 +57,7 @@ export class AdminManagementController {
   }
 
   @Post('companies/:empresaId/admins')
-  @Roles(Role.SUPER_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
   @ApiOperation({
     summary:
       'Crear un administrador de empresa (COMPANY_ADMIN) para la empresa indicada',
@@ -65,8 +65,9 @@ export class AdminManagementController {
   async createCompanyAdmin(
     @Param('empresaId', ParseIntPipe) empresaId: number,
     @Body() dto: CreateAdminUserDto,
+    @AuthUser() user: AuthenticatedUser,
   ) {
-    return this.adminManagementService.createCompanyAdmin(empresaId, dto);
+    return this.adminManagementService.createCompanyAdmin(empresaId, dto, user);
   }
 
   @Post('branches/:sedeId/admins')
