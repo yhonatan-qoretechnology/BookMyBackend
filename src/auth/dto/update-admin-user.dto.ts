@@ -29,10 +29,12 @@ export class UpdateAdminUserDto {
   @Matches(/^\+?\d{7,15}$/)
   phone?: string;
 
-  @ApiPropertyOptional({ example: 'https://...' })
-  @IsOptional()
-  @IsString()
-  photoUrl?: string;
+  @ApiPropertyOptional({
+    type: 'string',
+    format: 'binary',
+    description: 'Archivo de imagen para la foto de perfil (JPG/PNG/WebP)',
+  })
+  photoFile?: Express.Multer.File;
 
   @ApiPropertyOptional({ enum: ClientState })
   @IsOptional()

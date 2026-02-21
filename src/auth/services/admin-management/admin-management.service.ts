@@ -112,6 +112,7 @@ export class AdminManagementService {
     userId: number,
     dto: UpdateAdminUserDto,
     user: AuthenticatedUser,
+    photoFile?: Express.Multer.File,
   ) {
     const target = await this.prisma.users.findUnique({
       where: { id: userId },
@@ -162,7 +163,11 @@ export class AdminManagementService {
       adminProfileUpdate.firstName = dto.firstName;
     if (dto.lastName !== undefined) adminProfileUpdate.lastName = dto.lastName;
     if (dto.phone !== undefined) adminProfileUpdate.phone = dto.phone;
-    if (dto.photoUrl !== undefined) adminProfileUpdate.photoUrl = dto.photoUrl;
+    if (dto.photoFile !== undefined) {
+      // TODO: Implementar lógica para guardar archivo y generar URL
+      // Por ahora, se puede dejar null o implementar upload a cloud storage
+      adminProfileUpdate.photoUrl = null;
+    }
 
     const usersUpdate: Prisma.UsersUpdateInput = {};
     if (dto.state !== undefined) usersUpdate.state = dto.state;
@@ -209,7 +214,12 @@ export class AdminManagementService {
     }
   }
 
-  async createCompanyAdmin(empresaId: number, dto: CreateAdminUserDto) {
+  async createCompanyAdmin(
+    empresaId: number,
+    dto: CreateAdminUserDto,
+    user?: AuthenticatedUser,
+    photoFile?: Express.Multer.File,
+  ) {
     const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
       select: { id: true },
@@ -226,6 +236,7 @@ export class AdminManagementService {
     sedeId: number,
     dto: CreateAdminUserDto,
     user: AuthenticatedUser,
+    photoFile?: Express.Multer.File,
   ) {
     const sede = await this.prisma.sede.findUnique({
       where: { id: sedeId },
@@ -320,6 +331,7 @@ export class AdminManagementService {
               firstName: dto.firstName,
               lastName: dto.lastName,
               phone: dto.phone,
+              photoUrl: null, // TODO: Implementar upload de archivo y guardar URL
               empresaId,
               sedeId: sedeId ?? undefined,
             },

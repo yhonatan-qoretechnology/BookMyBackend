@@ -6,9 +6,17 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { AuthUser } from '../common/decorators/auth-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -47,41 +55,65 @@ export class AdminManagementController {
 
   @Patch('admins/:userId')
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Actualizar un administrador por userId' })
+  @UseInterceptors(FileInterceptor('photoFile'))
   async updateAdmin(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: UpdateAdminUserDto,
     @AuthUser() user: AuthenticatedUser,
+    @UploadedFile() photoFile?: Express.Multer.File,
   ) {
-    return this.adminManagementService.updateAdminByUserId(userId, dto, user);
+    return this.adminManagementService.updateAdminByUserId(
+      userId,
+      dto,
+      user,
+      photoFile,
+    );
   }
 
   @Post('companies/:empresaId/admins')
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary:
       'Crear un administrador de empresa (COMPANY_ADMIN) para la empresa indicada',
   })
+  @UseInterceptors(FileInterceptor('photoFile'))
   async createCompanyAdmin(
     @Param('empresaId', ParseIntPipe) empresaId: number,
     @Body() dto: CreateAdminUserDto,
-    @AuthUser() user: AuthenticatedUser,
+    @AuthUser() user?: AuthenticatedUser,
+    @UploadedFile() photoFile?: Express.Multer.File,
   ) {
-    return this.adminManagementService.createCompanyAdmin(empresaId, dto, user);
+    return this.adminManagementService.createCompanyAdmin(
+      empresaId,
+      dto,
+      user,
+      photoFile,
+    );
   }
 
   @Post('branches/:sedeId/admins')
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary:
       'Crear un administrador de sede (BRANCH_ADMIN) para la sede indicada, devuelve listado y permite actualizar',
   })
+  @UseInterceptors(FileInterceptor('photoFile'))
   async createBranchAdmin(
     @Param('sedeId', ParseIntPipe) sedeId: number,
     @Body() dto: CreateAdminUserDto,
     @AuthUser() user: AuthenticatedUser,
+    @UploadedFile() photoFile?: Express.Multer.File,
   ) {
-    await this.adminManagementService.createBranchAdmin(sedeId, dto, user);
+    await this.adminManagementService.createBranchAdmin(
+      sedeId,
+      dto,
+      user,
+      photoFile,
+    );
     const admins = await this.adminManagementService.listAdmins(user);
     return {
       message: 'Administrador creado exitosamente',
