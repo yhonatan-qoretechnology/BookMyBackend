@@ -244,7 +244,7 @@ export class AppointmentService {
           'viernes',
           'sábado',
         ];
-        const normalizedTarget = dayNames[dayOfWeek];
+        const normalizedTarget = this.normalizeKey(dayNames[dayOfWeek]);
 
         const entry = Object.entries(
           sede.horario as Record<string, string | null>,

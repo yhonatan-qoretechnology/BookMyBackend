@@ -1,6 +1,24 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
+import { CreatePaymentCardDto } from './dto/create-payment-card.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { PaymentCardResponseDto } from './dto/payment-card-response.dto';
+import { UpdatePaymentCardDto } from './dto/update-payment-card.dto';
 import { PaymentService } from './payment.service';
 
 @ApiTags('Payments')
@@ -28,7 +46,45 @@ export class PaymentController {
 
   @Get()
   @ApiOperation({ summary: 'Listar todos los pagos' })
-  async list() {
-    return this.paymentService.listPayments();
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    description: 'Filtra los pagos pertenecientes a un usuario específico',
+  })
+  async list(@Query('userId') userId?: string) {
+    return this.paymentService.listPayments(
+      userId ? Number(userId) : undefined,
+    );
+  }
+
+  @Post('cards')
+  @ApiOperation({ summary: 'Registrar una tarjeta para un usuario' })
+  @ApiCreatedResponse({ type: PaymentCardResponseDto })
+  async createCard(@Body() dto: CreatePaymentCardDto) {
+    return this.paymentService.createPaymentCard(dto);
+  }
+
+  @Get('cards/:userId')
+  @ApiOperation({ summary: 'Listar tarjetas guardadas de un usuario' })
+  @ApiOkResponse({ type: PaymentCardResponseDto, isArray: true })
+  async listCards(@Param('userId') userId: string) {
+    return this.paymentService.listPaymentCards(Number(userId));
+  }
+
+  @Patch('cards/:id')
+  @ApiOperation({ summary: 'Actualizar datos de una tarjeta guardada' })
+  @ApiOkResponse({ type: PaymentCardResponseDto })
+  async updateCard(@Param('id') id: string, @Body() dto: UpdatePaymentCardDto) {
+    return this.paymentService.updatePaymentCard(Number(id), dto);
+  }
+
+  @Delete('cards/:id')
+  @ApiOperation({ summary: 'Eliminar (desactivar) una tarjeta guardada' })
+  @ApiOkResponse({ type: PaymentCardResponseDto })
+  async removeCard(@Param('id') id: string, @Query('userId') userId?: string) {
+    return this.paymentService.removePaymentCard(
+      Number(id),
+      userId ? Number(userId) : undefined,
+    );
   }
 }
