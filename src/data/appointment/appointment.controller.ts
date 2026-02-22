@@ -57,8 +57,49 @@ export class AppointmentController {
 
   @Get()
   @ApiOperation({ summary: 'Listar todas las citas' })
-  findAll() {
-    return this.appointmentService.findAll();
+  // Para filtrar/buscar citas por sede: /appointments?sedeId=<ID_SEDE>
+  @ApiQuery({
+    name: 'sedeId',
+    required: false,
+    description: 'Filtrar por sede',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Página (1..n)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Elementos por página',
+  })
+  findAll(
+    @Query('sedeId') sedeId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.appointmentService.findAll({
+      sedeId: sedeId ? Number(sedeId) : undefined,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('branches/:sedeId/latest')
+  @ApiOperation({ summary: 'Últimas reservas por sede' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Cantidad a devolver (default 10)',
+  })
+  getLatestBySede(
+    @Param('sedeId', ParseIntPipe) sedeId: number,
+    @Query('limit') limit?: string,
+  ) {
+    return this.appointmentService.getLatestBySede(
+      sedeId,
+      limit ? Number(limit) : undefined,
+    );
   }
 
   @Get('users/:userId/services')

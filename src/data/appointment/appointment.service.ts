@@ -522,15 +522,54 @@ export class AppointmentService {
     };
   }
 
-  async findAll() {
+  async findAll(params?: { sedeId?: number; page?: number; limit?: number }) {
+    const sedeId = params?.sedeId;
+    const page = params?.page && params.page > 0 ? params.page : 1;
+    const limit = params?.limit && params.limit > 0 ? params.limit : 50;
+    const skip = (page - 1) * limit;
+
+    const where = sedeId ? { sedeId } : undefined;
+
+    const [items, total] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where,
+        include: {
+          sede: true,
+          service: true,
+          profesional: true,
+          user: true,
+        },
+        orderBy: [{ fecha: 'desc' }, { horaInicio: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.appointment.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      },
+    };
+  }
+
+  async getLatestBySede(sedeId: number, limit = 10) {
     return this.prisma.appointment.findMany({
+      where: { sedeId },
       include: {
         sede: true,
         service: true,
         profesional: true,
         user: true,
       },
-      orderBy: { fecha: 'asc' },
+      orderBy: [{ fecha: 'desc' }, { horaInicio: 'desc' }],
+      take: limit,
     });
   }
 
