@@ -100,6 +100,62 @@ export class AppointmentService {
     };
   }
 
+  async handleReservationClient(body: { email: string }) {
+    const result = await this.searchClient(body.email);
+
+    if (!result.found) {
+      return {
+        ...result,
+        redirectUrl: '/clients/create',
+        actionMessage: `El cliente con email "${body.email}" no está registrado. Debe crearlo primero antes de continuar con la reserva.`,
+        requiresClientCreation: true,
+      };
+    }
+
+    return {
+      ...result,
+      actionMessage: `Cliente encontrado: ${result.client?.name || result.client?.email}. Puede continuar con la reserva.`,
+      requiresClientCreation: false,
+    };
+  }
+
+  async searchClient(email?: string) {
+    if (!email) {
+      throw new BadRequestException('Debe proporcionar email para buscar');
+    }
+
+    const client = await this.prisma.users.findFirst({
+      where: {
+        email: email.toLowerCase(),
+        role: 'CLIENT',
+      },
+      include: {
+        UserData: true,
+        UserLocation: true,
+      },
+    });
+
+    if (client) {
+      return {
+        found: true,
+        client: {
+          id: client.id,
+          email: client.email,
+          name: client.UserData?.name,
+          phone: client.UserData?.phone,
+        },
+        message: 'Cliente encontrado',
+      };
+    }
+
+    return {
+      found: false,
+      message: 'Cliente no encontrado. Por favor, cree un nuevo cliente.',
+      suggestedAction: 'CREATE_CLIENT',
+      searchParams: { email },
+    };
+  }
+
   async create(data: CreateAppointmentDto) {
     const fecha = new Date(data.fecha);
     const horaInicio = new Date(data.horaInicio);

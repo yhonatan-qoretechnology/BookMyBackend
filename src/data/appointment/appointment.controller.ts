@@ -7,8 +7,9 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -17,6 +18,35 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 @Controller('appointments')
 export class AppointmentController {
   constructor(private readonly appointmentService: AppointmentService) {}
+
+  @Post('reservation-client')
+  @ApiOperation({
+    summary: 'Gestionar cliente para reserva',
+    description:
+      'Busca un cliente para la reserva. Si no existe, indica que debe ser creado.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Resultado de la búsqueda del cliente',
+  })
+  async handleReservationClient(@Body() body: { email: string }) {
+    return this.appointmentService.searchClient(body.email);
+  }
+
+  @Get('search-client')
+  @ApiOperation({
+    summary: 'Buscar cliente por email para reserva',
+    description:
+      'Busca un cliente existente por email. Si no existe, devuelve indicación para crearlo.',
+  })
+  @ApiQuery({
+    name: 'email',
+    required: false,
+    description: 'Email del cliente',
+  })
+  async searchClient(@Query('email') email?: string) {
+    return this.appointmentService.searchClient(email);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Crear una nueva cita' })
