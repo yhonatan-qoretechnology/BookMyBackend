@@ -92,14 +92,27 @@ export class AppointmentController {
     required: false,
     description: 'Cantidad a devolver (default 10)',
   })
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    description: 'Mes (1-12). Si se envía, filtra por mes y año.',
+  })
+  @ApiQuery({
+    name: 'year',
+    required: false,
+    description: 'Año (default: año actual).',
+  })
   getLatestBySede(
     @Param('sedeId', ParseIntPipe) sedeId: number,
     @Query('limit') limit?: string,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
   ) {
-    return this.appointmentService.getLatestBySede(
-      sedeId,
-      limit ? Number(limit) : undefined,
-    );
+    return this.appointmentService.getLatestBySede(sedeId, {
+      limit: limit ? Number(limit) : undefined,
+      month: month ? Number(month) : undefined,
+      year: year ? Number(year) : undefined,
+    });
   }
 
   @Get('users/:userId/services')

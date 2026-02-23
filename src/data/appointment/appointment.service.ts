@@ -559,9 +559,34 @@ export class AppointmentService {
     };
   }
 
-  async getLatestBySede(sedeId: number, limit = 10) {
+  async getLatestBySede(
+    sedeId: number,
+    options?: { limit?: number; month?: number; year?: number },
+  ) {
+    const limit = options?.limit ?? 10;
+    const month = options?.month;
+    const year = options?.year;
+    const effectiveYear = year ?? new Date().getFullYear();
+
+    if (month !== undefined && (month < 1 || month > 12)) {
+      throw new BadRequestException('El mes debe estar entre 1 y 12');
+    }
+
+    const startDate = month
+      ? new Date(Date.UTC(effectiveYear, month - 1, 1))
+      : new Date(Date.UTC(effectiveYear, 0, 1));
+    const endDate = month
+      ? new Date(Date.UTC(effectiveYear, month, 1))
+      : new Date(Date.UTC(effectiveYear + 1, 0, 1));
+
     return this.prisma.appointment.findMany({
-      where: { sedeId },
+      where: {
+        sedeId,
+        fecha: {
+          gte: startDate,
+          lt: endDate,
+        },
+      },
       include: {
         sede: true,
         service: true,
