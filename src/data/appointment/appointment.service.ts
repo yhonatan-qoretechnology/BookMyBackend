@@ -559,6 +559,129 @@ export class AppointmentService {
     };
   }
 
+  async filterAppointments(params: {
+    sedeId?: number;
+    date?: string;
+    serviceId?: number;
+    hour?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = params.page && params.page > 0 ? params.page : 1;
+    const limit = params.limit && params.limit > 0 ? params.limit : 50;
+    const skip = (page - 1) * limit;
+
+    const and: any[] = [];
+
+    if (params.sedeId) and.push({ sedeId: params.sedeId });
+    if (params.serviceId) and.push({ serviceId: params.serviceId });
+
+    let dayStart: Date | undefined;
+    let dayEnd: Date | undefined;
+
+    if (params.date) {
+      const parsed = new Date(`${params.date}T00:00:00.000Z`);
+      if (Number.isNaN(parsed.getTime())) {
+        throw new BadRequestException('La fecha debe tener formato YYYY-MM-DD');
+      }
+
+      dayStart = parsed;
+      dayEnd = new Date(parsed);
+      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+      // Algunas integraciones guardan el “día” en `fecha` y otras se basan en `horaInicio`.
+      // Para no perder resultados, aplicamos el rango del día sobre ambos campos.
+      and.push({
+        OR: [
+          { fecha: { gte: dayStart, lt: dayEnd } },
+          { horaInicio: { gte: dayStart, lt: dayEnd } },
+        ],
+      });
+    }
+
+    if (params.hour && params.date) {
+      const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(params.hour);
+      if (!match) {
+        throw new BadRequestException('La hora debe tener formato HH:mm');
+      }
+      const hour = Number(match[1]);
+      const minute = Number(match[2]);
+
+      const base = new Date(`${params.date}T00:00:00.000Z`);
+      const start = new Date(base);
+      start.setUTCHours(hour, minute, 0, 0);
+      const end = new Date(start);
+      end.setUTCMinutes(end.getUTCMinutes() + 1);
+
+      and.push({ horaInicio: { gte: start, lt: end } });
+    }
+
+    const where = and.length ? { AND: and } : undefined;
+
+    const runQuery = async (whereInput: any) => {
+      const [items, total] = await Promise.all([
+        this.prisma.appointment.findMany({
+          where: whereInput,
+          include: {
+            sede: true,
+            service: true,
+            profesional: true,
+            user: true,
+          },
+          orderBy: [{ fecha: 'desc' }, { horaInicio: 'desc' }],
+          skip,
+          take: limit,
+        }),
+        this.prisma.appointment.count({ where: whereInput }),
+      ]);
+
+      return { items, total };
+    };
+
+    let fallbackApplied = false;
+    let { items, total } = await runQuery(where);
+
+    if (!items.length) {
+      const now = new Date();
+      const startOfMonth = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+      );
+      const startOfNextMonth = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+      );
+
+      const fallbackAnd: any[] = [];
+      if (params.sedeId) fallbackAnd.push({ sedeId: params.sedeId });
+      if (params.serviceId) fallbackAnd.push({ serviceId: params.serviceId });
+
+      fallbackAnd.push({
+        OR: [
+          { fecha: { gte: startOfMonth, lt: startOfNextMonth } },
+          { horaInicio: { gte: startOfMonth, lt: startOfNextMonth } },
+        ],
+      });
+
+      const fallbackWhere = { AND: fallbackAnd };
+      const fallbackResult = await runQuery(fallbackWhere);
+      items = fallbackResult.items;
+      total = fallbackResult.total;
+      fallbackApplied = true;
+    }
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      },
+      fallbackApplied,
+    };
+  }
+
   async getLatestBySede(
     sedeId: number,
     options?: { limit?: number; month?: number; year?: number },

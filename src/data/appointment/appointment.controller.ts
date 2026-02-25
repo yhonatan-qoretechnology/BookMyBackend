@@ -85,6 +85,48 @@ export class AppointmentController {
     });
   }
 
+  @Get('filter')
+  @ApiOperation({ summary: 'Filtrar citas' })
+  @ApiQuery({
+    name: 'sedeId',
+    required: false,
+    description: 'Filtrar por sede',
+  })
+  @ApiQuery({
+    name: 'date',
+    required: false,
+    description: 'Fecha (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'serviceId',
+    required: false,
+    description: 'Filtrar por servicio (ID)',
+  })
+  @ApiQuery({ name: 'hour', required: false, description: 'Hora (HH:mm)' })
+  @ApiQuery({ name: 'page', required: false, description: 'Página (1..n)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Elementos por página',
+  })
+  filter(
+    @Query('sedeId') sedeId?: string,
+    @Query('date') date?: string,
+    @Query('serviceId') serviceId?: string,
+    @Query('hour') hour?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.appointmentService.filterAppointments({
+      sedeId: sedeId ? Number(sedeId) : undefined,
+      date,
+      serviceId: serviceId ? Number(serviceId) : undefined,
+      hour,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
   @Get('branches/:sedeId/latest')
   @ApiOperation({ summary: 'Últimas reservas por sede' })
   @ApiQuery({
