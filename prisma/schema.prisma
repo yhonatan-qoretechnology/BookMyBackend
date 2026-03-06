@@ -25,6 +25,8 @@ model Users {
   UserCategories UserCategory[]
   UserData       UserData?      @relation("UserToUserData")
   UserLocation   UserLocation?  @relation("UserToLocation")
+  paymentCards   PaymentCard[]
+  payments       Payment[]
 
   @@index([email])
   @@map("users")
@@ -278,6 +280,7 @@ model Service {
   categoryId             Int
   imagenes               String[]
   Appointment            Appointment[]
+  payments               Payment[]
   prices                 Price[]
   translations           ServiceTranslation[]
   serviceSedeProfesional ServiceSedeProfesional[]
@@ -382,6 +385,9 @@ model DisponibilidadProfesional {
 model Payment {
   id             Int           @id @default(autoincrement())
   appointmentId  Int           @unique
+  userId         Int
+  serviceId      Int
+  cardId         Int?
   method         PaymentMethod
   status         PaymentStatus @default(PENDING)
   totalAmount    Float
@@ -392,8 +398,34 @@ model Payment {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   appointment    Appointment   @relation(fields: [appointmentId], references: [id])
+  user           Users         @relation(fields: [userId], references: [id])
+  service        Service       @relation(fields: [serviceId], references: [id])
+  card           PaymentCard?  @relation(fields: [cardId], references: [id])
+
+  @@index([userId])
+  @@index([serviceId])
+  @@index([cardId])
 
   @@map("payments")
+}
+
+model PaymentCard {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @map("user_id")
+  brand          String    @db.VarChar(50)
+  last4          String    @db.Char(4)
+  expiryMonth    Int       @map("expiry_month")
+  expiryYear     Int       @map("expiry_year")
+  cardholderName String    @map("cardholder_name") @db.VarChar(150)
+  token          String?   @map("token")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  user           Users     @relation(fields: [userId], references: [id])
+  payments       Payment[]
+
+  @@index([userId])
+  @@map("payment_cards")
 }
 
 enum ClientType {

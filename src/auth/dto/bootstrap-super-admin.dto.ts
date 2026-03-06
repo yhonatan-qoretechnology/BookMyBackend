@@ -1,17 +1,20 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
-    IsDateString,
-    IsEmail,
-    IsEnum,
-    IsNotEmpty,
-    IsString,
-    MaxLength,
-    MinLength,
+  IsDateString,
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsString,
+  MaxLength,
+  MinLength,
 } from 'class-validator';
 import { ClientState, ClientType } from './register.dto';
 
 export class BootstrapSuperAdminDto {
-  @ApiProperty({ example: 'Root Super Admin', description: 'Full name of the SUPER_ADMIN' })
+  @ApiProperty({
+    example: 'Root Super Admin',
+    description: 'Full name of the SUPER_ADMIN',
+  })
   @IsNotEmpty()
   @IsString()
   @MaxLength(100)
@@ -38,7 +41,7 @@ export class BootstrapSuperAdminDto {
   @MinLength(6)
   password: string;
 
-  @ApiProperty({ example: 'Masculino', description: 'Gender' })
+  @ApiProperty({ example: ' ', description: 'Gender' })
   @IsNotEmpty()
   @IsString()
   gender: string;

@@ -1,29 +1,31 @@
 import {
-    BadRequestException,
-    Body,
-    Controller,
-    Get,
-    HttpException,
-    HttpStatus,
-    Param,
-    ParseIntPipe,
-    Patch,
-    Post,
-    Req,
-    UploadedFile,
-    UseInterceptors,
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpException,
+  HttpStatus,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Req,
+  Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-    ApiBadRequestResponse,
-    ApiBody,
-    ApiConsumes,
-    ApiHeader,
-    ApiNotFoundResponse,
-    ApiOperation,
-    ApiResponse,
-    ApiTags,
+  ApiBadRequestResponse,
+  ApiBody,
+  ApiConsumes,
+  ApiHeader,
+  ApiNotFoundResponse,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
+import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { AuthUser } from './common/decorators/auth-user.decorator';
 import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
@@ -86,8 +88,20 @@ export class AuthController {
   }
 
   @Post('login')
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(
+    @Body() loginDto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.login(loginDto);
+    if ((result as any)?.token) {
+      res.cookie('access_token', (result as any).token, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: false,
+        maxAge: 12 * 60 * 60 * 1000,
+      });
+    }
+    return result;
   }
 
   @Post('bootstrap-super-admin')
@@ -95,7 +109,9 @@ export class AuthController {
     summary:
       'Crear un usuario SUPER_ADMIN solo en entornos no productivos (bootstrap)',
   })
-  @ApiBadRequestResponse({ description: 'Datos inválidos o SUPER_ADMIN ya existe.' })
+  @ApiBadRequestResponse({
+    description: 'Datos inválidos o SUPER_ADMIN ya existe.',
+  })
   async bootstrapSuperAdmin(@Body() dto: BootstrapSuperAdminDto) {
     return this.authService.bootstrapSuperAdmin(dto);
   }

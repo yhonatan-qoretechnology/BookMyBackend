@@ -7,8 +7,9 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -17,6 +18,35 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 @Controller('appointments')
 export class AppointmentController {
   constructor(private readonly appointmentService: AppointmentService) {}
+
+  @Post('reservation-client')
+  @ApiOperation({
+    summary: 'Gestionar cliente para reserva',
+    description:
+      'Busca un cliente para la reserva. Si no existe, indica que debe ser creado.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Resultado de la búsqueda del cliente',
+  })
+  async handleReservationClient(@Body() body: { email: string }) {
+    return this.appointmentService.searchClient(body.email);
+  }
+
+  @Get('search-client')
+  @ApiOperation({
+    summary: 'Buscar cliente por email para reserva',
+    description:
+      'Busca un cliente existente por email. Si no existe, devuelve indicación para crearlo.',
+  })
+  @ApiQuery({
+    name: 'email',
+    required: false,
+    description: 'Email del cliente',
+  })
+  async searchClient(@Query('email') email?: string) {
+    return this.appointmentService.searchClient(email);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Crear una nueva cita' })
@@ -27,8 +57,104 @@ export class AppointmentController {
 
   @Get()
   @ApiOperation({ summary: 'Listar todas las citas' })
-  findAll() {
-    return this.appointmentService.findAll();
+  // Para filtrar/buscar citas por sede: /appointments?sedeId=<ID_SEDE>
+  @ApiQuery({
+    name: 'sedeId',
+    required: false,
+    description: 'Filtrar por sede',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Página (1..n)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Elementos por página',
+  })
+  findAll(
+    @Query('sedeId') sedeId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.appointmentService.findAll({
+      sedeId: sedeId ? Number(sedeId) : undefined,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('filter')
+  @ApiOperation({ summary: 'Filtrar citas' })
+  @ApiQuery({
+    name: 'sedeId',
+    required: false,
+    description: 'Filtrar por sede',
+  })
+  @ApiQuery({
+    name: 'date',
+    required: false,
+    description: 'Fecha (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'serviceId',
+    required: false,
+    description: 'Filtrar por servicio (ID)',
+  })
+  @ApiQuery({ name: 'hour', required: false, description: 'Hora (HH:mm)' })
+  @ApiQuery({ name: 'page', required: false, description: 'Página (1..n)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Elementos por página',
+  })
+  filter(
+    @Query('sedeId') sedeId?: string,
+    @Query('date') date?: string,
+    @Query('serviceId') serviceId?: string,
+    @Query('hour') hour?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.appointmentService.filterAppointments({
+      sedeId: sedeId ? Number(sedeId) : undefined,
+      date,
+      serviceId: serviceId ? Number(serviceId) : undefined,
+      hour,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('branches/:sedeId/latest')
+  @ApiOperation({ summary: 'Últimas reservas por sede' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Cantidad a devolver (default 10)',
+  })
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    description: 'Mes (1-12). Si se envía, filtra por mes y año.',
+  })
+  @ApiQuery({
+    name: 'year',
+    required: false,
+    description: 'Año (default: año actual).',
+  })
+  getLatestBySede(
+    @Param('sedeId', ParseIntPipe) sedeId: number,
+    @Query('limit') limit?: string,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+  ) {
+    return this.appointmentService.getLatestBySede(sedeId, {
+      limit: limit ? Number(limit) : undefined,
+      month: month ? Number(month) : undefined,
+      year: year ? Number(year) : undefined,
+    });
   }
 
   @Get('users/:userId/services')
