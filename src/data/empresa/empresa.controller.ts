@@ -48,7 +48,7 @@ export class EmpresaController {
   )
   async create(
     @Body() createEmpresaDto: CreateEmpresaDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.empresaService.create(createEmpresaDto, file);
   }
@@ -90,7 +90,7 @@ export class EmpresaController {
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateEmpresaDto: UpdateEmpresaDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.empresaService.update(id, updateEmpresaDto, file);
   }

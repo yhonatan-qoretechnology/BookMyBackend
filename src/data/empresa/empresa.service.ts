@@ -48,7 +48,7 @@ export class EmpresaService {
     }
   }
 
-  async create(createEmpresaDto: CreateEmpresaDto, file: Express.Multer.File) {
+  async create(createEmpresaDto: CreateEmpresaDto, file?: Express.Multer.File) {
     const logoUrl = file ? this.moveLogoToFinalPath(file) : null;
 
     try {
@@ -62,7 +62,7 @@ export class EmpresaService {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           if (file) {
-            fs.unlinkSync(file.path);
+            this.safeDeleteIfExists(logoUrl ?? file.path);
           }
           throw new BadRequestException(
             'El nombre de la empresa ya está en uso.',
@@ -90,14 +90,14 @@ export class EmpresaService {
   async update(
     id: number,
     updateEmpresaDto: UpdateEmpresaDto,
-    file: Express.Multer.File,
+    file?: Express.Multer.File,
   ) {
     const empresa = await this.prisma.empresa.findUnique({
       where: { id },
     });
     if (!empresa) {
       if (file) {
-        fs.unlinkSync(file.path);
+        this.safeDeleteIfExists(file.path);
       }
       throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
     }
@@ -122,7 +122,7 @@ export class EmpresaService {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           if (file) {
-            fs.unlinkSync(file.path);
+            this.safeDeleteIfExists(file.path);
           }
           throw new BadRequestException(
             'El nombre de la empresa ya está en uso.',
@@ -158,7 +158,7 @@ export class EmpresaService {
 
     const empresa = await this.prisma.empresa.findUnique({ where: { id } });
     if (!empresa) {
-      fs.unlinkSync(file.path);
+      this.safeDeleteIfExists(file.path);
       throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
     }
 
