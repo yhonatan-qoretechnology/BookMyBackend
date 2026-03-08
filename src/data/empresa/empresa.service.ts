@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
@@ -13,8 +14,42 @@ import { UpdateEmpresaDto } from './dto/update-empresa.dto';
 export class EmpresaService {
   constructor(private prisma: PrismaService) {}
 
+  private moveLogoToFinalPath(file: Express.Multer.File) {
+    const uploadDirAbs = path.join(process.cwd(), 'uploads', 'logos');
+    if (!fs.existsSync(uploadDirAbs)) {
+      fs.mkdirSync(uploadDirAbs, { recursive: true });
+    }
+
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const finalAbsPath = path.join(uploadDirAbs, finalFileName);
+
+    const tempAbsPath = path.isAbsolute(file.path)
+      ? file.path
+      : path.join(process.cwd(), file.path);
+
+    if (tempAbsPath !== finalAbsPath) {
+      fs.renameSync(tempAbsPath, finalAbsPath);
+    }
+
+    return path.join('uploads', 'logos', finalFileName).replace(/\\/g, '/');
+  }
+
+  private safeDeleteIfExists(filePath: string) {
+    const absPath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(process.cwd(), filePath);
+    if (fs.existsSync(absPath)) {
+      try {
+        fs.unlinkSync(absPath);
+      } catch (error) {
+        console.error(`Error al eliminar archivo: ${absPath}`, error);
+      }
+    }
+  }
+
   async create(createEmpresaDto: CreateEmpresaDto, file: Express.Multer.File) {
-    const logoUrl = file ? file.path : null;
+    const logoUrl = file ? this.moveLogoToFinalPath(file) : null;
 
     try {
       return await this.prisma.empresa.create({
@@ -71,16 +106,10 @@ export class EmpresaService {
       ...updateEmpresaDto,
     };
     if (file) {
-      updateData.logo = file.path;
-      if (empresa.logo) {
-        try {
-          fs.unlinkSync(empresa.logo);
-        } catch (error) {
-          console.error(
-            `Error al eliminar el logo anterior: ${empresa.logo}`,
-            error,
-          );
-        }
+      const newLogoPath = this.moveLogoToFinalPath(file);
+      updateData.logo = newLogoPath;
+      if (empresa.logo && empresa.logo !== newLogoPath) {
+        this.safeDeleteIfExists(empresa.logo);
       }
     }
 
@@ -113,11 +142,7 @@ export class EmpresaService {
     }
 
     if (empresa.logo) {
-      try {
-        fs.unlinkSync(empresa.logo);
-      } catch (error) {
-        console.error(`Error al eliminar el logo: ${empresa.logo}`, error);
-      }
+      this.safeDeleteIfExists(empresa.logo);
     }
 
     await this.prisma.empresa.delete({
@@ -137,7 +162,7 @@ export class EmpresaService {
       throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
     }
 
-    const newLogoPath = file.path;
+    const newLogoPath = this.moveLogoToFinalPath(file);
 
     try {
       const updated = await this.prisma.empresa.update({
@@ -148,19 +173,13 @@ export class EmpresaService {
       });
 
       if (empresa.logo && empresa.logo !== newLogoPath) {
-        try {
-          fs.unlinkSync(empresa.logo);
-        } catch (error) {
-          console.error(
-            `Error al eliminar el logo anterior: ${empresa.logo}`,
-            error,
-          );
-        }
+        this.safeDeleteIfExists(empresa.logo);
       }
 
       return updated;
     } catch (error) {
-      fs.unlinkSync(file.path);
+      // Si algo falla, intentamos limpiar el archivo que se subió
+      this.safeDeleteIfExists(file.path);
 
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {

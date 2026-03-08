@@ -10,7 +10,8 @@
     "npm": ">=10.9.4"
   },
   "scripts": {
-    "prebuild": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "clean": "rimraf dist",
+    "prebuild": "npm run clean",
     "build": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
