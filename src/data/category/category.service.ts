@@ -14,6 +14,46 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 export class CategoryService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private moveCategoryFileToFinalPath(file: Express.Multer.File) {
+    const uploadDirAbs = path.join(process.cwd(), 'uploads', 'categories');
+    if (!fs.existsSync(uploadDirAbs)) {
+      fs.mkdirSync(uploadDirAbs, { recursive: true });
+    }
+
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const finalAbsPath = path.join(uploadDirAbs, finalFileName);
+
+    const tempAbsPath = path.isAbsolute(file.path)
+      ? file.path
+      : path.join(process.cwd(), file.path);
+
+    if (tempAbsPath !== finalAbsPath) {
+      fs.renameSync(tempAbsPath, finalAbsPath);
+    }
+
+    return path
+      .join('uploads', 'categories', finalFileName)
+      .replace(/\\/g, '/');
+  }
+
+  private safeDeleteCategoryFile(filePath: string) {
+    if (!filePath) return;
+    const absPath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(process.cwd(), filePath);
+    if (fs.existsSync(absPath)) {
+      try {
+        fs.unlinkSync(absPath);
+      } catch (error) {
+        console.error(
+          `Error al eliminar archivo de categoría: ${absPath}`,
+          error,
+        );
+      }
+    }
+  }
+
   /**
    * Crea una nueva categoría con traducciones e imagen opcional
    */
@@ -23,12 +63,16 @@ export class CategoryService {
   ) {
     const languages = createCategoryDto.translations.map((t) => t.language);
     if (new Set(languages).size !== languages.length) {
+      if (file) this.safeDeleteCategoryFile(file.path);
       throw new BadRequestException(
         'No se permiten idiomas duplicados en las traducciones',
       );
     }
 
-    const imagePath = file ? file.path : null;
+    let imagePath: string | null = null;
+    if (file) {
+      imagePath = this.moveCategoryFileToFinalPath(file);
+    }
 
     try {
       return await this.prisma.category.create({
@@ -47,11 +91,11 @@ export class CategoryService {
         include: { translations: true },
       });
     } catch (error) {
+      if (file) this.safeDeleteCategoryFile(imagePath || file.path);
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        if (file) fs.unlinkSync(file.path);
         throw new BadRequestException(
           'Ya existe una traducción para este idioma',
         );
@@ -116,11 +160,14 @@ export class CategoryService {
   ) {
     const category = await this.prisma.category.findUnique({ where: { id } });
     if (!category) {
-      if (file) fs.unlinkSync(file.path);
+      if (file) this.safeDeleteCategoryFile(file.path);
       throw new NotFoundException(`Categoría con ID ${id} no encontrada.`);
     }
 
-    const imagePath = file ? file.path : category.image;
+    let imagePath = category.image;
+    if (file) {
+      imagePath = this.moveCategoryFileToFinalPath(file);
+    }
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -144,25 +191,18 @@ export class CategoryService {
         });
 
         // Si se subió una nueva imagen, eliminar la anterior
-        if (file && category.image) {
-          try {
-            fs.unlinkSync(category.image);
-          } catch (error) {
-            console.error(
-              `Error al eliminar imagen antigua: ${category.image}`,
-              error,
-            );
-          }
+        if (file && category.image && category.image !== imagePath) {
+          this.safeDeleteCategoryFile(category.image);
         }
 
         return updated;
       });
     } catch (error) {
+      if (file) this.safeDeleteCategoryFile(imagePath || file.path);
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        if (file) fs.unlinkSync(file.path);
         throw new BadRequestException(
           'Ya existe una traducción para este idioma',
         );
@@ -181,11 +221,7 @@ export class CategoryService {
     }
 
     if (category.image) {
-      try {
-        fs.unlinkSync(category.image);
-      } catch (error) {
-        console.error(`Error al eliminar imagen: ${category.image}`, error);
-      }
+      this.safeDeleteCategoryFile(category.image);
     }
 
     await this.prisma.categoryTranslation.deleteMany({
@@ -203,36 +239,27 @@ export class CategoryService {
 
     const category = await this.prisma.category.findUnique({ where: { id } });
     if (!category) {
-      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      this.safeDeleteCategoryFile(file.path);
       throw new NotFoundException(`Categoría con ID ${id} no encontrada.`);
     }
 
-    // ✅ Eliminar imagen anterior (si existe)
-    if (category.image && fs.existsSync(category.image)) {
-      try {
-        fs.unlinkSync(category.image);
-      } catch {
-        console.warn(
-          `⚠️ No se pudo eliminar la imagen anterior: ${category.image}`,
-        );
+    const newImagePath = this.moveCategoryFileToFinalPath(file);
+
+    try {
+      // ✅ Eliminar imagen anterior (si existe)
+      if (category.image) {
+        this.safeDeleteCategoryFile(category.image);
       }
+
+      const updated = await this.prisma.category.update({
+        where: { id },
+        data: { image: newImagePath },
+      });
+
+      return updated;
+    } catch (error) {
+      this.safeDeleteCategoryFile(newImagePath);
+      throw error;
     }
-
-    // ✅ Guardar ruta relativa
-    const relativePath = path
-      .relative(process.cwd(), file.path)
-      .replace(/\\/g, '/');
-
-    const updated = await this.prisma.category.update({
-      where: { id },
-      data: { image: relativePath },
-    });
-
-    // ✅ Mostrar la URL de acceso en consola
-    console.log(
-      `🖼️ Imagen accesible en: http://localhost:3000/${relativePath}`,
-    );
-
-    return updated;
   }
 }

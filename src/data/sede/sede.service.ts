@@ -14,8 +14,49 @@ import { UpdateSedeDto } from './dto/update-sede.dto';
 export class SedeService {
   constructor(private prisma: PrismaService) {}
 
+  private moveSedeFileToFinalPath(sedeId: number, file: Express.Multer.File) {
+    const uploadDirAbs = path.join(
+      process.cwd(),
+      'uploads',
+      'sedes',
+      sedeId.toString(),
+    );
+    if (!fs.existsSync(uploadDirAbs)) {
+      fs.mkdirSync(uploadDirAbs, { recursive: true });
+    }
+
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const finalAbsPath = path.join(uploadDirAbs, finalFileName);
+
+    const tempAbsPath = path.isAbsolute(file.path)
+      ? file.path
+      : path.join(process.cwd(), file.path);
+
+    if (tempAbsPath !== finalAbsPath) {
+      fs.renameSync(tempAbsPath, finalAbsPath);
+    }
+
+    return path
+      .join('uploads', 'sedes', sedeId.toString(), finalFileName)
+      .replace(/\\/g, '/');
+  }
+
+  private safeDeleteSedeFile(filePath: string) {
+    const absPath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(process.cwd(), filePath);
+    if (fs.existsSync(absPath)) {
+      try {
+        fs.unlinkSync(absPath);
+      } catch (error) {
+        console.error(`Error al eliminar archivo de sede: ${absPath}`, error);
+      }
+    }
+  }
+
   // 🔹 Crear una nueva sede
-  async create(createSedeDto: CreateSedeDto, files: Express.Multer.File[]) {
+  async create(createSedeDto: CreateSedeDto, files?: Express.Multer.File[]) {
     try {
       const empresa = await this.prisma.empresa.findUnique({
         where: { id: createSedeDto.empresaId },
@@ -32,17 +73,12 @@ export class SedeService {
         },
       });
 
-      const finalDir = path.join('./uploads/sedes', sede.id.toString());
-      if (!fs.existsSync(finalDir)) {
-        fs.mkdirSync(finalDir, { recursive: true });
+      let imagenesUrls: string[] = [];
+      if (files && files.length > 0) {
+        imagenesUrls = files.map((file) =>
+          this.moveSedeFileToFinalPath(sede.id, file),
+        );
       }
-
-      const imagenesUrls = files.map((file) => {
-        const newFileName = `${Date.now()}-${file.originalname}`;
-        const finalPath = path.join(finalDir, newFileName);
-        fs.renameSync(file.path, finalPath);
-        return finalPath;
-      });
 
       return await this.prisma.sede.update({
         where: { id: sede.id },
@@ -51,9 +87,7 @@ export class SedeService {
     } catch (error) {
       if (files && files.length > 0) {
         files.forEach((file) => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
+          this.safeDeleteSedeFile(file.path);
         });
       }
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -138,27 +172,19 @@ export class SedeService {
 
   // 🔹 Agregar una sola imagen
   async addImageToSede(id: number, file: Express.Multer.File) {
-    const sede = await this.prisma.sede.findUnique({
-      where: { id },
-    });
+    const sede = await this.prisma.sede.findUnique({ where: { id } });
     if (!sede) {
-      fs.unlinkSync(file.path);
+      this.safeDeleteSedeFile(file.path);
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
     }
 
-    const finalDir = path.join('./uploads/sedes', sede.id.toString());
-    if (!fs.existsSync(finalDir)) {
-      fs.mkdirSync(finalDir, { recursive: true });
-    }
-
-    const finalPath = path.join(finalDir, file.filename);
-    fs.renameSync(file.path, finalPath);
+    const finalPublicPath = this.moveSedeFileToFinalPath(id, file);
 
     return this.prisma.sede.update({
       where: { id },
       data: {
         imagenes: {
-          push: finalPath,
+          push: finalPublicPath,
         },
       },
     });
@@ -168,22 +194,13 @@ export class SedeService {
   async addImagesToGaleria(id: number, files: Express.Multer.File[]) {
     const sede = await this.prisma.sede.findUnique({ where: { id } });
     if (!sede) {
-      this.deleteTempFiles(files);
+      files.forEach((f) => this.safeDeleteSedeFile(f.path));
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
     }
 
-    const finalDir = path.join('./uploads/sedes', sede.id.toString());
-    if (!fs.existsSync(finalDir)) {
-      fs.mkdirSync(finalDir, { recursive: true });
-    }
-
-    const newImagePaths: string[] = [];
-    files.forEach((file) => {
-      const newFileName = `${Date.now()}-${file.originalname}`;
-      const finalPath = path.join(finalDir, newFileName);
-      fs.renameSync(file.path, finalPath);
-      newImagePaths.push(finalPath);
-    });
+    const newImagePaths = files.map((file) =>
+      this.moveSedeFileToFinalPath(id, file),
+    );
 
     return await this.prisma.sede.update({
       where: { id },
@@ -269,14 +286,30 @@ export class SedeService {
     return sede.Service;
   }
 
-  // 🔹 Utilidad para limpiar archivos temporales
-  private deleteTempFiles(files: Express.Multer.File[]) {
-    if (files && files.length > 0) {
-      files.forEach((file) => {
-        if (fs.existsSync(file.path)) {
-          fs.unlinkSync(file.path);
-        }
-      });
+  // 🔹 Eliminar imágenes específicas de una sede
+  async removeImagesFromSede(id: number, imagenesParaEliminar: string[]) {
+    const sede = await this.prisma.sede.findUnique({ where: { id } });
+    if (!sede) {
+      throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
     }
+
+    const imagenesActuales = sede.imagenes || [];
+    const nuevasImagenes = imagenesActuales.filter(
+      (img) => !imagenesParaEliminar.includes(img),
+    );
+
+    // Eliminar archivos físicos
+    imagenesParaEliminar.forEach((imgPath) => {
+      if (imagenesActuales.includes(imgPath)) {
+        this.safeDeleteSedeFile(imgPath);
+      }
+    });
+
+    return await this.prisma.sede.update({
+      where: { id },
+      data: {
+        imagenes: nuevasImagenes,
+      },
+    });
   }
 }

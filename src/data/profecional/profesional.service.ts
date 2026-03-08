@@ -20,6 +20,46 @@ export class ProfesionalService {
     private readonly accessControlService: AccessControlService,
   ) {}
 
+  private moveProfesionalFileToFinalPath(file: Express.Multer.File) {
+    const uploadDirAbs = path.join(process.cwd(), 'uploads', 'profesionales');
+    if (!fs.existsSync(uploadDirAbs)) {
+      fs.mkdirSync(uploadDirAbs, { recursive: true });
+    }
+
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const finalAbsPath = path.join(uploadDirAbs, finalFileName);
+
+    const tempAbsPath = path.isAbsolute(file.path)
+      ? file.path
+      : path.join(process.cwd(), file.path);
+
+    if (tempAbsPath !== finalAbsPath) {
+      fs.renameSync(tempAbsPath, finalAbsPath);
+    }
+
+    return path
+      .join('uploads', 'profesionales', finalFileName)
+      .replace(/\\/g, '/');
+  }
+
+  private safeDeleteProfesionalFile(filePath: string) {
+    if (!filePath) return;
+    const absPath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(process.cwd(), filePath);
+    if (fs.existsSync(absPath)) {
+      try {
+        fs.unlinkSync(absPath);
+      } catch (error) {
+        console.error(
+          `Error al eliminar archivo de profesional: ${absPath}`,
+          error,
+        );
+      }
+    }
+  }
+
   async create(
     createProfesionalDto: CreateProfesionalDto,
     user?: AuthenticatedUser,
@@ -32,7 +72,7 @@ export class ProfesionalService {
     });
     if (!sede) {
       if (file) {
-        fs.unlinkSync(file.path);
+        this.safeDeleteProfesionalFile(file.path);
       }
       throw new NotFoundException(
         `Sede con ID ${createProfesionalDto.sedeId} no encontrada.`,
@@ -42,7 +82,7 @@ export class ProfesionalService {
     if (user?.role === Role.BRANCH_ADMIN) {
       if (!user.sedeId || user.sedeId !== sede.id) {
         if (file) {
-          fs.unlinkSync(file.path);
+          this.safeDeleteProfesionalFile(file.path);
         }
         throw new ForbiddenException(
           'No puede crear profesionales en otra sede.',
@@ -53,7 +93,7 @@ export class ProfesionalService {
     if (user?.role === Role.COMPANY_ADMIN) {
       if (!user.empresaId || user.empresaId !== sede.empresaId) {
         if (file) {
-          fs.unlinkSync(file.path);
+          this.safeDeleteProfesionalFile(file.path);
         }
         throw new ForbiddenException(
           'No puede crear profesionales fuera de su empresa.',
@@ -61,17 +101,11 @@ export class ProfesionalService {
       }
     }
 
+    let imagenPath: string | undefined;
     try {
-      let imagenPath: string | undefined;
-
-      // 2. Si se subió un archivo, moverlo al directorio final
+      // 2. Si se subió un archivo, moverlo al directorio final con extensión
       if (file) {
-        const uploadDir = path.join('./uploads/profesionales');
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        imagenPath = path.join(uploadDir, file.filename);
-        fs.renameSync(file.path, imagenPath);
+        imagenPath = this.moveProfesionalFileToFinalPath(file);
       }
 
       // 3. Crear el profesional en la base de datos
@@ -85,8 +119,8 @@ export class ProfesionalService {
       return profesional;
     } catch (error) {
       // 4. Limpiar el archivo si algo falla
-      if (file && fs.existsSync(file.path)) {
-        fs.unlinkSync(file.path);
+      if (file) {
+        this.safeDeleteProfesionalFile(imagenPath || file.path);
       }
       // 5. Manejar errores de Prisma, por ejemplo, teléfono duplicado
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -285,27 +319,29 @@ export class ProfesionalService {
     });
 
     if (!profesional) {
-      fs.unlinkSync(file.path); // Elimina la imagen subida si el profesional no existe
+      this.safeDeleteProfesionalFile(file.path);
       throw new NotFoundException(`Profesional con ID ${id} no encontrado.`);
     }
 
-    // 1. Eliminar la imagen antigua si existe
-    if (profesional.imagen && fs.existsSync(profesional.imagen)) {
-      fs.unlinkSync(profesional.imagen);
+    const newImagenPath = this.moveProfesionalFileToFinalPath(file);
+
+    try {
+      // 1. Eliminar la imagen antigua si existe
+      if (profesional.imagen) {
+        this.safeDeleteProfesionalFile(profesional.imagen);
+      }
+
+      // 2. Actualizar la ruta de la imagen en la base de datos
+      return await this.prisma.profesional.update({
+        where: { id },
+        data: {
+          imagen: newImagenPath,
+        },
+      });
+    } catch (error) {
+      this.safeDeleteProfesionalFile(newImagenPath);
+      throw error;
     }
-
-    // 2. Mover la nueva imagen de la carpeta temporal a la final
-    const uploadDir = path.join('./uploads/profesionales');
-    const finalPath = path.join(uploadDir, file.filename);
-    fs.renameSync(file.path, finalPath);
-
-    // 3. Actualizar la ruta de la imagen en la base de datos
-    return this.prisma.profesional.update({
-      where: { id },
-      data: {
-        imagen: finalPath,
-      },
-    });
   }
 
   async remove(id: number, user?: AuthenticatedUser) {
@@ -317,8 +353,8 @@ export class ProfesionalService {
       throw new NotFoundException(`Profesional con ID ${id} no encontrado.`);
     }
 
-    if (profesional.imagen && fs.existsSync(profesional.imagen)) {
-      fs.unlinkSync(profesional.imagen);
+    if (profesional.imagen) {
+      this.safeDeleteProfesionalFile(profesional.imagen);
     }
     return this.prisma.profesional.delete({ where: { id } });
   }

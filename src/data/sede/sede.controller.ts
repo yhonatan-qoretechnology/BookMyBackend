@@ -53,7 +53,7 @@ export class SedeController {
   )
   async create(
     @Body() body: any,
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles() files?: Express.Multer.File[],
   ) {
     const parsedBody = {
       ...body,
@@ -371,5 +371,44 @@ export class SedeController {
       );
     }
     return this.sedeService.removeServicesFromSede(id, serviceIds);
+  }
+
+  // Eliminar imágenes específicas de una sede
+  @Delete(':id/imagenes')
+  @ApiOperation({
+    summary: 'Eliminar imágenes específicas de una sede (BD y FS)',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        imagenes: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['uploads/sedes/1/archivo.png'],
+          description:
+            'Lista de rutas de imágenes a eliminar (tal como están en la BD)',
+        },
+      },
+      required: ['imagenes'],
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Imágenes eliminadas exitosamente de la base de datos y del servidor.',
+  })
+  @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
+  async removeImages(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { imagenes: string[] },
+  ) {
+    const { imagenes } = body;
+    if (!imagenes || imagenes.length === 0) {
+      throw new BadRequestException(
+        'Debe proporcionar al menos una ruta de imagen para eliminar.',
+      );
+    }
+    return this.sedeService.removeImagesFromSede(id, imagenes);
   }
 }
