@@ -120,12 +120,38 @@ export class SedeService {
       throw new NotFoundException(`Empresa con ID ${empresaId} no encontrada.`);
     }
 
-    return this.prisma.sede.findMany({
-      where: { empresaId },
-      include: {
-        Service: true, // incluir los servicios asociados
-      },
-    });
+    try {
+      return await this.prisma.sede.findMany({
+        where: { empresaId },
+        include: {
+          Service: true, // incluir los servicios asociados
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        console.error(
+          `Error Prisma al listar sedes por empresa (empresaId=${empresaId}, code=${error.code})`,
+          error,
+        );
+      } else {
+        console.error(
+          `Error inesperado al listar sedes por empresa (empresaId=${empresaId})`,
+          error,
+        );
+      }
+
+      try {
+        return await this.prisma.sede.findMany({
+          where: { empresaId },
+        });
+      } catch (fallbackError) {
+        console.error(
+          `Error en fallback al listar sedes por empresa (empresaId=${empresaId})`,
+          fallbackError,
+        );
+        throw fallbackError;
+      }
+    }
   }
 
   // 🔹 Obtener una sede específica

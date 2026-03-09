@@ -15,6 +15,12 @@ export class AppointmentService {
 
   constructor(private prisma: PrismaService) {}
 
+  private toIsoOrNull(value: unknown) {
+    if (!(value instanceof Date)) return null;
+    if (Number.isNaN(value.getTime())) return null;
+    return value.toISOString();
+  }
+
   private getMinutesFromDate(date: Date) {
     return date.getHours() * 60 + date.getMinutes();
   }
@@ -80,10 +86,26 @@ export class AppointmentService {
   }) {
     const serviceName =
       appointment.service?.translations.find((translation) =>
-        ['es', 'es-ES', 'es-419'].includes(translation.language.toLowerCase()),
+        ['es', 'es-ES', 'es-419'].includes(
+          (translation.language ?? '').toLowerCase(),
+        ),
       )?.name ??
       appointment.service?.translations[0]?.name ??
       null;
+
+    const fechaIso = this.toIsoOrNull(appointment.fecha);
+    const horaInicioIso = this.toIsoOrNull(appointment.horaInicio);
+    const horaFinIso = this.toIsoOrNull(appointment.horaFin);
+
+    if (!fechaIso || !horaInicioIso || !horaFinIso) {
+      this.logger.warn(
+        `Cita con fechas inválidas o nulas al construir summary: appointmentId=${appointment.id}, fecha=${String(
+          appointment.fecha,
+        )}, horaInicio=${String(appointment.horaInicio)}, horaFin=${String(
+          appointment.horaFin,
+        )}`,
+      );
+    }
 
     return {
       appointmentId: appointment.id,
@@ -94,9 +116,9 @@ export class AppointmentService {
       sedeId: appointment.sedeId,
       sedeNombre: appointment.sede?.nombre ?? null,
       estado: appointment.estado,
-      fecha: appointment.fecha.toISOString(),
-      horaInicio: appointment.horaInicio.toISOString(),
-      horaFin: appointment.horaFin.toISOString(),
+      fecha: fechaIso,
+      horaInicio: horaInicioIso,
+      horaFin: horaFinIso,
     };
   }
 
