@@ -10,6 +10,7 @@ import * as path from 'path';
 import { AccessControlService } from '../../auth/services/access-control/access-control.service';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SftpStorageService } from '../../storage/sftp-storage.service';
 import { CreateProfesionalDto } from './dto/create-profesional.dto';
 import { UpdateProfesionalDto } from './dto/update-profesional.dto';
 
@@ -18,7 +19,43 @@ export class ProfesionalService {
   constructor(
     private prisma: PrismaService,
     private readonly accessControlService: AccessControlService,
+    private readonly sftpStorage: SftpStorageService,
   ) {}
+
+  private async storeProfesionalImage(file: Express.Multer.File) {
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const relativePath = path
+      .join('uploads', 'profesionales', finalFileName)
+      .replace(/\\/g, '/');
+
+    if (this.sftpStorage.isEnabled()) {
+      await this.sftpStorage.uploadLocalFile({
+        localPath: file.path,
+        remoteRelativePath: relativePath,
+        deleteLocalAfter: true,
+      });
+      return relativePath;
+    }
+
+    return this.moveProfesionalFileToFinalPath(file);
+  }
+
+  private async safeDeleteRemoteOrLocal(filePath: string) {
+    if (!filePath) return;
+    if (this.sftpStorage.isEnabled()) {
+      try {
+        await this.sftpStorage.deleteByRelativePath(filePath);
+        return;
+      } catch (error) {
+        console.error(
+          `Error al eliminar archivo remoto de profesional: ${filePath}`,
+          error,
+        );
+      }
+    }
+    this.safeDeleteProfesionalFile(filePath);
+  }
 
   private moveProfesionalFileToFinalPath(file: Express.Multer.File) {
     const uploadDirAbs = path.join(process.cwd(), 'uploads', 'profesionales');
@@ -72,7 +109,7 @@ export class ProfesionalService {
     });
     if (!sede) {
       if (file) {
-        this.safeDeleteProfesionalFile(file.path);
+        await this.safeDeleteRemoteOrLocal(file.path);
       }
       throw new NotFoundException(
         `Sede con ID ${createProfesionalDto.sedeId} no encontrada.`,
@@ -82,7 +119,7 @@ export class ProfesionalService {
     if (user?.role === Role.BRANCH_ADMIN) {
       if (!user.sedeId || user.sedeId !== sede.id) {
         if (file) {
-          this.safeDeleteProfesionalFile(file.path);
+          await this.safeDeleteRemoteOrLocal(file.path);
         }
         throw new ForbiddenException(
           'No puede crear profesionales en otra sede.',
@@ -93,7 +130,7 @@ export class ProfesionalService {
     if (user?.role === Role.COMPANY_ADMIN) {
       if (!user.empresaId || user.empresaId !== sede.empresaId) {
         if (file) {
-          this.safeDeleteProfesionalFile(file.path);
+          await this.safeDeleteRemoteOrLocal(file.path);
         }
         throw new ForbiddenException(
           'No puede crear profesionales fuera de su empresa.',
@@ -105,7 +142,7 @@ export class ProfesionalService {
     try {
       // 2. Si se subió un archivo, moverlo al directorio final con extensión
       if (file) {
-        imagenPath = this.moveProfesionalFileToFinalPath(file);
+        imagenPath = await this.storeProfesionalImage(file);
       }
 
       // 3. Crear el profesional en la base de datos
@@ -120,7 +157,7 @@ export class ProfesionalService {
     } catch (error) {
       // 4. Limpiar el archivo si algo falla
       if (file) {
-        this.safeDeleteProfesionalFile(imagenPath || file.path);
+        await this.safeDeleteRemoteOrLocal(imagenPath || file.path);
       }
       // 5. Manejar errores de Prisma, por ejemplo, teléfono duplicado
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -319,16 +356,16 @@ export class ProfesionalService {
     });
 
     if (!profesional) {
-      this.safeDeleteProfesionalFile(file.path);
+      await this.safeDeleteRemoteOrLocal(file.path);
       throw new NotFoundException(`Profesional con ID ${id} no encontrado.`);
     }
 
-    const newImagenPath = this.moveProfesionalFileToFinalPath(file);
+    const newImagenPath = await this.storeProfesionalImage(file);
 
     try {
       // 1. Eliminar la imagen antigua si existe
       if (profesional.imagen) {
-        this.safeDeleteProfesionalFile(profesional.imagen);
+        await this.safeDeleteRemoteOrLocal(profesional.imagen);
       }
 
       // 2. Actualizar la ruta de la imagen en la base de datos
@@ -339,7 +376,7 @@ export class ProfesionalService {
         },
       });
     } catch (error) {
-      this.safeDeleteProfesionalFile(newImagenPath);
+      await this.safeDeleteRemoteOrLocal(newImagenPath);
       throw error;
     }
   }
@@ -354,7 +391,7 @@ export class ProfesionalService {
     }
 
     if (profesional.imagen) {
-      this.safeDeleteProfesionalFile(profesional.imagen);
+      await this.safeDeleteRemoteOrLocal(profesional.imagen);
     }
     return this.prisma.profesional.delete({ where: { id } });
   }

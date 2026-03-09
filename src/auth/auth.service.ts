@@ -12,6 +12,7 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import * as path from 'path';
 import { OtpService } from '../data/otp/otp.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SftpStorageService } from '../storage/sftp-storage.service';
 import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
 import { ChangePasswordByAdminDto } from './dto/change-password-by-admin.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -38,11 +39,67 @@ export class AuthService {
     private jwtService: JwtService,
     private hashService: HashService,
     private otpService: OtpService,
+    private readonly sftpStorage: SftpStorageService,
   ) {}
+
+  private async storeUserImage(file: Express.Multer.File) {
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${Date.now()}-${file.filename}${ext}`;
+    const relativePath = path
+      .join('uploads', 'users', finalFileName)
+      .replace(/\\/g, '/');
+
+    if (this.sftpStorage.isEnabled()) {
+      await this.sftpStorage.uploadLocalFile({
+        localPath: file.path,
+        remoteRelativePath: relativePath,
+        deleteLocalAfter: true,
+      });
+      return relativePath;
+    }
+
+    const userUploadsDir = path.join(process.cwd(), 'uploads', 'users');
+    if (!fs.existsSync(userUploadsDir)) {
+      fs.mkdirSync(userUploadsDir, { recursive: true });
+    }
+    const finalPath = path.join(userUploadsDir, finalFileName);
+    fs.renameSync(file.path, finalPath);
+    return finalPath.replace(/\\/g, '/');
+  }
+
+  private async safeDeleteRemoteOrLocal(filePath: string) {
+    if (!filePath) return;
+    if (this.sftpStorage.isEnabled()) {
+      try {
+        await this.sftpStorage.deleteByRelativePath(filePath);
+        return;
+      } catch (error) {
+        console.error(
+          `Error al eliminar archivo remoto de usuario: ${filePath}`,
+          error,
+        );
+      }
+    }
+    const absPath = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(filePath);
+    if (fs.existsSync(absPath)) {
+      try {
+        fs.unlinkSync(absPath);
+      } catch (error) {
+        console.error(
+          `Error al eliminar archivo de usuario: ${absPath}`,
+          error,
+        );
+      }
+    }
+  }
 
   async bootstrapSuperAdmin(dto: BootstrapSuperAdminDto) {
     if (process.env.NODE_ENV === 'production') {
-      throw new ForbiddenException('Este endpoint no está disponible en producción.');
+      throw new ForbiddenException(
+        'Este endpoint no está disponible en producción.',
+      );
     }
 
     const existingSuperAdmin = await this.prisma.users.findFirst({
@@ -51,12 +108,16 @@ export class AuthService {
     });
 
     if (existingSuperAdmin) {
-      throw new BadRequestException('Ya existe al menos un usuario SUPER_ADMIN.');
+      throw new BadRequestException(
+        'Ya existe al menos un usuario SUPER_ADMIN.',
+      );
     }
 
     const phoneNumber = parsePhoneNumberFromString(dto.phone ?? '');
     if (!phoneNumber || !phoneNumber.isValid()) {
-      throw new BadRequestException('El número de teléfono proporcionado no es válido.');
+      throw new BadRequestException(
+        'El número de teléfono proporcionado no es válido.',
+      );
     }
 
     const hashedPassword = await this.hashService.hash(dto.password);
@@ -316,14 +377,7 @@ export class AuthService {
 
       // 2. Crear el usuario solo si las validaciones pasan
       if (file) {
-        const userUploadsDir = path.join('uploads', 'users');
-        if (!fs.existsSync(userUploadsDir)) {
-          fs.mkdirSync(userUploadsDir, { recursive: true });
-        }
-        const finalName = `${Date.now()}-${file.originalname}`;
-        const finalPath = path.join(userUploadsDir, finalName);
-        fs.renameSync(file.path, finalPath);
-        fotoPerfilPath = finalPath.replace(/\\/g, '/');
+        fotoPerfilPath = await this.storeUserImage(file);
       }
 
       const user = await this.prisma.users.create({
@@ -415,10 +469,7 @@ export class AuthService {
       }
 
       if (fotoPerfilPath) {
-        const normalizedPath = path.resolve(fotoPerfilPath);
-        if (fs.existsSync(normalizedPath)) {
-          fs.unlinkSync(normalizedPath);
-        }
+        await this.safeDeleteRemoteOrLocal(fotoPerfilPath);
       }
 
       if (createdUserId) {
@@ -554,36 +605,15 @@ export class AuthService {
       throw new NotFoundException(`Usuario con ID ${userId} no encontrado.`);
     }
 
-    const uploadsRootDir = path.join('uploads', 'users');
-    const userUploadsDir = path.join(uploadsRootDir, String(userId));
-    const userUploadsDirAbs = path.resolve(userUploadsDir);
-
-    if (!fs.existsSync(userUploadsDirAbs)) {
-      fs.mkdirSync(userUploadsDirAbs, { recursive: true });
-    }
-
     if (user.fotoPerfil) {
-      const previousPhotoAbs = path.resolve(user.fotoPerfil);
-      const isWithinUserDir = previousPhotoAbs.startsWith(
-        `${userUploadsDirAbs}${path.sep}`,
-      );
-
-      if (isWithinUserDir && fs.existsSync(previousPhotoAbs)) {
-        fs.unlinkSync(previousPhotoAbs);
-      }
+      await this.safeDeleteRemoteOrLocal(user.fotoPerfil);
     }
 
-    const newFileName = `${Date.now()}-${file.originalname}`;
-    const tempFileAbsPath = path.resolve(file.path);
-    const finalPathRelative = path.join(userUploadsDir, newFileName);
-    const finalPathAbs = path.resolve(finalPathRelative);
-    fs.renameSync(tempFileAbsPath, finalPathAbs);
-
-    const normalizedPath = finalPathRelative.replace(/\\/g, '/');
+    const newFotoPerfilPath = await this.storeUserImage(file);
 
     return this.prisma.users.update({
       where: { id: userId },
-      data: { fotoPerfil: normalizedPath },
+      data: { fotoPerfil: newFotoPerfilPath },
     });
   }
 

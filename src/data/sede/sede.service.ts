@@ -7,12 +7,35 @@ import { Prisma } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SftpStorageService } from '../../storage/sftp-storage.service';
 import { CreateSedeDto } from './dto/create-sede.dto';
 import { UpdateSedeDto } from './dto/update-sede.dto';
 
 @Injectable()
 export class SedeService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly sftpStorage: SftpStorageService,
+  ) {}
+
+  private async storeSedeImage(sedeId: number, file: Express.Multer.File) {
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const relativePath = path
+      .join('uploads', 'bookmy', 'sedes', sedeId.toString(), finalFileName)
+      .replace(/\\/g, '/');
+
+    if (this.sftpStorage.isEnabled()) {
+      await this.sftpStorage.uploadLocalFile({
+        localPath: file.path,
+        remoteRelativePath: relativePath,
+        deleteLocalAfter: true,
+      });
+      return relativePath;
+    }
+
+    return this.moveSedeFileToFinalPath(sedeId, file);
+  }
 
   private moveSedeFileToFinalPath(sedeId: number, file: Express.Multer.File) {
     const uploadDirAbs = path.join(
@@ -55,6 +78,22 @@ export class SedeService {
     }
   }
 
+  private async safeDeleteRemoteOrLocal(filePath: string) {
+    if (!filePath) return;
+    if (this.sftpStorage.isEnabled()) {
+      try {
+        await this.sftpStorage.deleteByRelativePath(filePath);
+        return;
+      } catch (error) {
+        console.error(
+          `Error al eliminar archivo remoto de sede: ${filePath}`,
+          error,
+        );
+      }
+    }
+    this.safeDeleteSedeFile(filePath);
+  }
+
   // 🔹 Crear una nueva sede
   async create(createSedeDto: CreateSedeDto, files?: Express.Multer.File[]) {
     try {
@@ -75,8 +114,8 @@ export class SedeService {
 
       let imagenesUrls: string[] = [];
       if (files && files.length > 0) {
-        imagenesUrls = files.map((file) =>
-          this.moveSedeFileToFinalPath(sede.id, file),
+        imagenesUrls = await Promise.all(
+          files.map((file) => this.storeSedeImage(sede.id, file)),
         );
       }
 
@@ -86,9 +125,9 @@ export class SedeService {
       });
     } catch (error) {
       if (files && files.length > 0) {
-        files.forEach((file) => {
-          this.safeDeleteSedeFile(file.path);
-        });
+        await Promise.all(
+          files.map((file) => this.safeDeleteRemoteOrLocal(file.path)),
+        );
       }
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
@@ -188,9 +227,17 @@ export class SedeService {
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
     }
 
-    const sedeDir = path.join('./uploads/sedes', sede.id.toString());
-    if (fs.existsSync(sedeDir)) {
-      fs.rmSync(sedeDir, { recursive: true, force: true });
+    if (Array.isArray(sede.imagenes) && sede.imagenes.length) {
+      await Promise.all(
+        sede.imagenes.map((img) => this.safeDeleteRemoteOrLocal(img)),
+      );
+    }
+
+    if (!this.sftpStorage.isEnabled()) {
+      const sedeDir = path.join('./uploads/sedes', sede.id.toString());
+      if (fs.existsSync(sedeDir)) {
+        fs.rmSync(sedeDir, { recursive: true, force: true });
+      }
     }
 
     return this.prisma.sede.delete({ where: { id } });
@@ -204,7 +251,7 @@ export class SedeService {
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
     }
 
-    const finalPublicPath = this.moveSedeFileToFinalPath(id, file);
+    const finalPublicPath = await this.storeSedeImage(id, file);
 
     return this.prisma.sede.update({
       where: { id },
@@ -224,8 +271,8 @@ export class SedeService {
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
     }
 
-    const newImagePaths = files.map((file) =>
-      this.moveSedeFileToFinalPath(id, file),
+    const newImagePaths = await Promise.all(
+      files.map((file) => this.storeSedeImage(id, file)),
     );
 
     return await this.prisma.sede.update({
@@ -325,11 +372,11 @@ export class SedeService {
     );
 
     // Eliminar archivos físicos
-    imagenesParaEliminar.forEach((imgPath) => {
-      if (imagenesActuales.includes(imgPath)) {
-        this.safeDeleteSedeFile(imgPath);
-      }
-    });
+    await Promise.all(
+      imagenesParaEliminar
+        .filter((imgPath) => imagenesActuales.includes(imgPath))
+        .map((imgPath) => this.safeDeleteRemoteOrLocal(imgPath)),
+    );
 
     return await this.prisma.sede.update({
       where: { id },

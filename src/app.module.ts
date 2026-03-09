@@ -23,6 +23,7 @@ import { UserLocationModule } from './data/user-location/user-location.module';
 import { UserCategoriesModule } from './data/userCategory/user-categories.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SeedModule } from './seed/seed.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -31,8 +32,15 @@ import { SeedModule } from './seed/seed.module';
       envFilePath: '.env',
       validationSchema: Joi.object({
         JWT_SECRET_KEY: Joi.string().required(),
+        SFTP_HOST: Joi.string().optional(),
+        SFTP_PORT: Joi.number().optional(),
+        SFTP_USER: Joi.string().optional(),
+        SFTP_PASSWORD: Joi.string().optional(),
+        SFTP_REMOTE_ROOT_PATH: Joi.string().optional(),
+        UPLOADS_PUBLIC_BASE_URL: Joi.string().optional(),
       }),
     }),
+    StorageModule,
     AuthModule,
     PrismaModule,
     SwaggerModule,

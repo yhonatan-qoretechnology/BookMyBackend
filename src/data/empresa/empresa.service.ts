@@ -7,12 +7,16 @@ import { Prisma } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SftpStorageService } from '../../storage/sftp-storage.service';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
 
 @Injectable()
 export class EmpresaService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly sftpStorage: SftpStorageService,
+  ) {}
 
   private moveLogoToFinalPath(file: Express.Multer.File) {
     const uploadDirAbs = path.join(process.cwd(), 'uploads', 'logos');
@@ -35,6 +39,25 @@ export class EmpresaService {
     return path.join('uploads', 'logos', finalFileName).replace(/\\/g, '/');
   }
 
+  private async storeLogo(file: Express.Multer.File) {
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const relativePath = path
+      .join('uploads', 'logos', finalFileName)
+      .replace(/\\/g, '/');
+
+    if (this.sftpStorage.isEnabled()) {
+      await this.sftpStorage.uploadLocalFile({
+        localPath: file.path,
+        remoteRelativePath: relativePath,
+        deleteLocalAfter: true,
+      });
+      return relativePath;
+    }
+
+    return this.moveLogoToFinalPath(file);
+  }
+
   private safeDeleteIfExists(filePath: string) {
     const absPath = path.isAbsolute(filePath)
       ? filePath
@@ -48,8 +71,22 @@ export class EmpresaService {
     }
   }
 
+  private async safeDeleteRemoteOrLocal(filePath: string) {
+    if (!filePath) return;
+    if (this.sftpStorage.isEnabled()) {
+      try {
+        await this.sftpStorage.deleteByRelativePath(filePath);
+        return;
+      } catch (error) {
+        console.error(`Error al eliminar archivo remoto: ${filePath}`, error);
+      }
+    }
+
+    this.safeDeleteIfExists(filePath);
+  }
+
   async create(createEmpresaDto: CreateEmpresaDto, file?: Express.Multer.File) {
-    const logoUrl = file ? this.moveLogoToFinalPath(file) : null;
+    const logoUrl = file ? await this.storeLogo(file) : null;
 
     try {
       return await this.prisma.empresa.create({
@@ -62,7 +99,7 @@ export class EmpresaService {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           if (file) {
-            this.safeDeleteIfExists(logoUrl ?? file.path);
+            await this.safeDeleteRemoteOrLocal(logoUrl ?? file.path);
           }
           throw new BadRequestException(
             'El nombre de la empresa ya está en uso.',
@@ -106,10 +143,10 @@ export class EmpresaService {
       ...updateEmpresaDto,
     };
     if (file) {
-      const newLogoPath = this.moveLogoToFinalPath(file);
+      const newLogoPath = await this.storeLogo(file);
       updateData.logo = newLogoPath;
       if (empresa.logo && empresa.logo !== newLogoPath) {
-        this.safeDeleteIfExists(empresa.logo);
+        await this.safeDeleteRemoteOrLocal(empresa.logo);
       }
     }
 
@@ -142,7 +179,7 @@ export class EmpresaService {
     }
 
     if (empresa.logo) {
-      this.safeDeleteIfExists(empresa.logo);
+      await this.safeDeleteRemoteOrLocal(empresa.logo);
     }
 
     await this.prisma.empresa.delete({
@@ -162,7 +199,7 @@ export class EmpresaService {
       throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
     }
 
-    const newLogoPath = this.moveLogoToFinalPath(file);
+    const newLogoPath = await this.storeLogo(file);
 
     try {
       const updated = await this.prisma.empresa.update({
@@ -173,13 +210,13 @@ export class EmpresaService {
       });
 
       if (empresa.logo && empresa.logo !== newLogoPath) {
-        this.safeDeleteIfExists(empresa.logo);
+        await this.safeDeleteRemoteOrLocal(empresa.logo);
       }
 
       return updated;
     } catch (error) {
       // Si algo falla, intentamos limpiar el archivo que se subió
-      this.safeDeleteIfExists(file.path);
+      await this.safeDeleteRemoteOrLocal(newLogoPath);
 
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {

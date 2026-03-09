@@ -7,12 +7,51 @@ import { Prisma } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SftpStorageService } from '../../storage/sftp-storage.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Injectable()
 export class CategoryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sftpStorage: SftpStorageService,
+  ) {}
+
+  private async storeCategoryImage(file: Express.Multer.File) {
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const relativePath = path
+      .join('uploads', 'categories', finalFileName)
+      .replace(/\\/g, '/');
+
+    if (this.sftpStorage.isEnabled()) {
+      await this.sftpStorage.uploadLocalFile({
+        localPath: file.path,
+        remoteRelativePath: relativePath,
+        deleteLocalAfter: true,
+      });
+      return relativePath;
+    }
+
+    return this.moveCategoryFileToFinalPath(file);
+  }
+
+  private async safeDeleteRemoteOrLocal(filePath: string) {
+    if (!filePath) return;
+    if (this.sftpStorage.isEnabled()) {
+      try {
+        await this.sftpStorage.deleteByRelativePath(filePath);
+        return;
+      } catch (error) {
+        console.error(
+          `Error al eliminar archivo remoto de categoría: ${filePath}`,
+          error,
+        );
+      }
+    }
+    this.safeDeleteCategoryFile(filePath);
+  }
 
   private moveCategoryFileToFinalPath(file: Express.Multer.File) {
     const uploadDirAbs = path.join(process.cwd(), 'uploads', 'categories');
@@ -63,7 +102,7 @@ export class CategoryService {
   ) {
     const languages = createCategoryDto.translations.map((t) => t.language);
     if (new Set(languages).size !== languages.length) {
-      if (file) this.safeDeleteCategoryFile(file.path);
+      if (file) await this.safeDeleteRemoteOrLocal(file.path);
       throw new BadRequestException(
         'No se permiten idiomas duplicados en las traducciones',
       );
@@ -71,7 +110,7 @@ export class CategoryService {
 
     let imagePath: string | null = null;
     if (file) {
-      imagePath = this.moveCategoryFileToFinalPath(file);
+      imagePath = await this.storeCategoryImage(file);
     }
 
     try {
@@ -91,7 +130,7 @@ export class CategoryService {
         include: { translations: true },
       });
     } catch (error) {
-      if (file) this.safeDeleteCategoryFile(imagePath || file.path);
+      if (file) await this.safeDeleteRemoteOrLocal(imagePath || file.path);
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
@@ -160,13 +199,13 @@ export class CategoryService {
   ) {
     const category = await this.prisma.category.findUnique({ where: { id } });
     if (!category) {
-      if (file) this.safeDeleteCategoryFile(file.path);
+      if (file) await this.safeDeleteRemoteOrLocal(file.path);
       throw new NotFoundException(`Categoría con ID ${id} no encontrada.`);
     }
 
     let imagePath = category.image;
     if (file) {
-      imagePath = this.moveCategoryFileToFinalPath(file);
+      imagePath = await this.storeCategoryImage(file);
     }
 
     try {
@@ -192,13 +231,13 @@ export class CategoryService {
 
         // Si se subió una nueva imagen, eliminar la anterior
         if (file && category.image && category.image !== imagePath) {
-          this.safeDeleteCategoryFile(category.image);
+          await this.safeDeleteRemoteOrLocal(category.image);
         }
 
         return updated;
       });
     } catch (error) {
-      if (file) this.safeDeleteCategoryFile(imagePath || file.path);
+      if (file) await this.safeDeleteRemoteOrLocal(imagePath || file.path);
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
@@ -221,7 +260,7 @@ export class CategoryService {
     }
 
     if (category.image) {
-      this.safeDeleteCategoryFile(category.image);
+      await this.safeDeleteRemoteOrLocal(category.image);
     }
 
     await this.prisma.categoryTranslation.deleteMany({
