@@ -41,7 +41,14 @@ export class CategoryService {
     if (!filePath) return;
     if (this.sftpStorage.isEnabled()) {
       try {
-        await this.sftpStorage.deleteByRelativePath(filePath);
+        const normalized = filePath.trim();
+        if (/^https?:\/\//i.test(normalized)) {
+          await this.sftpStorage.deleteByPublicUrl(normalized);
+          return;
+        }
+
+        const relative = normalized.replace(/^\/+/, '');
+        await this.sftpStorage.deleteByRelativePath(relative);
         return;
       } catch (error) {
         console.error(
