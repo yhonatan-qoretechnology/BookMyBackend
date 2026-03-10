@@ -5,9 +5,14 @@ import * as path from 'path';
 
 @Injectable()
 export class SftpStorageService {
+  private enabledCache: boolean | null = null;
+
   constructor(private readonly configService: ConfigService) {}
 
   isEnabled() {
+    if (this.enabledCache !== null) {
+      return this.enabledCache;
+    }
     const host = this.configService.get<string>('SFTP_HOST');
     const username = this.configService.get<string>('SFTP_USER');
     const password = this.configService.get<string>('SFTP_PASSWORD');
@@ -15,7 +20,10 @@ export class SftpStorageService {
     const publicBase = this.configService.get<string>(
       'UPLOADS_PUBLIC_BASE_URL',
     );
-    return Boolean(host && username && password && remoteRoot && publicBase);
+    this.enabledCache = Boolean(
+      host && username && password && remoteRoot && publicBase,
+    );
+    return this.enabledCache;
   }
 
   private async createClient() {
@@ -104,10 +112,10 @@ export class SftpStorageService {
         port,
         username: sanitizedUsername,
         password: sanitizedPassword,
-        readyTimeout: 20000,
-        retries: 2,
-        retry_factor: 2,
-        retry_minTimeout: 2000,
+        readyTimeout: 5000,
+        retries: 1,
+        retry_factor: 1,
+        retry_minTimeout: 1000,
       };
     }
 
