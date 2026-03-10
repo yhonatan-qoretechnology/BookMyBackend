@@ -82,22 +82,28 @@ export class SftpStorageService {
     const username = this.configService.get<string>('SFTP_USER');
     const password = this.configService.get<string>('SFTP_PASSWORD');
 
+    const sanitizedUsername = username?.replace(/^SFTP_USER=/, '').trim();
+    const sanitizedPassword = password
+      ?.trim()
+      .replace(/^"|"$/g, '')
+      .replace(/^'|'$/g, '');
+
     //console.log('[SFTP] Host:', host);
     //console.log('[SFTP] User:', username);
     //console.log('[SFTP] Password raw:', JSON.stringify(password));
     //console.log('[SFTP] Password length:', password?.length);
 
-    if (!host || !username) {
+    if (!host || !sanitizedUsername) {
       throw new Error('Credenciales SFTP incompletas');
     }
 
     // Intentar primero con contraseña
-    if (password) {
+    if (sanitizedPassword) {
       return {
         host,
         port,
-        username,
-        password,
+        username: sanitizedUsername,
+        password: sanitizedPassword,
         readyTimeout: 20000,
         retries: 2,
         retry_factor: 2,
