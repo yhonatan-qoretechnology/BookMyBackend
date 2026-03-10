@@ -27,6 +27,27 @@ async function test() {
       console.log('\nListando /clickandbuilds/bookmy...');
       const bmList = await sftp.list('/clickandbuilds/bookmy');
       console.log('Carpetas:', bmList.map((f) => f.name).join(', '));
+
+      console.log('Listando /clickandbuilds/bookmy/uploads...');
+      const uploadsList = await sftp.list('/clickandbuilds/bookmy/uploads');
+      console.log(
+        'Carpetas en uploads:',
+        uploadsList.map((f) => f.name).join(', '),
+      );
+
+      // Verificar subcarpetas
+      for (const folder of uploadsList) {
+        if (folder.type === 'd') {
+          try {
+            const subList = await sftp.list(
+              `/clickandbuilds/bookmy/uploads/${folder.name}`,
+            );
+            console.log(`  ${folder.name}/: ${subList.length} archivos`);
+          } catch (e) {
+            console.log(`  ${folder.name}/: vacío o error`);
+          }
+        }
+      }
     }
 
     await sftp.end();
