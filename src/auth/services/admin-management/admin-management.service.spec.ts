@@ -18,6 +18,11 @@ describe('AdminManagementService', () => {
   const hashServiceMock = {
     hash: jest.fn().mockResolvedValue('hashed-password'),
   };
+  const sftpStorageMock = {
+    isEnabled: jest.fn().mockReturnValue(false),
+    uploadLocalFile: jest.fn(),
+    delete: jest.fn(),
+  };
   let prismaMock: ReturnType<typeof createPrismaMock>;
   let service: AdminManagementService;
 
@@ -26,6 +31,7 @@ describe('AdminManagementService', () => {
     service = new AdminManagementService(
       prismaMock as any,
       hashServiceMock as any,
+      sftpStorageMock as any,
     );
     jest.clearAllMocks();
   });

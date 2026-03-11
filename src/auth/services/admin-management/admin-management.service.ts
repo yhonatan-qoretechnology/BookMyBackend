@@ -6,7 +6,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ClientState, ClientType, Prisma, Role } from '@prisma/client';
+import * as path from 'path';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { SftpStorageService } from '../../../storage/sftp-storage.service';
 import { CreateAdminUserDto } from '../../dto/create-admin-user.dto';
 import { UpdateAdminUserDto } from '../../dto/update-admin-user.dto';
 import { AuthenticatedUser } from '../../types/authenticated-user.interface';
@@ -24,7 +26,52 @@ export class AdminManagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hashService: HashService,
+    private readonly sftpStorage: SftpStorageService,
   ) {}
+
+  private async storeAdminImage(file: Express.Multer.File) {
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${Date.now()}-${file.filename}${ext}`;
+    const relativePath = path
+      .join('uploads', 'users', finalFileName)
+      .replace(/\\/g, '/');
+
+    if (this.sftpStorage.isEnabled()) {
+      await this.sftpStorage.uploadLocalFile({
+        localPath: file.path,
+        remoteRelativePath: relativePath,
+        deleteLocalAfter: true,
+      });
+      return relativePath;
+    }
+
+    const userUploadsDir = path.join(process.cwd(), 'uploads', 'users');
+    const fs = require('fs');
+    if (!fs.existsSync(userUploadsDir)) {
+      fs.mkdirSync(userUploadsDir, { recursive: true });
+    }
+    const finalPath = path.join(userUploadsDir, finalFileName);
+    fs.renameSync(file.path, finalPath);
+    return finalPath.replace(/\\/g, '/');
+  }
+
+  private async deleteAdminImage(filePath: string) {
+    if (!filePath) return;
+    if (this.sftpStorage.isEnabled()) {
+      try {
+        const normalized = filePath.trim();
+        await this.sftpStorage.deleteByRelativePath(normalized);
+      } catch (error) {
+        console.error('Error deleting remote image:', error);
+      }
+      return;
+    }
+    const fs = require('fs');
+    const fullPath = path.join(process.cwd(), filePath);
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
+    }
+  }
 
   async listAdmins(user: AuthenticatedUser) {
     const baseWhere: Prisma.UsersWhereInput = {
@@ -183,8 +230,13 @@ export class AdminManagementService {
       adminProfileUpdate.firstName = dto.firstName;
     if (dto.lastName !== undefined) adminProfileUpdate.lastName = dto.lastName;
     if (dto.phone !== undefined) adminProfileUpdate.phone = dto.phone;
-    if (dto.photoFile !== undefined) {
-      adminProfileUpdate.photoUrl = null;
+    if (dto.photoFile !== undefined && dto.photoFile !== null) {
+      const oldPhotoUrl = target.AdminProfile?.photoUrl;
+      if (oldPhotoUrl) {
+        await this.deleteAdminImage(oldPhotoUrl);
+      }
+      const newPhotoUrl = await this.storeAdminImage(dto.photoFile);
+      adminProfileUpdate.photoUrl = newPhotoUrl;
     }
 
     const usersUpdate: Prisma.UsersUpdateInput = {};
