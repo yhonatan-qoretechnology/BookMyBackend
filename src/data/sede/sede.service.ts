@@ -78,6 +78,23 @@ export class SedeService {
     }
   }
 
+  async findByIds(ids: number[], withServices = false) {
+    if (!ids || ids.length === 0) {
+      return [];
+    }
+
+    return this.prisma.sede.findMany({
+      where: { id: { in: ids } },
+      ...(withServices
+        ? {
+            include: {
+              Service: true,
+            },
+          }
+        : {}),
+    });
+  }
+
   private async safeDeleteRemoteOrLocal(filePath: string) {
     if (!filePath) return;
     if (this.sftpStorage.isEnabled()) {
@@ -148,16 +165,20 @@ export class SedeService {
   }
 
   // 🔹 Obtener todas las sedes
-  async findAll() {
-    return this.prisma.sede.findMany({
-      include: {
-        Service: true, // incluir los servicios asociados
-      },
-    });
+  async findAll(withServices = false) {
+    return this.prisma.sede.findMany(
+      withServices
+        ? {
+            include: {
+              Service: true,
+            },
+          }
+        : undefined,
+    );
   }
 
   // 🔹 Obtener todas las sedes de una empresa
-  async findByEmpresa(empresaId: number) {
+  async findByEmpresa(empresaId: number, withServices = false) {
     const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
     });
@@ -169,9 +190,13 @@ export class SedeService {
     try {
       return await this.prisma.sede.findMany({
         where: { empresaId },
-        include: {
-          Service: true, // incluir los servicios asociados
-        },
+        ...(withServices
+          ? {
+              include: {
+                Service: true,
+              },
+            }
+          : {}),
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -201,12 +226,16 @@ export class SedeService {
   }
 
   // 🔹 Obtener una sede específica
-  async findOne(id: number) {
+  async findOne(id: number, withServices = false) {
     const sede = await this.prisma.sede.findUnique({
       where: { id },
-      include: {
-        Service: true, // incluir los servicios asociados
-      },
+      ...(withServices
+        ? {
+            include: {
+              Service: true,
+            },
+          }
+        : {}),
     });
     if (!sede) {
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);

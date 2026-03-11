@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
@@ -134,8 +135,29 @@ export class SedeController {
   @Get()
   @ApiOperation({ summary: 'Obtener todas las sedes' })
   @ApiResponse({ status: 200, description: 'Lista de todas las sedes.' })
-  async findAll() {
-    return this.sedeService.findAll();
+  async findAll(@Query('withServices') withServices?: string) {
+    return this.sedeService.findAll(withServices === 'true');
+  }
+
+  // 🟢 Obtener múltiples sedes en una sola request
+  @Get('bulk')
+  @ApiOperation({ summary: 'Obtener múltiples sedes por IDs' })
+  @ApiResponse({ status: 200, description: 'Lista de sedes.' })
+  async findBulk(
+    @Query('ids') ids?: string,
+    @Query('withServices') withServices?: string,
+  ) {
+    if (!ids) {
+      throw new BadRequestException('Debe proporcionar el query param ids');
+    }
+    const parsed = ids
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n));
+    if (parsed.length === 0) {
+      throw new BadRequestException('ids inválidos');
+    }
+    return this.sedeService.findByIds(parsed, withServices === 'true');
   }
 
   // 🟢 Obtener todas las sedes de una empresa
@@ -148,8 +170,11 @@ export class SedeController {
     description: 'Lista de sedes de la empresa especificada.',
   })
   @ApiNotFoundResponse({ description: 'Empresa no encontrada.' })
-  async findByEmpresa(@Param('empresaId', ParseIntPipe) empresaId: number) {
-    return this.sedeService.findByEmpresa(empresaId);
+  async findByEmpresa(
+    @Param('empresaId', ParseIntPipe) empresaId: number,
+    @Query('withServices') withServices?: string,
+  ) {
+    return this.sedeService.findByEmpresa(empresaId, withServices === 'true');
   }
 
   // 🟢 Obtener una sede por ID
@@ -157,8 +182,11 @@ export class SedeController {
   @ApiOperation({ summary: 'Obtener una sede por su ID' })
   @ApiResponse({ status: 200, description: 'Sede encontrada.' })
   @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.sedeService.findOne(id);
+  async findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('withServices') withServices?: string,
+  ) {
+    return this.sedeService.findOne(id, withServices === 'true');
   }
 
   // 🟢 Actualizar una sede

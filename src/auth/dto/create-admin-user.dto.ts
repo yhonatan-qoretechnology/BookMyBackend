@@ -71,6 +71,7 @@ export class CreateAdminUserDto {
     format: 'binary',
     description: 'Archivo de imagen para la foto de perfil (JPG/PNG/WebP)',
   })
+  @IsOptional()
   photoFile?: Express.Multer.File;
 
   @ApiPropertyOptional({ enum: [Role.COMPANY_ADMIN, Role.BRANCH_ADMIN] })
