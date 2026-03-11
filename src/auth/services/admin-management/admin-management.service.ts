@@ -148,14 +148,34 @@ export class AdminManagementService {
     }
 
     const userDataUpdate: Prisma.UserDataUpdateInput = {};
-    if (dto.phone !== undefined) userDataUpdate.phone = dto.phone;
-    if (dto.idioma !== undefined) userDataUpdate.idioma = dto.idioma;
-    if (dto.gender !== undefined) userDataUpdate.gender = dto.gender;
+    const userDataCreate: Prisma.UserDataCreateInput = {
+      user: { connect: { id: userId } },
+      name: target.email || '',
+      email: target.email,
+      phone: '',
+      idioma: '',
+      gender: '',
+    } as Prisma.UserDataCreateInput;
+    if (dto.phone !== undefined) {
+      userDataUpdate.phone = dto.phone;
+      userDataCreate.phone = dto.phone;
+    }
+    if (dto.idioma !== undefined) {
+      userDataUpdate.idioma = dto.idioma;
+      userDataCreate.idioma = dto.idioma;
+    }
+    if (dto.gender !== undefined) {
+      userDataUpdate.gender = dto.gender;
+      userDataCreate.gender = dto.gender;
+    }
     if (dto.countryId !== undefined && dto.countryId !== null) {
       userDataUpdate.country = { connect: { id: dto.countryId } };
+      userDataCreate.country = { connect: { id: dto.countryId } };
     }
     if (dto.birthdate !== undefined) {
-      userDataUpdate.birthdate = dto.birthdate ? new Date(dto.birthdate) : null;
+      const birthdate = dto.birthdate ? new Date(dto.birthdate) : null;
+      userDataUpdate.birthdate = birthdate;
+      userDataCreate.birthdate = birthdate;
     }
 
     const adminProfileUpdate: Prisma.AdminProfileUpdateInput = {};
@@ -191,7 +211,7 @@ export class AdminManagementService {
         where: { id: userId },
         data: {
           ...usersUpdate,
-          UserData: { create: userDataUpdate },
+          UserData: { create: userDataCreate },
           AdminProfile: { update: adminProfileUpdate },
         },
         include: { UserData: true, AdminProfile: true },
@@ -203,7 +223,7 @@ export class AdminManagementService {
         where: { id: userId },
         data: {
           ...usersUpdate,
-          UserData: { create: userDataUpdate },
+          UserData: { create: userDataCreate },
         },
         include: { UserData: true, AdminProfile: true },
       });
