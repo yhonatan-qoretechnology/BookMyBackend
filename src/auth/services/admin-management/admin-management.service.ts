@@ -491,6 +491,12 @@ export class AdminManagementService {
       this.prisma.adminProfile.delete({
         where: { userId },
       }),
+      this.prisma.userAuth.delete({
+        where: { user_id: userId },
+      }),
+      this.prisma.userData.delete({
+        where: { userId },
+      }),
       this.prisma.users.delete({
         where: { id: userId },
       }),
