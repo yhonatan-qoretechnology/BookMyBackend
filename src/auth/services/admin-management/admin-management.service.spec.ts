@@ -76,15 +76,19 @@ describe('AdminManagementService', () => {
       prismaMock.sede.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.createBranchAdmin(10, {
-          email: 'branch@corp.com',
-          password: 'Branch123$',
-          phone: '+123456789',
-          firstName: 'Jane',
-          lastName: 'Doe',
-          countryId: 1,
-          role: Role.BRANCH_ADMIN,
-        } as any),
+        service.createBranchAdmin(
+          10,
+          {
+            email: 'branch@corp.com',
+            password: 'Branch123$',
+            phone: '+123456789',
+            firstName: 'Jane',
+            lastName: 'Doe',
+            countryId: 1,
+            role: Role.BRANCH_ADMIN,
+          } as any,
+          { userId: 1, role: Role.SUPER_ADMIN } as any,
+        ),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
@@ -92,16 +96,20 @@ describe('AdminManagementService', () => {
       prismaMock.sede.findUnique.mockResolvedValue({ id: 2, empresaId: 5 });
 
       await expect(
-        service.createBranchAdmin(2, {
-          email: 'branch@corp.com',
-          password: 'Branch123$',
-          phone: '+123456789',
-          firstName: 'Jane',
-          lastName: 'Doe',
-          countryId: 1,
-          role: Role.BRANCH_ADMIN,
-          empresaId: 99,
-        } as any),
+        service.createBranchAdmin(
+          2,
+          {
+            email: 'branch@corp.com',
+            password: 'Branch123$',
+            phone: '+123456789',
+            firstName: 'Jane',
+            lastName: 'Doe',
+            countryId: 1,
+            role: Role.BRANCH_ADMIN,
+            empresaId: 99,
+          } as any,
+          { userId: 1, role: Role.SUPER_ADMIN } as any,
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -109,15 +117,19 @@ describe('AdminManagementService', () => {
       prismaMock.sede.findUnique.mockResolvedValue({ id: 2, empresaId: 5 });
       prismaMock.users.create.mockResolvedValue({ id: 100 });
 
-      await service.createBranchAdmin(2, {
-        email: 'branch@corp.com',
-        password: 'Branch123$',
-        phone: '+123456789',
-        firstName: 'Jane',
-        lastName: 'Doe',
-        countryId: 1,
-        role: Role.BRANCH_ADMIN,
-      } as any);
+      await service.createBranchAdmin(
+        2,
+        {
+          email: 'branch@corp.com',
+          password: 'Branch123$',
+          phone: '+123456789',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          countryId: 1,
+          role: Role.BRANCH_ADMIN,
+        } as any,
+        { userId: 1, role: Role.SUPER_ADMIN } as any,
+      );
 
       expect(prismaMock.users.create).toHaveBeenCalledWith(
         expect.objectContaining({
