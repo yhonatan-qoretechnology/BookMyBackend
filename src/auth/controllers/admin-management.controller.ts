@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -15,6 +16,7 @@ import {
   ApiBearerAuth,
   ApiConsumes,
   ApiOperation,
+  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
@@ -121,5 +123,20 @@ export class AdminManagementController {
       canUpdate:
         user.role === Role.SUPER_ADMIN || user.role === Role.COMPANY_ADMIN,
     };
+  }
+
+  @Delete('admins/:userId')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiOperation({ summary: 'Eliminar un administrador por userId' })
+  @ApiResponse({
+    status: 200,
+    description: 'Administrador eliminado exitosamente.',
+  })
+  @ApiResponse({ status: 404, description: 'Administrador no encontrado.' })
+  async deleteAdmin(
+    @Param('userId', ParseIntPipe) userId: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.adminManagementService.deleteAdmin(userId, user);
   }
 }

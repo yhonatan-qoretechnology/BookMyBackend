@@ -151,7 +151,7 @@ export class AdminManagementService {
     if (dto.phone !== undefined) userDataUpdate.phone = dto.phone;
     if (dto.idioma !== undefined) userDataUpdate.idioma = dto.idioma;
     if (dto.gender !== undefined) userDataUpdate.gender = dto.gender;
-    if (dto.countryId !== undefined) {
+    if (dto.countryId !== undefined && dto.countryId !== null) {
       userDataUpdate.country = { connect: { id: dto.countryId } };
     }
     if (dto.birthdate !== undefined) {
@@ -164,54 +164,80 @@ export class AdminManagementService {
     if (dto.lastName !== undefined) adminProfileUpdate.lastName = dto.lastName;
     if (dto.phone !== undefined) adminProfileUpdate.phone = dto.phone;
     if (dto.photoFile !== undefined) {
-      // TODO: Implementar lógica para guardar archivo y generar URL
-      // Por ahora, se puede dejar null o implementar upload a cloud storage
       adminProfileUpdate.photoUrl = null;
     }
 
     const usersUpdate: Prisma.UsersUpdateInput = {};
     if (dto.state !== undefined) usersUpdate.state = dto.state;
+    if (dto.role !== undefined) usersUpdate.role = dto.role;
 
-    try {
-      const updated = await this.prisma.users.update({
+    const hasUserData = target.UserData !== null;
+    const hasUserDataUpdate = Object.keys(userDataUpdate).length > 0;
+    const hasAdminProfileUpdate = Object.keys(adminProfileUpdate).length > 0;
+
+    if (hasUserData && hasUserDataUpdate && !hasAdminProfileUpdate) {
+      return this.prisma.users.update({
         where: { id: userId },
         data: {
           ...usersUpdate,
-          ...(Object.keys(userDataUpdate).length > 0
-            ? {
-                UserData: {
-                  update: userDataUpdate,
-                },
-              }
-            : {}),
-          ...(Object.keys(adminProfileUpdate).length > 0
-            ? {
-                AdminProfile: {
-                  update: adminProfileUpdate,
-                },
-              }
-            : {}),
+          UserData: { update: userDataUpdate },
         },
         include: { UserData: true, AdminProfile: true },
       });
-
-      return {
-        message: 'Administrador actualizado correctamente.',
-        user: updated,
-      };
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        const target = this.extractUniqueTarget(error);
-        throw new ConflictException(
-          `Ya existe un registro con el mismo valor para: ${target}.`,
-        );
-      }
-
-      throw error;
     }
+
+    if (!hasUserData && hasUserDataUpdate && hasAdminProfileUpdate) {
+      return this.prisma.users.update({
+        where: { id: userId },
+        data: {
+          ...usersUpdate,
+          UserData: { create: userDataUpdate },
+          AdminProfile: { update: adminProfileUpdate },
+        },
+        include: { UserData: true, AdminProfile: true },
+      });
+    }
+
+    if (!hasUserData && hasUserDataUpdate && !hasAdminProfileUpdate) {
+      return this.prisma.users.update({
+        where: { id: userId },
+        data: {
+          ...usersUpdate,
+          UserData: { create: userDataUpdate },
+        },
+        include: { UserData: true, AdminProfile: true },
+      });
+    }
+
+    if (hasUserData && hasUserDataUpdate && hasAdminProfileUpdate) {
+      return this.prisma.users.update({
+        where: { id: userId },
+        data: {
+          ...usersUpdate,
+          UserData: { update: userDataUpdate },
+          AdminProfile: { update: adminProfileUpdate },
+        },
+        include: { UserData: true, AdminProfile: true },
+      });
+    }
+
+    if (!hasUserData && !hasUserDataUpdate && hasAdminProfileUpdate) {
+      return this.prisma.users.update({
+        where: { id: userId },
+        data: {
+          ...usersUpdate,
+          AdminProfile: { update: adminProfileUpdate },
+        },
+        include: { UserData: true, AdminProfile: true },
+      });
+    }
+
+    // Solo usersUpdate (role o state) - sin cambios en UserData ni AdminProfile
+    return this.prisma.users.update({
+      where: { id: userId },
+      data: usersUpdate,
+      include: { UserData: true, AdminProfile: true },
+    });
   }
 
   async createCompanyAdmin(
@@ -407,5 +433,49 @@ export class AdminManagementService {
     throw new ForbiddenException(
       'No tiene permisos para acceder a este recurso.',
     );
+  }
+
+  async deleteAdmin(userId: number, user: AuthenticatedUser) {
+    const admin = await this.prisma.users.findUnique({
+      where: { id: userId },
+      include: { AdminProfile: true },
+    });
+
+    if (!admin) {
+      throw new NotFoundException(
+        `Administrador con ID ${userId} no encontrado.`,
+      );
+    }
+
+    if (!admin.AdminProfile) {
+      throw new BadRequestException(
+        `El usuario con ID ${userId} no es un administrador.`,
+      );
+    }
+
+    if (admin.role !== Role.COMPANY_ADMIN && admin.role !== Role.BRANCH_ADMIN) {
+      throw new BadRequestException(
+        `El usuario con ID ${userId} no es un administrador válido.`,
+      );
+    }
+
+    this.ensureAdminScopeAccess(
+      {
+        empresaId: admin.AdminProfile.empresaId,
+        sedeId: admin.AdminProfile.sedeId,
+      },
+      user,
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.adminProfile.delete({
+        where: { userId },
+      }),
+      this.prisma.users.delete({
+        where: { id: userId },
+      }),
+    ]);
+
+    return { message: 'Administrador eliminado exitosamente.' };
   }
 }
