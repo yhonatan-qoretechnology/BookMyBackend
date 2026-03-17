@@ -556,4 +556,41 @@ export class AdminManagementService {
 
     return { message: 'Administrador eliminado exitosamente.' };
   }
+
+  /**
+   * Activa un usuario (CLIENT, COMPANY_ADMIN, BRANCH_ADMIN) que esté en estado disabled o blocked.
+   * Solo accesible por SUPER_ADMIN.
+   */
+  async activateUser(userId: number, user: AuthenticatedUser) {
+    // La validación de rol SUPER_ADMIN ya se hace en el controlador con @Roles(Role.SUPER_ADMIN),
+    // pero como buena práctica validamos aquí también.
+    if (user.role !== Role.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'Solo un super administrador puede activar usuarios directamente.',
+      );
+    }
+
+    const targetUser = await this.prisma.users.findUnique({
+      where: { id: userId },
+    });
+
+    if (!targetUser) {
+      throw new NotFoundException(`Usuario con ID ${userId} no encontrado.`);
+    }
+
+    if (targetUser.state === 'enabled') {
+      return { message: 'El usuario ya se encuentra activo.' };
+    }
+
+    await this.prisma.users.update({
+      where: { id: userId },
+      data: { state: 'enabled' },
+    });
+
+    return {
+      message: `Usuario ${targetUser.email} activado exitosamente.`,
+      userId: targetUser.id,
+      state: 'enabled',
+    };
+  }
 }

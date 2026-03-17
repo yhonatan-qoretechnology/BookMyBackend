@@ -139,4 +139,24 @@ export class AdminManagementController {
   ) {
     return this.adminManagementService.deleteAdmin(userId, user);
   }
+
+  @Patch('users/:userId/activate')
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Activar un usuario inactivo (Solo SUPER_ADMIN)',
+    description:
+      'Permite a un super administrador activar cualquier usuario (CLIENT, COMPANY_ADMIN, BRANCH_ADMIN) que esté en estado disabled o blocked.',
+  })
+  @ApiResponse({ status: 200, description: 'Usuario activado exitosamente.' })
+  @ApiResponse({
+    status: 403,
+    description: 'No tiene permisos para realizar esta acción.',
+  })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado.' })
+  async activateUser(
+    @Param('userId', ParseIntPipe) userId: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.adminManagementService.activateUser(userId, user);
+  }
 }
