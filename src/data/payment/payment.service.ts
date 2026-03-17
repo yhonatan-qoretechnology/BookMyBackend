@@ -262,7 +262,7 @@ export class PaymentService {
         })
       : await this.prisma.paymentCard.create({
           data: {
-            userId: dto.userId,
+            user: { connect: { id: dto.userId } },
             brand,
             last4,
             expiryMonth: dto.expiryMonth,
@@ -392,7 +392,7 @@ export class PaymentService {
       } else {
         cardRecord = await this.prisma.paymentCard.create({
           data: {
-            userId: dto.userId,
+            user: { connect: { id: dto.userId } },
             brand,
             last4,
             expiryMonth: dto.expiryMonth,
