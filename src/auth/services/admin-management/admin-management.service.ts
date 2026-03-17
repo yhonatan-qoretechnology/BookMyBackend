@@ -562,8 +562,6 @@ export class AdminManagementService {
    * Solo accesible por SUPER_ADMIN.
    */
   async activateUser(userId: number, user: AuthenticatedUser) {
-    // La validación de rol SUPER_ADMIN ya se hace en el controlador con @Roles(Role.SUPER_ADMIN),
-    // pero como buena práctica validamos aquí también.
     if (user.role !== Role.SUPER_ADMIN) {
       throw new ForbiddenException(
         'Solo un super administrador puede activar usuarios directamente.',
