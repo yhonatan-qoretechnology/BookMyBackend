@@ -744,7 +744,17 @@ export class AuthService {
 
     // Validaciones
     if (!userAuth || !userAuth.password) {
+      console.log(
+        `[LOGIN] UserAuth NOT FOUND or NO PASSWORD for email: ${email}`,
+      );
       return { error: 'Credenciales incorrectas.' };
+    }
+
+    if (!userAuth.user) {
+      console.log(
+        `[LOGIN] UserAuth FOUND but RELATIONAL USER IS MISSING for email: ${email}, authId: ${userAuth.id}`,
+      );
+      return { error: 'Error de integridad de cuenta.' };
     }
 
     const isPasswordValid = await this.hashService.compare(
@@ -753,10 +763,18 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
+      console.log(`[LOGIN] Password INVALID for email: ${email}`);
       return { error: 'Credenciales incorrectas.' };
     }
 
+    console.log(
+      `[LOGIN] SUCCESS STEP 1: AuthEmail=${email}, UserID=${userAuth.user.id}, UserEmail=${userAuth.user.email}, State=${userAuth.user.state}`,
+    );
+
     if (userAuth.user.state !== 'enabled') {
+      console.log(
+        `[LOGIN] BLOCK: User state is '${userAuth.user.state}' for email: ${email}`,
+      );
       return { error: 'El usuario no está activo.' };
     }
 
