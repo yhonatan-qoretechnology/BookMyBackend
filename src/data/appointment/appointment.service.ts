@@ -256,6 +256,12 @@ export class AppointmentService {
         throw new BadRequestException('El usuario no existe');
       }
 
+      if (user.state !== 'enabled') {
+        throw new BadRequestException(
+          'Cuenta no activa: tu usuario no está activo. Revisa tu correo para completar la activación o solicita un nuevo código.',
+        );
+      }
+
       if (!profesional) {
         throw new BadRequestException('El profesional no existe');
       }
