@@ -8,7 +8,6 @@ import { JwtService } from '@nestjs/jwt';
 import { Role, UserAuth } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
-import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import * as path from 'path';
 import { OtpService } from '../data/otp/otp.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -120,10 +119,10 @@ export class AuthService {
       );
     }
 
-    const phoneNumber = parsePhoneNumberFromString(dto.phone ?? '');
-    if (!phoneNumber || !phoneNumber.isValid()) {
+    const phone = dto.phone?.replace(/\s+/g, '') ?? '';
+    if (phone.length < 7) {
       throw new BadRequestException(
-        'El número de teléfono proporcionado no es válido.',
+        'El número de teléfono debe tener al menos 7 dígitos.',
       );
     }
 
@@ -848,15 +847,12 @@ export class AuthService {
   async validatePhone(dto: ValidatePhoneDto) {
     const { phone } = dto;
 
-    // Validar formato con libphonenumber-js
-    const parsed = parsePhoneNumberFromString(phone);
-
-    if (!parsed) {
-      throw new BadRequestException('Formato de número inválido');
-    }
-
-    if (parsed.country !== 'ES') {
-      throw new BadRequestException('El número no es de España');
+    // Validar que tenga al menos 7 dígitos
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (phoneDigits.length < 7) {
+      throw new BadRequestException(
+        'El número de teléfono debe tener al menos 7 dígitos',
+      );
     }
 
     // Simulación de búsqueda en base de datos
