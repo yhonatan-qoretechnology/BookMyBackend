@@ -349,7 +349,158 @@ export class SeedService {
 
     const categories = [
       {
-        image: 'https://cdn.miapp.com/categories/manicura.png',
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Cejas',
+            description: 'Diseño y cuidado de cejas',
+          },
+          {
+            language: 'en',
+            name: 'Eyebrows',
+            description: 'Eyebrow design and care services',
+          },
+        ],
+      },
+      {
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Depilación con cera',
+            description: 'Eliminación de vello con cera',
+          },
+          {
+            language: 'en',
+            name: 'Waxing',
+            description: 'Hair removal using wax',
+          },
+        ],
+      },
+      {
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Depilación con cera para hombres',
+            description: 'Depilación con cera especializada para hombres',
+          },
+          {
+            language: 'en',
+            name: 'Men Waxing',
+            description: 'Waxing services for men',
+          },
+        ],
+      },
+      {
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Depilación con hilo',
+            description: 'Depilación con técnica de hilo',
+          },
+          {
+            language: 'en',
+            name: 'Threading',
+            description: 'Hair removal using thread technique',
+          },
+        ],
+      },
+      {
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Depilación láser',
+            description: 'Eliminación de vello con tecnología láser',
+          },
+          {
+            language: 'en',
+            name: 'Laser Hair Removal',
+            description: 'Hair removal using laser technology',
+          },
+        ],
+      },
+      {
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Dermapen',
+            description: 'Tratamiento facial con microneedling',
+          },
+          {
+            language: 'en',
+            name: 'Dermapen',
+            description: 'Microneedling facial treatment',
+          },
+        ],
+      },
+      {
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Extensiones Acrílicas',
+            description: 'Extensión de uñas con acrílico',
+          },
+          {
+            language: 'en',
+            name: 'Acrylic Extensions',
+            description: 'Acrylic nail extension services',
+          },
+        ],
+      },
+      {
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Extensiones Polygel',
+            description: 'Extensión de uñas con polygel',
+          },
+          {
+            language: 'en',
+            name: 'Polygel Extensions',
+            description: 'Polygel nail extension services',
+          },
+        ],
+      },
+      {
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Extras para tus uñas',
+            description: 'Decoraciones y servicios adicionales para uñas',
+          },
+          {
+            language: 'en',
+            name: 'Nail Extras',
+            description: 'Additional nail art and extra services',
+          },
+        ],
+      },
+      {
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Head Spa',
+            description:
+              'Tratamientos capilares y relajación del cuero cabelludo',
+          },
+          {
+            language: 'en',
+            name: 'Head Spa',
+            description: 'Scalp care and relaxation treatments',
+          },
+        ],
+      },
+      {
+        image: null,
         translations: [
           {
             language: 'es',
@@ -364,7 +515,22 @@ export class SeedService {
         ],
       },
       {
-        image: 'https://cdn.miapp.com/categories/pedicura.png',
+        image: null,
+        translations: [
+          {
+            language: 'es',
+            name: 'Masajes corporales',
+            description: 'Masajes terapéuticos y de relajación corporal',
+          },
+          {
+            language: 'en',
+            name: 'Body Massages',
+            description: 'Therapeutic and relaxing body massages',
+          },
+        ],
+      },
+      {
+        image: null,
         translations: [
           {
             language: 'es',
@@ -379,167 +545,62 @@ export class SeedService {
         ],
       },
       {
-        image: 'https://cdn.miapp.com/categories/refuerzos.png',
+        image: null,
         translations: [
           {
             language: 'es',
-            name: 'Refuerzos',
-            description: 'Refuerzos de uñas y fortalecimiento',
+            name: 'Peluquería',
+            description: 'Servicios de corte, peinado y cuidado del cabello',
           },
           {
             language: 'en',
-            name: 'Nail Reinforcement',
-            description: 'Nail reinforcement and strengthening',
+            name: 'Hair Salon',
+            description: 'Hair cutting, styling, and care services',
           },
         ],
       },
       {
-        image: 'https://cdn.miapp.com/categories/acrilicas.png',
-        translations: [
-          {
-            language: 'es',
-            name: 'Extensiones Acrílicas',
-            description: 'Extensiones de uñas acrílicas',
-          },
-          {
-            language: 'en',
-            name: 'Acrylic Extensions',
-            description: 'Acrylic nail extensions',
-          },
-        ],
-      },
-      {
-        image: 'https://cdn.miapp.com/categories/polygel.png',
-        translations: [
-          {
-            language: 'es',
-            name: 'Extensiones Polygel',
-            description: 'Extensiones de uñas en polygel',
-          },
-          {
-            language: 'en',
-            name: 'Polygel Extensions',
-            description: 'Polygel nail extensions',
-          },
-        ],
-      },
-      {
-        image: 'https://cdn.miapp.com/categories/extras-unas.png',
-        translations: [
-          {
-            language: 'es',
-            name: 'Extras para tus Uñas',
-            description: 'Servicios adicionales y decoración de uñas',
-          },
-          {
-            language: 'en',
-            name: 'Nail Extras',
-            description: 'Additional nail services and decorations',
-          },
-        ],
-      },
-      {
-        image: 'https://cdn.miapp.com/categories/cejas.png',
-        translations: [
-          {
-            language: 'es',
-            name: 'Cejas',
-            description: 'Diseño, depilación y tinte de cejas',
-          },
-          {
-            language: 'en',
-            name: 'Eyebrows',
-            description: 'Eyebrow design, waxing and tinting',
-          },
-        ],
-      },
-      {
-        image: 'https://cdn.miapp.com/categories/cera.png',
-        translations: [
-          {
-            language: 'es',
-            name: 'Depilación con Cera',
-            description: 'Depilación corporal y facial con cera',
-          },
-          {
-            language: 'en',
-            name: 'Waxing',
-            description: 'Body and facial waxing services',
-          },
-        ],
-      },
-      {
-        image: 'https://cdn.miapp.com/categories/hilo.png',
-        translations: [
-          {
-            language: 'es',
-            name: 'Depilación con Hilo',
-            description: 'Depilación facial con hilo',
-          },
-          {
-            language: 'en',
-            name: 'Threading',
-            description: 'Facial threading services',
-          },
-        ],
-      },
-      {
-        image: 'https://cdn.miapp.com/categories/pestanas.png',
+        image: null,
         translations: [
           {
             language: 'es',
             name: 'Pestañas',
-            description: 'Lifting y tratamientos de pestañas',
+            description: 'Extensión y cuidado de pestañas',
           },
           {
             language: 'en',
             name: 'Eyelashes',
-            description: 'Eyelash lifting and treatments',
+            description: 'Eyelash extensions and care',
           },
         ],
       },
       {
-        image: 'https://cdn.miapp.com/categories/laser.png',
+        image: null,
         translations: [
           {
             language: 'es',
-            name: 'Depilación Láser',
-            description: 'Depilación láser por zonas',
+            name: 'Refuerzos',
+            description: 'Refuerzo de uñas naturales',
           },
           {
             language: 'en',
-            name: 'Laser Hair Removal',
-            description: 'Laser hair removal by areas',
+            name: 'Nail Reinforcement',
+            description: 'Natural nail strengthening services',
           },
         ],
       },
       {
-        image: 'https://cdn.miapp.com/categories/limpieza-facial.png',
+        image: null,
         translations: [
           {
             language: 'es',
-            name: 'Limpiezas Faciales',
-            description: 'Higiene y limpieza facial profesional',
+            name: 'Tratamientos faciales',
+            description: 'Cuidado y tratamientos para la piel del rostro',
           },
           {
             language: 'en',
-            name: 'Facial Cleansing',
-            description: 'Professional facial cleansing services',
-          },
-        ],
-      },
-      {
-        image: 'https://cdn.miapp.com/categories/dermapen.png',
-        translations: [
-          {
-            language: 'es',
-            name: 'Dermapen',
-            description: 'Tratamientos faciales con dermapen',
-          },
-          {
-            language: 'en',
-            name: 'Dermapen',
-            description: 'Facial dermapen treatments',
+            name: 'Facial Treatments',
+            description: 'Facial skin care treatments',
           },
         ],
       },
@@ -886,7 +947,11 @@ export class SeedService {
             // no publicados oficialmente
           ],
           empresaId: 1, // 👈 ajusta según el ID real de WB Corporation / Glow Experience
-          imagenes: [],
+          imagenes: [
+            'uploads/bookmy/sedes/1/77ad7959fdd35715d9e189f2f5d70527.jpeg',
+            'uploads/bookmy/sedes/1/7c681ea63d4a050acd18c5a65aa74502.jpeg',
+            'uploads/bookmy/sedes/1/c0c12fa4517b65e0a3c1bb3d04fc0074.jpeg',
+          ],
         },
         {
           nombre: 'Glow Fuengirola',
@@ -908,7 +973,67 @@ export class SeedService {
             // no publicados oficialmente
           ],
           empresaId: 1,
-          imagenes: [],
+          imagenes: [
+            'uploads/bookmy/sedes/2/b4efa3edf6faf76e2d37d00813aee87e.jpeg',
+            'uploads/bookmy/sedes/2/bf33cdcefb791969eba7025f05377290.jpeg',
+            'uploads/bookmy/sedes/2/ceaaf695174bc876d63944c79a165453.jpeg',
+            'uploads/bookmy/sedes/2/b5a3c3ea7f6aa5f543a7985876343280.jpeg',
+          ],
+        },
+        {
+          nombre: 'Glow Marbella',
+          direccion: 'C. Pablo Casals, 3, 29602 Marbella, Málaga, España',
+          telefono: '+34699732239',
+          latitud: 36.50916245978868,
+          longitud: -4.893536260774952,
+          provincia: 'Málaga',
+          horario: {
+            lunes: '10:00-19:00',
+            martes: '10:00-19:00',
+            miércoles: '10:00-19:00',
+            jueves: '10:00-19:00',
+            viernes: '10:00-19:00',
+            sábado: '10:00-19:00',
+            domingo: 'Cerrado',
+          },
+          diasCerrado: [
+            // no publicados oficialmente
+          ],
+          empresaId: 1, // 👈 ajusta según el ID real de WB Corporation / Glow Experience
+          imagenes: [
+            'uploads/bookmy/sedes/3/56bb8899ec3ff621cfa8449b40e5a244.jpeg',
+            'uploads/bookmy/sedes/3/00fca0273245d665199b1aa642a7fa5a.jpeg',
+            'uploads/bookmy/sedes/3/482c002faea4017cb3e07e6741c44501.jpeg',
+            'uploads/bookmy/sedes/3/0f597b287095f8293d705798a340bd49.jpeg',
+          ], // las imagenes que subiran al drive o carpeta compartida
+        },
+        {
+          nombre: ' Lash By Glow',
+          direccion: 'Calle Los Cármenes, 5, 29631,',
+          telefono: '+34685544742',
+          latitud: 36.60211848837215,
+          longitud: -4.531658007730843,
+          provincia: 'Málaga',
+          horario: {
+            lunes: '10:00-19:00',
+            martes: '10:00-19:00',
+            miércoles: '10:00-19:00',
+            jueves: '10:00-19:00',
+            viernes: '10:00-19:00',
+            sábado: '10:00-19:00',
+            domingo: 'Cerrado',
+          },
+          diasCerrado: [
+            // no publicados oficialmente
+          ],
+          empresaId: 1, // 👈 ajusta según el ID real de WB Corporation / Glow Experience
+          imagenes: [
+            'uploads/bookmy/sedes/4/4473fb93c33c0889f946f5d9d513fa19.jpeg',
+            'uploads/bookmy/sedes/4/b3833e4734665e8cc515b99c644d783b.jpeg',
+            'uploads/bookmy/sedes/4/56877cf54d552beb438ef82ded32e29f.jpeg',
+            'uploads/bookmy/sedes/4/ca36adfd5a538af5e3db7dead49254e7.jpeg',
+            'uploads/bookmy/sedes/4/c277db080a2129a17ed7e27ddaf041ec.jpeg',
+          ], // las imagenes que subiran al drive o carpeta compartida
         },
       ],
       skipDuplicates: true,
