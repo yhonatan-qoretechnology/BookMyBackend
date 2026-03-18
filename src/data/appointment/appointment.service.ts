@@ -466,6 +466,7 @@ export class AppointmentService {
       const overlapping = await this.prisma.appointment.findFirst({
         where: {
           profesionalId: data.profesionalId,
+          fecha: fecha,
           horaInicio: { lt: horaFin },
           horaFin: { gt: horaInicio },
         },
@@ -516,11 +517,56 @@ export class AppointmentService {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : JSON.stringify(error);
+
+      // Detectar errores de Prisma y traducirlos a 400/409
+      if (error instanceof Error) {
+        const prismaErrorMessage = error.message.toLowerCase();
+
+        // Unique constraint failed (conflicto de horario)
+        if (
+          prismaErrorMessage.includes('unique constraint') ||
+          prismaErrorMessage.includes('unique constraint failed')
+        ) {
+          throw new BadRequestException(
+            'El profesional ya tiene una cita programada en ese horario',
+          );
+        }
+
+        // Foreign key constraint failed (relaciones inexistentes)
+        if (
+          prismaErrorMessage.includes('foreign key constraint') ||
+          prismaErrorMessage.includes('invalid reference')
+        ) {
+          throw new BadRequestException(
+            'Datos inválidos: el profesional, servicio o sede no existen',
+          );
+        }
+
+        // Not found o constraint violation
+        if (
+          prismaErrorMessage.includes('record to update not found') ||
+          prismaErrorMessage.includes('record not found')
+        ) {
+          throw new BadRequestException(
+            'No se pudo crear la cita: datos inválidos',
+          );
+        }
+      }
+
+      // Si ya es BadRequestException o similar, propagar tal cual
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      // Para cualquier otro error, loguear y lanzar 500 con detalle interno
       this.logger.error(
         `Error al crear cita con payload ${JSON.stringify(debugPayload)}: ${errorMessage}`,
         error instanceof Error ? error.stack : undefined,
       );
-      throw error;
+      throw new BadRequestException(errorMessage);
     }
   }
 
