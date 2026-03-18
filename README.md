@@ -222,3 +222,4 @@ main();
 npx prisma migrate dev
 npx prisma db push
 npx prisma generate
+npx prisma studio - muetra la db ene le navegador
