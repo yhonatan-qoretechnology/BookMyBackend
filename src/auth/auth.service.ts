@@ -146,7 +146,7 @@ export class AuthService {
         UserData: {
           create: {
             name: dto.name,
-            phone: phoneNumber.number,
+            phone: phone,
             email: dto.email,
             gender: dto.gender,
             idioma: dto.idioma,
@@ -865,7 +865,7 @@ export class AuthService {
     return {
       success: true,
       message: 'Número válido y disponible',
-      formatted: parsed.formatInternational(),
+      formatted: phone,
     };
   }
 }
