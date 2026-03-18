@@ -9,11 +9,16 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
+import { PaymentService } from '../payment/payment.service';
+
 @Injectable()
 export class AppointmentService {
   private readonly logger = new Logger(AppointmentService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private paymentService: PaymentService,
+  ) {}
 
   private toIsoOrNull(value: unknown) {
     if (!(value instanceof Date)) return null;
@@ -484,6 +489,28 @@ export class AppointmentService {
       this.logger.log(
         `Cita creada: id=${appointment.id}, sedeId=${appointment.sedeId}, profesionalId=${appointment.profesionalId}, userId=${appointment.userId}, inicio=${appointment.horaInicio.toISOString()}, fin=${appointment.horaFin.toISOString()}`,
       );
+
+      // Crear el registro de pago asociado
+      let expiryMonth: number | undefined;
+      let expiryYear: number | undefined;
+
+      if (data.expiryDate) {
+        const [month, year] = data.expiryDate.split('/').map(Number);
+        expiryMonth = month;
+        expiryYear = 2000 + year; // Asumiendo formato YY
+      }
+
+      await this.paymentService.createPayment({
+        userId: data.userId,
+        appointmentId: appointment.id,
+        method: data.paymentMethod,
+        amount: data.paymentAmount,
+        cardNumber: data.cardNumber,
+        expiryMonth,
+        expiryYear,
+        cvv: data.cvv,
+        saveCard: false, // Por defecto no guardar a menos que se extienda el DTO
+      });
 
       return appointment;
     } catch (error) {
