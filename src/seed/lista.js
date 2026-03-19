@@ -1151,23 +1151,6 @@ const services = [
     prices: [{ amount: 90, duration: 120, currency: 'EUR' }],
     sedeIds: [1],
   },
-  {
-    categoryId: 2,
-    translations: [
-      {
-        language: 'es',
-        name: 'Depilación Con Cera Orejas',
-        description: 'Depilación con cera en orejas',
-      },
-      {
-        language: 'en',
-        name: 'Ear Waxing',
-        description: 'Waxing service for ears',
-      },
-    ],
-    prices: [{ amount: null, duration: null, currency: 'EUR' }],
-    sedeIds: [1],
-  },
 
   {
     categoryId: 4,

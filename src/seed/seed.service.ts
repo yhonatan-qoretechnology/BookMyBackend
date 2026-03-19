@@ -1792,23 +1792,6 @@ export class SeedService {
         prices: [{ amount: 90, duration: 120, currency: 'EUR' }],
         sedeIds: [1],
       },
-      {
-        categoryId: 2,
-        translations: [
-          {
-            language: 'es',
-            name: 'Depilación Con Cera Orejas',
-            description: 'Depilación con cera en orejas',
-          },
-          {
-            language: 'en',
-            name: 'Ear Waxing',
-            description: 'Waxing service for ears',
-          },
-        ],
-        prices: [{ amount: null, duration: null, currency: 'EUR' }],
-        sedeIds: [1],
-      },
 
       {
         categoryId: 4,
@@ -4068,11 +4051,15 @@ export class SeedService {
             })),
           },
           prices: {
-            create: service.prices?.map((price) => ({
-              amount: price.amount,
-              duration: price.duration,
-              currency: price.currency ?? 'EUR',
-            })),
+            create: service.prices
+              ?.filter(
+                (price) => price.amount != null && price.duration != null,
+              )
+              .map((price) => ({
+                amount: price.amount,
+                duration: price.duration,
+                currency: price.currency ?? 'EUR',
+              })),
           },
         } satisfies Prisma.ServiceCreateInput,
       });
