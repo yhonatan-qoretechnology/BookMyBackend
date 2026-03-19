@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import * as dayjs from 'dayjs';
+import dayjs from 'dayjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../email/mail.service';
 import { SmsService } from '../sms/sms.service';
