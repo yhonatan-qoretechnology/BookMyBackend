@@ -3078,12 +3078,6 @@ export class SeedService {
         prices: [{ amount: 60, duration: 75, currency: 'EUR' }],
         sedeIds: [1],
       },
-
-      {
-        id_existente_en_memoria: 'Higiene facial con hidratación',
-        sedeIds: [2],
-      },
-
       {
         categoryId: 4,
         translations: [
@@ -4205,65 +4199,193 @@ export class SeedService {
         {
           nombre: 'Nayomi Clenshaw',
           biografia:
-            'Manicurista profesional con amplia experiencia en tratamientos y diseño de uñas.',
-          phone: '+34666555444',
+            'Especialista en manicura y tratamientos de estética avanzada.',
+          phone: '+34600000001',
           sedeId: 1,
-          imagen:
-            'https://d375139ucebi94.cloudfront.net/region2/es/26140/resource_photos/29b0ef56cfba49b5b5a6b9e344c577-glow-benalmadena-nayomi-clenshaw-872338da480847949c01025f01db7a-booksy.jpeg?size=250x250&size=100x100',
+          imagen: null, // Puedes actualizar con la URL de la imagen de Nayomi
         },
         {
-          nombre: 'Lidia Sánchez',
-          biografia:
-            'Manicurista con atención al detalle y pasión por el arte en las uñas.',
-          phone: '+34666555445',
+          nombre: 'Priscilla Cuero',
+          biografia: 'Experta en estilismo y cuidado integral del cabello.',
+          phone: '+34600000002',
           sedeId: 1,
-          imagen:
-            'https://d375139ucebi94.cloudfront.net/region2/es/26140/resource_photos/29b0ef56cfba49b5b5a6b9e344c577-glow-benalmadena-nayomi-clenshaw-872338da480847949c01025f01db7a-booksy.jpeg?size=250x250&size=100x100',
+          imagen: null,
         },
         {
-          nombre: 'Priscila Cuervo',
+          nombre: 'Francesca D.',
           biografia:
-            'Especialista en manicura moderna y técnicas de esmaltado profesional.',
-          phone: '+34666555446',
+            'Profesional especializada en técnicas de color y diseño capilar.',
+          phone: '+34600000003',
           sedeId: 1,
-          imagen:
-            'https://d375139ucebi94.cloudfront.net/region2/es/26140/resource_photos/5c819b901a174187b5a02f5b90617e-glow-benalmadena-priscila-cuervo-bbaefaa0c2694ff3ab2fca32d7181f-booksy.jpeg?size=250x250&size=100x100',
+          imagen: null,
         },
         {
-          nombre: 'Francesca Dela Magna',
+          nombre: 'Katy Alvarez',
           biografia:
-            'Manicurista especializada en tratamientos estéticos y diseño artístico.',
-          phone: '+34666555447',
+            'Especialista en tratamientos faciales y estética de mirada.',
+          phone: '+34600000004',
           sedeId: 1,
-          imagen:
-            'https://d375139ucebi94.cloudfront.net/region2/es/26140/resource_photos/2512c13228f848acbc2652a15a8847-glow-benalmadena-francesca-dela-magna-f291664ec0fb42a09a2b168c453680-booksy.jpeg?size=250x250&size=100x100',
+          imagen: null,
         },
         {
-          nombre: 'Laura',
+          nombre: 'Valentina Sa...',
           biografia:
-            'Manicurista con amplia experiencia en técnicas modernas y tratamientos personalizados.',
-          phone: '+34666555448',
+            'Técnica en belleza integral con enfoque en bienestar corporal.',
+          phone: '+34600000005',
           sedeId: 1,
-          imagen:
-            'https://d375139ucebi94.cloudfront.net/region2/es/25686/resource_photos/1b810cabfdba4ffba9202890e6712a-glow-fuengirola-laura-e36c370bb176421893583738986b8c-booksy.jpeg?size=250x250&size=100x100',
+          imagen: null,
         },
         {
-          nombre: 'Natalia',
+          nombre: 'Laura Perez',
           biografia:
-            'Especialista en manicura y pedicura, dedicada al cuidado integral de las uñas.',
-          phone: '+34666555449',
+            'Experta en servicios de peluquería y tendencias de corte moderno.',
+          phone: '+34600000006',
           sedeId: 1,
-          imagen:
-            'https://d375139ucebi94.cloudfront.net/region2/es/25686/resource_photos/629f3f297b154693a8ff2992ec350e-glow-fuengirola-natalia-c444ed18a3f341bca6afbbdee6f77c-booksy.jpeg?size=250x250&size=100x100',
+          imagen: null,
         },
         {
-          nombre: 'Gabriela',
+          nombre: 'Paula Flecha',
           biografia:
-            'Manicurista profesional con enfoque en tratamientos naturales y personalizados.',
-          phone: '+34666555450',
-          sedeId: 1,
-          imagen:
-            'https://d375139ucebi94.cloudfront.net/region2/es/25686/resource_photos/97eaa5d70ade4ccb94dbabde8cc2df-glow-fuengirola-gabriela-5c23aac4295b429ea292f86acc23d6-booksy.jpeg?size=250x250&size=100x100',
+            'Especialista en estética facial y cuidado de la piel con técnicas avanzadas.',
+          phone: '+34600200001',
+          sedeId: 2,
+          imagen: null, // Tiene placeholder en la imagen
+        },
+        {
+          nombre: 'Laura Galvis',
+          biografia:
+            'Estilista senior experta en colorimetría y diseño de imagen personalizada.',
+          phone: '+34600200002',
+          sedeId: 2,
+          imagen: 'https://tu-servidor.com/fotos/laura-galvis.jpg', // Reemplazar con URL real
+        },
+        {
+          nombre: 'Zulay Burgos',
+          biografia:
+            'Profesional en tratamientos capilares regenerativos y salud del cabello.',
+          phone: '+34600200003',
+          sedeId: 2,
+          imagen: 'https://tu-servidor.com/fotos/zulay-burgos.jpg',
+        },
+        {
+          nombre: 'Natalia Lamp...', // Probablemente Natalia Lampert
+          biografia:
+            'Especialista en diseño de mirada, micropigmentación y pestañas.',
+          phone: '+34600200004',
+          sedeId: 2,
+          imagen: 'https://tu-servidor.com/fotos/natalia-l.jpg',
+        },
+        {
+          nombre: 'Carolina Vel...', // Probablemente Carolina Velásquez
+          biografia:
+            'Técnica experta en manicura rusa, pedicura spa y nail art.',
+          phone: '+34600200005',
+          sedeId: 2,
+          imagen: 'https://tu-servidor.com/fotos/carolina-v.jpg',
+        },
+        {
+          nombre: 'Maryluna Sa...', // Probablemente Maryluna Sarmiento
+          biografia:
+            'Especialista en masajes terapéuticos y bienestar corporal integral.',
+          phone: '+34600200006',
+          sedeId: 2,
+          imagen: 'https://tu-servidor.com/fotos/maryluna-s.jpg',
+        },
+        {
+          nombre: 'Stefany O.', // Probablemente Stefany Orozco
+          biografia:
+            'Profesional en corte y peinado para eventos y producciones de moda.',
+          phone: '+34600200007',
+          sedeId: 2,
+          imagen: 'https://tu-servidor.com/fotos/stefany-o.jpg',
+        },
+        {
+          nombre: 'Alexa Mendoza',
+          biografia:
+            'Especialista en colorimetría y transformaciones capilares de tendencia.',
+          phone: '+34600300001',
+          sedeId: 3,
+          imagen: 'https://tu-servidor.com/fotos/alexa-mendoza.jpg',
+        },
+        {
+          nombre: 'Andrea Lozano',
+          biografia:
+            'Experta en tratamientos de estética avanzada y cuidado facial personalizado.',
+          phone: '+34600300002',
+          sedeId: 3,
+          imagen: 'https://tu-servidor.com/fotos/andrea-lozano.jpg',
+        },
+        {
+          nombre: 'Nicol Torres',
+          biografia:
+            'Técnica especialista en micropigmentación y diseño de cejas.',
+          phone: '+34600300003',
+          sedeId: 3,
+          imagen: null, // Tiene placeholder en la imagen
+        },
+        {
+          nombre: 'Keisy Sanchez',
+          biografia:
+            'Profesional en manicura de precisión, esculpido y nail art creativo.',
+          phone: '+34600300004',
+          sedeId: 3,
+          imagen: 'https://tu-servidor.com/fotos/keisy-sanchez.jpg',
+        },
+        {
+          nombre: 'Samantha Arroyave',
+          biografia:
+            'Estilista senior con enfoque en cortes modernos y peinados para eventos.',
+          phone: '+34600300005',
+          sedeId: 3,
+          imagen: 'https://tu-servidor.com/fotos/samantha-arroyave.jpg',
+        },
+        {
+          nombre: 'Alexa Mendoza',
+          biografia:
+            'Especialista en colorimetría y transformaciones capilares de tendencia.',
+          phone: '+34600300001',
+          sedeId: 3,
+          imagen: 'https://tu-servidor.com/fotos/alexa-mendoza.jpg',
+        },
+        {
+          nombre: 'Andrea Lozano',
+          biografia:
+            'Experta en tratamientos de estética avanzada y cuidado facial personalizado.',
+          phone: '+34600300002',
+          sedeId: 3,
+          imagen: 'https://tu-servidor.com/fotos/andrea-lozano.jpg',
+        },
+        {
+          nombre: 'Nicol Torres',
+          biografia:
+            'Técnica especialista en micropigmentación y diseño de cejas.',
+          phone: '+34600300003',
+          sedeId: 3,
+          imagen: null, // Tiene placeholder en la imagen
+        },
+        {
+          nombre: 'Keisy Sanchez',
+          biografia:
+            'Profesional en manicura de precisión, esculpido y nail art creativo.',
+          phone: '+34600300004',
+          sedeId: 3,
+          imagen: 'https://tu-servidor.com/fotos/keisy-sanchez.jpg',
+        },
+        {
+          nombre: 'Samantha Arroyave',
+          biografia:
+            'Estilista senior con enfoque en cortes modernos y peinados para eventos.',
+          phone: '+34600300005',
+          sedeId: 3,
+          imagen: 'https://tu-servidor.com/fotos/samantha-arroyave.jpg',
+        },
+        {
+          nombre: 'Danna',
+          biografia:
+            'Especialista en extensiones de pestañas y diseño de mirada personalizada.',
+          phone: '+34600400001',
+          sedeId: 4,
+          imagen: 'https://tu-servidor.com/fotos/danna-sede4.jpg',
         },
       ],
 
