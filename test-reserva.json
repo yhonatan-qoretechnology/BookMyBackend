@@ -1,0 +1,14 @@
+{
+  "fecha": "2025-03-25T00:00:00Z",
+  "horaInicio": "2025-03-25T14:00:00Z",
+  "horaFin": "2025-03-25T15:15:00Z",
+  "duracion": 75,
+  "estado": "PENDING",
+  "notas": "Reserva de prueba",
+  "sedeId": 1,
+  "serviceId": 2,
+  "profesionalId": 1,
+  "userId": 2,
+  "paymentMethod": "CASH",
+  "paymentAmount": 30
+}
