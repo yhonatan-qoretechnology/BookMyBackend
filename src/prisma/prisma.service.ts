@@ -23,7 +23,13 @@ export class PrismaService
   }
 
   async onModuleInit() {
-    await this.$connect();
+    try {
+      // console.log('🔌 Conectando a la base de datos...');
+      await this.$connect();
+      console.log('✅ Conexión a DB establecida');
+    } catch (error) {
+      console.error('❌ Error conectando a la base de datos:', error.message);
+    }
   }
 
   async onModuleDestroy() {
