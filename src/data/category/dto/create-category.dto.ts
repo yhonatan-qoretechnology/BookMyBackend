@@ -1,35 +1,63 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
-import { CategoryTranslationDto } from './translation.dto';
+
+export class TranslationInputDto {
+  @ApiProperty({ example: 'es', description: 'Código de idioma' })
+  @IsString()
+  language: string;
+
+  @ApiProperty({ example: 'Belleza', description: 'Nombre de la categoría' })
+  @IsString()
+  name: string;
+
+  @ApiPropertyOptional({
+    example: 'Servicios de belleza',
+    description: 'Descripción',
+  })
+  @IsString()
+  @IsOptional()
+  description?: string;
+}
 
 export class CreateCategoryDto {
   @ApiPropertyOptional({
     description: 'URL de la imagen de la categoría (opcional)',
-    example: 'https://cdn.miapp.com/categories/electronica.png',
+    example: null,
   })
   @IsString()
   @IsOptional()
   image?: string;
 
   @ApiProperty({
-    type: [CategoryTranslationDto],
+    type: [TranslationInputDto],
     description: 'Lista de traducciones (al menos una requerida)',
     example: [
       {
         language: 'es',
-        name: 'Belleza',
-        description: 'Servicios de belleza y cuidado personal',
+        name: 'Cejas',
+        description: 'Diseño y cuidado de cejas',
       },
       {
         language: 'en',
-        name: 'Beauty',
-        description: 'Beauty and personal care services',
+        name: 'Eyebrows',
+        description: 'Eyebrow design and care services',
       },
     ],
   })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CategoryTranslationDto)
-  translations: CategoryTranslationDto[];
+  @Type(() => TranslationInputDto)
+  translations: TranslationInputDto[];
+}
+
+export class BulkCreateCategoriesDto {
+  @ApiProperty({
+    type: [CreateCategoryDto],
+    description: 'Lista de categorías a crear',
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateCategoryDto)
+  categories: CreateCategoryDto[];
 }

@@ -23,7 +23,10 @@ import {
 import { multerConfig } from 'src/config/multer.config';
 import { CreateCategoryWithFileDto } from '../serviceCategory/dto/create-category-with-file.dto';
 import { CategoryService } from './category.service';
-import { CreateCategoryDto } from './dto/create-category.dto';
+import {
+  BulkCreateCategoriesDto,
+  CreateCategoryDto,
+} from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @ApiTags('Categories')
@@ -32,15 +35,59 @@ export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Crear categoría con traducciones e imagen' })
+  @ApiOperation({
+    summary: 'Crear categoría (application/json)',
+  })
+  @ApiConsumes('application/json')
+  @ApiBody({
+    type: CreateCategoryDto,
+    examples: {
+      ejemplo: {
+        summary: 'Categoría con ES y EN, sin imagen',
+        value: {
+          image: null,
+          translations: [
+            {
+              language: 'es',
+              name: 'Tecnología',
+              description: 'Servicios de tecnología y soluciones digitales',
+            },
+            {
+              language: 'en',
+              name: 'Technology',
+              description: 'Technology services and digital solutions',
+            },
+          ],
+        },
+      },
+    },
+  })
+  async create(@Body() createCategoryDto: CreateCategoryDto) {
+    return this.categoryService.create(createCategoryDto, undefined);
+  }
+
+  @Post('multipart')
+  @ApiOperation({
+    summary: 'Crear categoría con traducciones e imagen (multipart/form-data)',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: CreateCategoryWithFileDto })
-  @UseInterceptors(FileInterceptor('image', multerConfig)) // 👈 aquí
-  async create(
+  @UseInterceptors(FileInterceptor('image', multerConfig))
+  async createMultipart(
     @Body() createCategoryDto: CreateCategoryDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.categoryService.create(createCategoryDto, file);
+  }
+
+  @Post('bulk')
+  @ApiOperation({
+    summary: 'Crear múltiples categorías (application/json)',
+  })
+  @ApiConsumes('application/json')
+  @ApiBody({ type: BulkCreateCategoriesDto })
+  async createBulk(@Body() bulkDto: BulkCreateCategoriesDto) {
+    return this.categoryService.createBulk(bulkDto);
   }
 
   @Get()

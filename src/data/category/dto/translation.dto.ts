@@ -1,20 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-
-export enum LanguageCode {
-  ES = 'es',
-  EN = 'en',
-}
+import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CategoryTranslationDto {
   @ApiProperty({
-    enum: LanguageCode,
+    enum: ['es', 'en'],
     description: 'Language code (es/en)',
     example: 'es',
   })
-  @IsEnum(LanguageCode)
+  @IsIn(['es', 'en'])
   @IsNotEmpty()
-  language: LanguageCode;
+  language: string;
 
   @ApiProperty({
     description: 'Category name in this language',

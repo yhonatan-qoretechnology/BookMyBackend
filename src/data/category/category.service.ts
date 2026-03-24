@@ -8,7 +8,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SftpStorageService } from '../../storage/sftp-storage.service';
-import { CreateCategoryDto } from './dto/create-category.dto';
+import {
+  BulkCreateCategoriesDto,
+  CreateCategoryDto,
+} from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Injectable()
@@ -17,6 +20,17 @@ export class CategoryService {
     private readonly prisma: PrismaService,
     private readonly sftpStorage: SftpStorageService,
   ) {}
+
+  async createBulk(bulkDto: BulkCreateCategoriesDto) {
+    const results: any[] = [];
+    for (const categoryDto of bulkDto.categories) {
+      results.push(await this.create(categoryDto, undefined));
+    }
+    return {
+      count: results.length,
+      items: results,
+    };
+  }
 
   private async storeCategoryImage(file: Express.Multer.File) {
     const ext = path.extname(file.originalname) || '';
@@ -107,7 +121,10 @@ export class CategoryService {
     createCategoryDto: CreateCategoryDto,
     file?: Express.Multer.File,
   ) {
-    const languages = createCategoryDto.translations.map((t) => t.language);
+    // translations ya viene como array del DTO validado
+    const translations = createCategoryDto.translations;
+
+    const languages = translations.map((t: any) => t.language);
     if (new Set(languages).size !== languages.length) {
       if (file) await this.safeDeleteRemoteOrLocal(file.path);
       throw new BadRequestException(
@@ -126,7 +143,7 @@ export class CategoryService {
           image: imagePath,
           translations: {
             createMany: {
-              data: createCategoryDto.translations.map((t) => ({
+              data: translations.map((t: any) => ({
                 language: t.language,
                 name: t.name,
                 description: t.description,
@@ -154,24 +171,35 @@ export class CategoryService {
    * Obtiene todas las categorías por idioma
    */
   async findAll(language: string = 'es') {
+    const include =
+      language === 'all'
+        ? { translations: true }
+        : { translations: { where: { language } } };
+
     const categories = await this.prisma.category.findMany({
-      include: {
-        translations: { where: { language } },
-      },
+      include,
     });
-    return categories.filter((c) => c.translations.length > 0);
+    return language === 'all'
+      ? categories
+      : categories.filter((c) => c.translations.length > 0);
   }
 
   async findThenRandom(language: string = 'es') {
     // Obtener todas las categorías con traducciones en el idioma solicitado
+    const include =
+      language === 'all'
+        ? { translations: true }
+        : { translations: { where: { language } } };
+
     const categories = await this.prisma.category.findMany({
-      include: {
-        translations: { where: { language } },
-      },
+      include,
     });
 
     // Filtrar categorías que tengan traducciones válidas
-    const filtered = categories.filter((c) => c.translations.length > 0);
+    const filtered =
+      language === 'all'
+        ? categories
+        : categories.filter((c) => c.translations.length > 0);
 
     // Mezclar aleatoriamente (Fisher-Yates shuffle)
     const shuffled = filtered.sort(() => Math.random() - 0.5);
@@ -187,7 +215,7 @@ export class CategoryService {
     const category = await this.prisma.category.findUnique({
       where: { id },
       include: {
-        translations: { where: { language } },
+        translations: language === 'all' ? true : { where: { language } },
       },
     });
     if (!category) {

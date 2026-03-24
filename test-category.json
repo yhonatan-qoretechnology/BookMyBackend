@@ -1,0 +1,14 @@
+{
+  "translations": [
+    {
+      "language": "es",
+      "name": "Tecnología",
+      "description": "Servicios de tecnología y soluciones digitales"
+    },
+    {
+      "language": "en",
+      "name": "Technology",
+      "description": "Technology services and digital solutions"
+    }
+  ]
+}
