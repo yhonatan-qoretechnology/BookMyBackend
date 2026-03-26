@@ -310,6 +310,18 @@ export class AppointmentService {
       } = data;
 
       const dayOfWeek = horaInicio.getDay();
+      const dayNames = [
+        'domingo',
+        'lunes',
+        'martes',
+        'miércoles',
+        'jueves',
+        'viernes',
+        'sábado',
+      ];
+      this.logger.log(
+        `Debug horario: horaInicio=${horaInicio.toISOString()}, getHours()=${horaInicio.getHours()}, getDay()=${dayOfWeek} (${dayNames[dayOfWeek]}), getMinutes()=${horaInicio.getMinutes()}`,
+      );
       const horarioRegistro = sede.HorarioSede.find(
         (registro) => registro.diaSemana === dayOfWeek && registro.activo,
       );
