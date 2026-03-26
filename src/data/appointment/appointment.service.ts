@@ -11,6 +11,8 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
 import { PaymentService } from '../payment/payment.service';
 
+const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Europe/Madrid';
+
 @Injectable()
 export class AppointmentService {
   private readonly logger = new Logger(AppointmentService.name);
@@ -27,7 +29,24 @@ export class AppointmentService {
   }
 
   private getMinutesFromDate(date: Date) {
-    return date.getHours() * 60 + date.getMinutes();
+    const dateInTimezone = new Date(
+      date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+    );
+    return dateInTimezone.getHours() * 60 + dateInTimezone.getMinutes();
+  }
+
+  private getDayOfWeekInTimezone(date: Date): number {
+    const dateInTimezone = new Date(
+      date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+    );
+    return dateInTimezone.getDay();
+  }
+
+  private getDateInTimezone(date: Date): string {
+    const dateInTimezone = new Date(
+      date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+    );
+    return dateInTimezone.toISOString().slice(0, 10);
   }
 
   private getMinutesFromHourString(hour: string) {
@@ -209,9 +228,9 @@ export class AppointmentService {
     );
 
     try {
-      const appointmentDay = fecha.toISOString().slice(0, 10);
-      const inicioDia = horaInicio.toISOString().slice(0, 10);
-      const finDia = horaFin.toISOString().slice(0, 10);
+      const appointmentDay = this.getDateInTimezone(fecha);
+      const inicioDia = this.getDateInTimezone(horaInicio);
+      const finDia = this.getDateInTimezone(horaFin);
 
       if (appointmentDay !== inicioDia || appointmentDay !== finDia) {
         throw new BadRequestException(
@@ -309,7 +328,7 @@ export class AppointmentService {
         ...appointmentData
       } = data;
 
-      const dayOfWeek = horaInicio.getDay();
+      const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio);
       const dayNames = [
         'domingo',
         'lunes',
@@ -319,8 +338,11 @@ export class AppointmentService {
         'viernes',
         'sábado',
       ];
+      const horaEnTimezone = new Date(
+        horaInicio.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+      );
       this.logger.log(
-        `Debug horario: horaInicio=${horaInicio.toISOString()}, getHours()=${horaInicio.getHours()}, getDay()=${dayOfWeek} (${dayNames[dayOfWeek]}), getMinutes()=${horaInicio.getMinutes()}`,
+        `Debug horario: horaInicio=${horaInicio.toISOString()}, getHours()=${horaEnTimezone.getHours()}, getDay()=${dayOfWeek} (${dayNames[dayOfWeek]}), getMinutes()=${horaEnTimezone.getMinutes()}`,
       );
       const horarioRegistro = sede.HorarioSede.find(
         (registro) => registro.diaSemana === dayOfWeek && registro.activo,
@@ -416,7 +438,7 @@ export class AppointmentService {
         if (!cierreParcial.fecha) continue;
         const cierreFecha = new Date(cierreParcial.fecha);
         if (Number.isNaN(cierreFecha.getTime())) continue;
-        const cierreDia = cierreFecha.toISOString().slice(0, 10);
+        const cierreDia = this.getDateInTimezone(cierreFecha);
         if (cierreDia !== appointmentDay) continue;
 
         if (cierreParcial.todoElDia ?? true) {
