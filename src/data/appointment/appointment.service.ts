@@ -401,9 +401,10 @@ export class AppointmentService {
           : [];
 
       for (const cierreParcial of diasCerradosRegistros) {
-        const cierreDia = new Date(cierreParcial.fecha)
-          .toISOString()
-          .slice(0, 10);
+        if (!cierreParcial.fecha) continue;
+        const cierreFecha = new Date(cierreParcial.fecha);
+        if (Number.isNaN(cierreFecha.getTime())) continue;
+        const cierreDia = cierreFecha.toISOString().slice(0, 10);
         if (cierreDia !== appointmentDay) continue;
 
         if (cierreParcial.todoElDia ?? true) {
