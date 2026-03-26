@@ -27,7 +27,7 @@ export class AppointmentService {
   }
 
   private getMinutesFromDate(date: Date) {
-    return date.getUTCHours() * 60 + date.getUTCMinutes();
+    return date.getHours() * 60 + date.getMinutes();
   }
 
   private getMinutesFromHourString(hour: string) {
