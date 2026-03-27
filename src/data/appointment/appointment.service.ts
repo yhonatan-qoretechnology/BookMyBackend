@@ -32,34 +32,25 @@ export class AppointmentService {
     return dateStr.endsWith('Z') || dateStr.includes('+');
   }
 
-  private getMinutesFromDate(date: Date, originalDateStr?: string) {
-    let dateToUse = date;
-    if (originalDateStr && !this.isUtcFormat(originalDateStr)) {
-      dateToUse = new Date(
-        date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
-      );
-    }
-    return dateToUse.getHours() * 60 + dateToUse.getMinutes();
+  private getMinutesFromDate(date: Date) {
+    const dateInTimezone = new Date(
+      date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+    );
+    return dateInTimezone.getHours() * 60 + dateInTimezone.getMinutes();
   }
 
-  private getDayOfWeekInTimezone(date: Date, originalDateStr?: string): number {
-    let dateToUse = date;
-    if (originalDateStr && !this.isUtcFormat(originalDateStr)) {
-      dateToUse = new Date(
-        date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
-      );
-    }
-    return dateToUse.getDay();
+  private getDayOfWeekInTimezone(date: Date): number {
+    const dateInTimezone = new Date(
+      date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+    );
+    return dateInTimezone.getDay();
   }
 
-  private getDateInTimezone(date: Date, originalDateStr?: string): string {
-    let dateToUse = date;
-    if (originalDateStr && !this.isUtcFormat(originalDateStr)) {
-      dateToUse = new Date(
-        date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
-      );
-    }
-    return dateToUse.toISOString().slice(0, 10);
+  private getDateInTimezone(date: Date): string {
+    const dateInTimezone = new Date(
+      date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+    );
+    return dateInTimezone.toISOString().slice(0, 10);
   }
 
   private getMinutesFromHourString(hour: string) {
@@ -249,9 +240,9 @@ export class AppointmentService {
     );
 
     try {
-      const appointmentDay = this.getDateInTimezone(fecha, data.fecha);
-      const inicioDia = this.getDateInTimezone(horaInicio, data.horaInicio);
-      const finDia = this.getDateInTimezone(horaFin, data.horaFin);
+      const appointmentDay = this.getDateInTimezone(fecha);
+      const inicioDia = this.getDateInTimezone(horaInicio);
+      const finDia = this.getDateInTimezone(horaFin);
 
       if (appointmentDay !== inicioDia || appointmentDay !== finDia) {
         throw new BadRequestException(
@@ -349,10 +340,7 @@ export class AppointmentService {
         ...appointmentData
       } = data;
 
-      const dayOfWeek = this.getDayOfWeekInTimezone(
-        horaInicio,
-        data.horaInicio,
-      );
+      const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio);
       const dayNames = [
         'domingo',
         'lunes',
