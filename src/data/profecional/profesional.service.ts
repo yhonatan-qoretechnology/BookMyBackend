@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AppointmentStatus, Prisma, Role } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -20,6 +21,7 @@ export class ProfesionalService {
     private prisma: PrismaService,
     private readonly accessControlService: AccessControlService,
     private readonly sftpStorage: SftpStorageService,
+    private readonly configService: ConfigService,
   ) {}
 
   private async storeProfesionalImage(file: Express.Multer.File) {
@@ -405,9 +407,13 @@ export class ProfesionalService {
 
   // 📦 Servicio para obtener los profesionales con sus servicios asociados por sede
   async findProfesionalesPorSede(sedeId: number, language: string = 'es') {
+    const baseUrl =
+      this.configService.get<string>('UPLOADS_PUBLIC_BASE_URL') ?? '';
+
     const profesionales = await this.prisma.profesional.findMany({
       where: { sedeId },
       include: {
+        sede: true,
         serviceSedeProfesional: {
           include: {
             service: {
@@ -445,6 +451,11 @@ export class ProfesionalService {
 
     // 🧩 Transformación a una respuesta limpia y legible
     return profesionales.map((prof) => {
+      // Obtener la imagen de la sede
+      const sedeImagen = prof.sede?.imagenes?.[0]
+        ? `${baseUrl}/${prof.sede.imagenes[0]}`
+        : null;
+
       const servicios = prof.serviceSedeProfesional
         .filter((ssp) => ssp.service) // ✅ evita incluir relaciones vacías
         .map((ssp) => ({
@@ -453,6 +464,7 @@ export class ProfesionalService {
           descripcion: ssp.service.translations[0]?.description ?? '',
           categoria:
             ssp.service.category?.translations?.[0]?.name ?? 'Sin categoría',
+          imagen: sedeImagen,
           precios: ssp.service.prices.map((p) => ({
             id: p.id,
             amount: p.amount,
@@ -465,7 +477,7 @@ export class ProfesionalService {
         id: prof.id,
         nombre: prof.nombre,
         biografia: prof.biografia,
-        imagen: prof.imagen,
+        imagen: prof.imagen ? `${baseUrl}/${prof.imagen}` : null,
         telefono: prof.phone,
         state: prof.state,
         sedeId: prof.sedeId,
