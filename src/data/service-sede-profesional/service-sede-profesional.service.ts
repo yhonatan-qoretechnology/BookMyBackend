@@ -18,6 +18,90 @@ export class ServiceSedeProfesionalService {
     private readonly accessControlService: AccessControlService,
   ) {}
 
+  async findServiciosConAsignacion(
+    sedeId: number,
+    profesionalId: number,
+    language: string = 'es',
+    user: AuthenticatedUser,
+  ) {
+    if (!user) {
+      throw new ForbiddenException('Usuario no autenticado.');
+    }
+
+    await this.accessControlService.ensureSedeAccessForUser(sedeId, user);
+    await this.accessControlService.ensureProfessionalAccessForUser(
+      profesionalId,
+      user,
+    );
+
+    const profesional = await this.prisma.profesional.findUnique({
+      where: { id: profesionalId },
+      select: { id: true, sedeId: true },
+    });
+
+    if (!profesional) {
+      throw new NotFoundException(
+        `Profesional con ID ${profesionalId} no encontrado.`,
+      );
+    }
+
+    if (profesional.sedeId !== sedeId) {
+      throw new BadRequestException(
+        'El profesional no pertenece a la sede indicada.',
+      );
+    }
+
+    const asignados = await this.prisma.serviceSedeProfesional.findMany({
+      where: {
+        sedeId,
+        profesionalId,
+      },
+      select: { serviceId: true },
+    });
+
+    const asignadosSet = new Set(asignados.map((a) => a.serviceId));
+
+    const services = await this.prisma.service.findMany({
+      include: {
+        translations: {
+          where: { language },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            language: true,
+          },
+        },
+        prices: {
+          select: {
+            id: true,
+            amount: true,
+            duration: true,
+            currency: true,
+          },
+        },
+        category: {
+          include: {
+            translations: {
+              where: { language },
+              select: { name: true, description: true },
+            },
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    return services.map((service) => ({
+      id: service.id,
+      nombre: service.translations[0]?.name ?? 'Sin traducción',
+      descripcion: service.translations[0]?.description ?? '',
+      categoria: service.category?.translations?.[0]?.name ?? 'Sin categoría',
+      precios: service.prices,
+      asignado: asignadosSet.has(service.id),
+    }));
+  }
+
   /**
    * Crea una nueva relación en la tabla ServiceSedeProfesional.
    * Valida que el servicio, la sede y el profesional existan antes de la creación.

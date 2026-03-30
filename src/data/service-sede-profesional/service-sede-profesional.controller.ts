@@ -7,9 +7,10 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
 import { Public } from '../../auth/common/decorators/public.decorator';
@@ -56,6 +57,37 @@ export class ServiceSedeProfesionalController {
   @ApiResponse({ status: 200, description: 'Relación encontrada.' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.serviceSedeProfesionalService.findOne(id);
+  }
+
+  @Get('by-sede/:sedeId/by-profesional/:profesionalId')
+  @UseGuards(JwtAuthGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ApiOperation({
+    summary:
+      'Lista todos los servicios de una sede y marca cuáles están asignados a un profesional.',
+  })
+  @ApiQuery({
+    name: 'language',
+    enum: ['es', 'en'],
+    required: false,
+    description: 'Idioma de las traducciones a devolver (por defecto: es)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de servicios con asignado=true/false',
+  })
+  findServiciosConAsignacion(
+    @Param('sedeId', ParseIntPipe) sedeId: number,
+    @Param('profesionalId', ParseIntPipe) profesionalId: number,
+    @Query('language') language: string = 'es',
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.serviceSedeProfesionalService.findServiciosConAsignacion(
+      sedeId,
+      profesionalId,
+      language,
+      user,
+    );
   }
 
   @Patch(':id')
