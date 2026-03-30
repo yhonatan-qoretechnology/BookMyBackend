@@ -266,27 +266,42 @@ export class AppointmentService {
         );
       }
 
-      const [user, profesional, service, relation, sede] = await Promise.all([
-        this.prisma.users.findUnique({ where: { id: data.userId } }),
-        this.prisma.profesional.findUnique({
-          where: { id: data.profesionalId },
-        }),
-        this.prisma.service.findUnique({
-          where: { id: data.serviceId },
-          include: { prices: true },
-        }),
-        this.prisma.serviceSedeProfesional.findFirst({
-          where: {
-            sedeId: data.sedeId,
-            serviceId: data.serviceId,
-            profesionalId: data.profesionalId,
-          },
-        }),
-        this.prisma.sede.findUnique({
-          where: { id: data.sedeId },
-          include: { HorarioSede: true, DiaCerradoSede: true },
-        }),
-      ]);
+      const [userDirect, profesional, service, relation, sede] =
+        await Promise.all([
+          this.prisma.users.findUnique({ where: { id: data.userId } }),
+          this.prisma.profesional.findUnique({
+            where: { id: data.profesionalId },
+          }),
+          this.prisma.service.findUnique({
+            where: { id: data.serviceId },
+            include: { prices: true },
+          }),
+          this.prisma.serviceSedeProfesional.findFirst({
+            where: {
+              sedeId: data.sedeId,
+              serviceId: data.serviceId,
+              profesionalId: data.profesionalId,
+            },
+          }),
+          this.prisma.sede.findUnique({
+            where: { id: data.sedeId },
+            include: { HorarioSede: true, DiaCerradoSede: true },
+          }),
+        ]);
+
+      let user = userDirect;
+      if (!user) {
+        const userData = await this.prisma.userData.findUnique({
+          where: { id: data.userId },
+          select: { userId: true },
+        });
+
+        if (userData?.userId) {
+          user = await this.prisma.users.findUnique({
+            where: { id: userData.userId },
+          });
+        }
+      }
 
       if (!user) {
         throw new BadRequestException('El usuario no existe');
