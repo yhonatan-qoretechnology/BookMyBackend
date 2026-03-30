@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,6 +18,8 @@ import { UpdateProfesionalDto } from './dto/update-profesional.dto';
 
 @Injectable()
 export class ProfesionalService {
+  private readonly logger = new Logger(ProfesionalService.name);
+
   constructor(
     private prisma: PrismaService,
     private readonly accessControlService: AccessControlService,
@@ -198,6 +201,21 @@ export class ProfesionalService {
     profesionalId: number,
     language: string = 'es',
   ) {
+    const baseUrl = (
+      this.configService.get<string>('UPLOADS_PUBLIC_BASE_URL') ?? ''
+    )
+      .trim()
+      .replace(/\/+$/g, '');
+
+    this.logger.log(
+      `[findProfesionalConServiciosYSede] profesionalId=${profesionalId} language=${language} baseUrl=${baseUrl}`,
+    );
+    // Log extra para depurar en entornos donde Nest Logger no esté mostrando logs
+    // eslint-disable-next-line no-console
+    console.log(
+      `[findProfesionalConServiciosYSede] profesionalId=${profesionalId} language=${language} baseUrl=${baseUrl}`,
+    );
+
     const profesional = await this.prisma.profesional.findUnique({
       where: { id: profesionalId },
       include: {
@@ -212,6 +230,7 @@ export class ProfesionalService {
             provincia: true,
             horario: true,
             diasCerrado: true,
+            imagenes: true,
             HorarioSede: {
               select: {
                 id: true,
@@ -268,6 +287,22 @@ export class ProfesionalService {
       );
     }
 
+    const sedeImagenesUrls = (profesional.sede?.imagenes ?? []).map((img) =>
+      baseUrl ? `${baseUrl}/${img}` : img,
+    );
+
+    this.logger.log(
+      `[findProfesionalConServiciosYSede] sedeId=${profesional.sedeId} sedeImagenes=${JSON.stringify(
+        profesional.sede?.imagenes ?? null,
+      )}`,
+    );
+    // eslint-disable-next-line no-console
+    console.log(
+      `[findProfesionalConServiciosYSede] sedeId=${profesional.sedeId} sedeImagenes=${JSON.stringify(
+        profesional.sede?.imagenes ?? null,
+      )}`,
+    );
+
     const servicios = profesional.serviceSedeProfesional
       .filter((ssp) => ssp.service)
       .map((ssp) => ({
@@ -288,7 +323,11 @@ export class ProfesionalService {
       id: profesional.id,
       nombre: profesional.nombre,
       biografia: profesional.biografia,
-      imagen: profesional.imagen,
+      imagen: profesional.imagen
+        ? baseUrl
+          ? `${baseUrl}/${profesional.imagen}`
+          : profesional.imagen
+        : null,
       telefono: profesional.phone,
       state: profesional.state,
       sedeId: profesional.sedeId,
@@ -303,6 +342,7 @@ export class ProfesionalService {
             provincia: profesional.sede.provincia,
             horario: profesional.sede.horario,
             diasCerrado: profesional.sede.diasCerrado,
+            imagenes: sedeImagenesUrls,
             horarioSemanal:
               profesional.sede.HorarioSede?.map((registro) => ({
                 id: registro.id,
