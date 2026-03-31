@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ResenaType } from '@prisma/client';
+import { ResenaState, ResenaType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateResenaDto } from './dto/create-resena.dto';
 import { UpdateResenaDto } from './dto/update-resena.dto';
@@ -172,6 +172,21 @@ export class ResenaService {
     return this.prisma.resena.update({
       where: { id },
       data: updateResenaDto,
+    });
+  }
+
+  async approve(id: number, aprobado: boolean) {
+    const resena = await this.prisma.resena.findUnique({ where: { id } });
+    if (!resena) {
+      throw new NotFoundException(`Reseña con ID ${id} no encontrada.`);
+    }
+
+    return this.prisma.resena.update({
+      where: { id },
+      data: {
+        aprobado,
+        estado: aprobado ? ResenaState.APROBADA : ResenaState.RECHAZADA,
+      },
     });
   }
 

@@ -78,6 +78,30 @@ export class ResenaController {
     return this.resenaService.update(id, updateResenaDto);
   }
 
+  @Patch(':id/aprobar')
+  @ApiOperation({ summary: 'Aprobar o rechazar una reseña' })
+  @ApiResponse({ status: 200, description: 'Estado de la reseña actualizado.' })
+  @ApiNotFoundResponse({ description: 'Reseña no encontrada.' })
+  @ApiBadRequestResponse({ description: 'Datos inválidos.' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        aprobado: {
+          type: 'boolean',
+          description: 'true para aprobar, false para rechazar',
+        },
+      },
+      required: ['aprobado'],
+    },
+  })
+  approve(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { aprobado: boolean },
+  ) {
+    return this.resenaService.approve(id, body.aprobado);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Eliminar una reseña por su ID' })
