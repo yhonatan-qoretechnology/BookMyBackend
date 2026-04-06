@@ -72,6 +72,7 @@ model UserData {
   idioma    String    @map("idioma") @db.VarChar(50)
   gender    String    @db.VarChar(50)
   birthdate DateTime?
+  direccion String?   @map("direccion") @db.VarChar(255)
   country   Country   @relation(fields: [countryId], references: [id])
   user      Users     @relation("UserToUserData", fields: [userId], references: [id])
 

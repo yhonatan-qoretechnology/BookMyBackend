@@ -552,6 +552,7 @@ export class AuthService {
       categoryIds,
       name,
       phone,
+      direccion,
       idioma,
       gender,
       birthdate,
@@ -569,6 +570,7 @@ export class AuthService {
     if (
       name !== undefined ||
       phone !== undefined ||
+      direccion !== undefined ||
       idioma !== undefined ||
       gender !== undefined ||
       birthdate !== undefined ||
@@ -579,6 +581,7 @@ export class AuthService {
         data: {
           ...(name !== undefined ? { name } : {}),
           ...(phone !== undefined ? { phone } : {}),
+          ...(direccion !== undefined ? { direccion } : {}),
           ...(idioma !== undefined ? { idioma } : {}),
           ...(gender !== undefined ? { gender } : {}),
           ...(birthdate !== undefined

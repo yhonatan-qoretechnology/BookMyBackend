@@ -51,6 +51,11 @@ export class UpdateUserDto {
   @IsString()
   phone?: string;
 
+  @ApiPropertyOptional({ description: 'Dirección del usuario' })
+  @IsOptional()
+  @IsString()
+  direccion?: string;
+
   @ApiPropertyOptional({ description: 'Idioma preferido' })
   @IsOptional()
   @IsString()
