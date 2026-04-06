@@ -6,7 +6,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  Matches,
   MaxLength,
 } from 'class-validator';
 
@@ -29,9 +28,6 @@ export class UpdateAdminUserDto {
   @Transform(({ value }) => (value === '' ? undefined : value))
   @IsOptional()
   @IsString()
-  @Matches(/^\+?\d{7,15}$/, {
-    message: 'El teléfono debe tener entre 7 y 15 dígitos, opcionalmente con +',
-  })
   phone?: string;
 
   @ApiPropertyOptional({

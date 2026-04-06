@@ -25,7 +25,7 @@ export class CreateAdminUserDto {
 
   @ApiProperty({ example: '+34123456789' })
   @IsString()
-  @Matches(/^\+?\d{7,15}$/)
+  @IsNotEmpty()
   phone: string;
 
   @ApiProperty({ example: 'María' })
