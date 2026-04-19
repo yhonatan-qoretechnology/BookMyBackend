@@ -157,6 +157,20 @@ export class AppointmentController {
     });
   }
 
+  @Get('calendar')
+  @ApiOperation({ summary: 'Reservas para calendario' })
+  getCalendar(
+    @Query('sedeId') sedeId: string,
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string,
+  ) {
+    return this.appointmentService.getCalendar({
+      sedeId: Number(sedeId),
+      fechaInicio,
+      fechaFin,
+    });
+  }
+
   @Get('users/:userId/services')
   @ApiOperation({
     summary: 'Listar servicios de un usuario separados por estado',

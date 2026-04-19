@@ -884,6 +884,91 @@ export class AppointmentService {
     });
   }
 
+  async getCalendar(options: {
+    sedeId: number;
+    fechaInicio?: string;
+    fechaFin?: string;
+  }) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let startDate = options.fechaInicio
+      ? new Date(`${options.fechaInicio}T00:00:00.000Z`)
+      : today;
+    let endDate = options.fechaFin
+      ? new Date(`${options.fechaFin}T23:59:59.999Z`)
+      : new Date(
+          Date.UTC(
+            new Date().getFullYear(),
+            new Date().getMonth() + 1,
+            0,
+            23,
+            59,
+            59,
+            999,
+          ),
+        );
+
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        sedeId: options.sedeId,
+        fecha: { gte: startDate, lte: endDate },
+      },
+      include: {
+        sede: true,
+        service: { include: { translations: true, prices: true } },
+        profesional: true,
+        user: { include: { UserData: true } },
+        Payment: true,
+      },
+      orderBy: [{ fecha: 'asc' }, { horaInicio: 'asc' }],
+    });
+
+    return appointments.map((apt) => ({
+      id: apt.id,
+      fecha: apt.fecha,
+      horaInicio: apt.horaInicio,
+      horaFin: apt.horaFin,
+      estado: apt.estado,
+      duracion: apt.duracion,
+      notas: apt.notas,
+      createdAt: apt.createdAt,
+      updatedAt: apt.updatedAt,
+      sede: {
+        id: apt.sede.id,
+        nombre: apt.sede.nombre,
+        direccion: apt.sede.direccion,
+        telefono: apt.sede.telefono,
+      },
+      service: {
+        id: apt.service.id,
+        nombre: apt.service.translations?.[0]?.name ?? 'Sin nombre',
+        descripcion: apt.service.translations?.[0]?.description ?? '',
+        precios: apt.service.prices,
+      },
+      profesional: {
+        id: apt.profesional.id,
+        nombre: apt.profesional.nombre,
+        telefono: apt.profesional.phone,
+      },
+      user: {
+        id: apt.user.id,
+        email: apt.user.email,
+        nombre: apt.user.UserData?.name ?? '',
+        telefono: apt.user.UserData?.phone ?? '',
+      },
+      payment: apt.Payment
+        ? {
+            id: apt.Payment.id,
+            method: apt.Payment.method,
+            totalAmount: apt.Payment.totalAmount,
+            paidAmount: apt.Payment.paidAmount,
+            status: apt.Payment.status,
+          }
+        : null,
+    }));
+  }
+
   async findOne(id: number) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
