@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { SwaggerModule } from '@nestjs/swagger';
 import * as Joi from 'joi';
 import { AuthModule } from './auth/auth.module';
+import { ChatModule } from './chat/chat.module';
 import { AppointmentModule } from './data/appointment/appointment.module';
 import { CategoryModule } from './data/category/category.module';
 import { DataModule } from './data/data.module';
@@ -64,6 +65,7 @@ import { StorageModule } from './storage/storage.module';
     DisponibilidadProfesionalModule,
     HorarioSedeModule,
     PaymentModule,
+    ChatModule,
   ],
 })
 export class AppModule {}
