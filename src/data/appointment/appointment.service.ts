@@ -1000,6 +1000,250 @@ export class AppointmentService {
     });
   }
 
+  async reschedule(
+    id: number,
+    data: {
+      fecha: string;
+      horaInicio: string;
+      horaFin?: string;
+      motivo?: string;
+    },
+  ) {
+    const cita = await this.prisma.appointment.findUnique({ where: { id } });
+    if (!cita) throw new NotFoundException('Cita no encontrada');
+
+    const oldFecha = cita.fecha.toISOString().split('T')[0];
+    const oldHoraInicio = cita.horaInicio
+      .toISOString()
+      .split('T')[1]
+      .slice(0, 8);
+
+    const fechaParts = data.fecha.split('-');
+    const año = parseInt(fechaParts[0]);
+    const mes = parseInt(fechaParts[1]) - 1;
+    const dia = parseInt(fechaParts[2]);
+
+    const horaInicioParts = data.horaInicio.split(':');
+    const horaInicio = new Date(
+      Date.UTC(
+        año,
+        mes,
+        dia,
+        parseInt(horaInicioParts[0]),
+        parseInt(horaInicioParts[1]),
+        parseInt(horaInicioParts[2]),
+      ),
+    );
+
+    const now = new Date();
+    if (horaInicio < now) {
+      throw new BadRequestException(
+        'No se puede agendar en una fecha u hora anterior a la actual',
+      );
+    }
+
+    let horaFin: Date;
+    if (data.horaFin) {
+      const horaFinParts = data.horaFin.split(':');
+      horaFin = new Date(
+        Date.UTC(
+          año,
+          mes,
+          dia,
+          parseInt(horaFinParts[0]),
+          parseInt(horaFinParts[1]),
+          parseInt(horaFinParts[2]),
+        ),
+      );
+    } else {
+      const duracionMinutos =
+        (cita.horaFin.getTime() - cita.horaInicio.getTime()) / (1000 * 60);
+      horaFin = new Date(horaInicio.getTime() + duracionMinutos * 60 * 1000);
+    }
+
+    if (horaFin <= horaInicio) {
+      throw new BadRequestException(
+        'La hora de fin debe ser posterior a la de inicio',
+      );
+    }
+
+    const durationMinutes = Math.round(
+      (horaFin.getTime() - horaInicio.getTime()) / (1000 * 60),
+    );
+    if (durationMinutes !== cita.duracion) {
+      throw new BadRequestException(
+        'La duración debe coincidir con la cita original: ' +
+          cita.duracion +
+          ' minutos',
+      );
+    }
+
+    const [profesional, sede] = await Promise.all([
+      this.prisma.profesional.findUnique({ where: { id: cita.profesionalId } }),
+      this.prisma.sede.findUnique({
+        where: { id: cita.sedeId },
+        include: { HorarioSede: true, DiaCerradoSede: true },
+      }),
+    ]);
+
+    if (!profesional) throw new BadRequestException('El profesional no existe');
+    if (profesional.state !== ClientState.enabled)
+      throw new BadRequestException('El profesional no está disponible');
+
+    if (!sede) throw new BadRequestException('La sede no existe');
+
+    const fecha = new Date(Date.UTC(año, mes, dia));
+    const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio);
+    const dayNames = [
+      'domingo',
+      'lunes',
+      'martes',
+      'miércoles',
+      'jueves',
+      'viernes',
+      'sábado',
+    ];
+    const horaEnTimezone = new Date(
+      horaInicio.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+    );
+
+    const horarioRegistro = sede.HorarioSede.find(
+      (r) => r.diaSemana === dayOfWeek && r.activo,
+    );
+    let scheduleRanges: { start: number; end: number }[] = [];
+
+    if (horarioRegistro) {
+      scheduleRanges = [
+        {
+          start: this.getMinutesFromHourString(horarioRegistro.horaApertura),
+          end: this.getMinutesFromHourString(horarioRegistro.horaCierre),
+        },
+      ];
+    } else if (sede.horario && typeof sede.horario === 'object') {
+      const normalizedTarget = this.normalizeKey(dayNames[dayOfWeek]);
+      const entry = Object.entries(
+        sede.horario as Record<string, string | null>,
+      ).find(([key]) => this.normalizeKey(key) === normalizedTarget)?.[1];
+      scheduleRanges = this.parseScheduleRanges(entry ?? undefined);
+    }
+
+    if (!scheduleRanges.length) {
+      throw new BadRequestException('La sede está cerrada el día seleccionado');
+    }
+
+    const inicio = this.getMinutesFromDate(horaInicio);
+    const fin = this.getMinutesFromDate(horaFin);
+
+    const fitsWithinSchedule = scheduleRanges.some((range) => {
+      const rangeLength = range.end - range.start;
+      if (durationMinutes > rangeLength) return false;
+      const adjustedEnd = range.end + durationMinutes;
+      return inicio >= range.start && inicio <= range.end && fin <= adjustedEnd;
+    });
+
+    if (!fitsWithinSchedule) {
+      throw new BadRequestException(
+        'La cita se encuentra fuera del horario operativo de la sede',
+      );
+    }
+
+    const appointmentDay = this.getDateInTimezone(fecha);
+    const diasCerradosRegistros = sede.DiaCerradoSede.length
+      ? sede.DiaCerradoSede
+      : Array.isArray(sede.diasCerrado)
+        ? (sede.diasCerrado as string[]).map((d) => ({
+            fecha: new Date(`${d}T00:00:00Z`),
+            todoElDia: true,
+            horaInicio: null,
+            horaFin: null,
+          }))
+        : [];
+
+    for (const cierreParcial of diasCerradosRegistros) {
+      if (!cierreParcial.fecha) continue;
+      const cierreFecha = new Date(cierreParcial.fecha);
+      if (Number.isNaN(cierreFecha.getTime())) continue;
+      const cierreDia = this.getDateInTimezone(cierreFecha);
+      if (cierreDia !== appointmentDay) continue;
+
+      if (cierreParcial.todoElDia ?? true) {
+        throw new BadRequestException(
+          'La sede está cerrada durante todo el día seleccionado',
+        );
+      }
+
+      if (cierreParcial.horaInicio && cierreParcial.horaFin) {
+        const cierreInicio = this.getMinutesFromHourString(
+          cierreParcial.horaInicio,
+        );
+        const cierreFin = this.getMinutesFromHourString(cierreParcial.horaFin);
+        if (this.rangesOverlap(inicio, fin, cierreInicio, cierreFin)) {
+          throw new BadRequestException(
+            'La cita se solapa con un cierre parcial de la sede',
+          );
+        }
+      }
+    }
+
+    const disponibilidad =
+      await this.prisma.disponibilidadProfesional.findUnique({
+        where: {
+          profesionalId_fecha: {
+            profesionalId: cita.profesionalId,
+            fecha: this.normalizeToDay(fecha),
+          },
+        },
+      });
+
+    if (disponibilidad) {
+      if (!disponibilidad.disponible)
+        throw new BadRequestException(
+          'El profesional no está disponible ese día',
+        );
+      if (disponibilidad.horaInicio && disponibilidad.horaFin) {
+        const dispoInicio = this.getMinutesFromHourString(
+          disponibilidad.horaInicio,
+        );
+        const dispoFin = this.getMinutesFromHourString(disponibilidad.horaFin);
+        if (inicio < dispoInicio || fin > dispoFin) {
+          throw new BadRequestException(
+            'La cita se encuentra fuera del rango disponible del profesional',
+          );
+        }
+      }
+    }
+
+    const overlapping = await this.prisma.appointment.findFirst({
+      where: {
+        id: { not: id },
+        profesionalId: cita.profesionalId,
+        fecha: fecha,
+        horaInicio: { lt: horaFin },
+        horaFin: { gt: horaInicio },
+      },
+    });
+
+    if (overlapping) {
+      throw new BadRequestException(
+        'El profesional ya tiene una cita en ese horario',
+      );
+    }
+
+    const motivo = data.motivo
+      ? `Reagendado: ${data.motivo}`
+      : `Reagendado el ${new Date().toISOString()}. Fecha anterior: ${oldFecha} ${oldHoraInicio}`;
+
+    return this.prisma.appointment.update({
+      where: { id },
+      data: {
+        fecha,
+        horaInicio,
+        horaFin,
+        notas: motivo,
+      },
+    });
+  }
+
   async cancel(id: number, motivo = 'Cancelado por el usuario') {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');

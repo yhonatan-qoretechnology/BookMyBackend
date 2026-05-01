@@ -12,6 +12,7 @@ import {
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
 @ApiTags('Appointments')
@@ -201,6 +202,15 @@ export class AppointmentController {
     @Body('motivo') motivo?: string,
   ) {
     return this.appointmentService.cancel(id, motivo);
+  }
+
+  @Patch(':id/reschedule')
+  @ApiOperation({ summary: 'Reagendar una cita' })
+  reschedule(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() rescheduleDto: RescheduleAppointmentDto,
+  ) {
+    return this.appointmentService.reschedule(id, rescheduleDto);
   }
 
   @Delete(':id')
