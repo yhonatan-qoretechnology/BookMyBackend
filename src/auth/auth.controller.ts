@@ -30,6 +30,7 @@ import { AuthService } from './auth.service';
 import { AuthUser } from './common/decorators/auth-user.decorator';
 import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
 import { ChangePasswordByAdminDto } from './dto/change-password-by-admin.dto';
+import { ChangePasswordOtpDto } from './dto/change-password-otp.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -227,6 +228,16 @@ export class AuthController {
   @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
   async validatePasswordOtp(@Body() dto: ValidatePasswordOtpDto) {
     return this.authService.validatePasswordOtp(dto);
+  }
+
+  @Patch('users/password/otp/change')
+  @ApiOperation({
+    summary: 'Cambiar contraseña usando OTP (recuperación de contraseña)',
+  })
+  @ApiBadRequestResponse({ description: 'Código OTP inválido o expirado.' })
+  @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
+  async changePasswordWithOtp(@Body() dto: ChangePasswordOtpDto) {
+    return this.authService.changePasswordWithOtp(dto);
   }
 
   @Patch('users/:id/password')

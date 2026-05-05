@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SftpStorageService } from '../storage/sftp-storage.service';
 import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
 import { ChangePasswordByAdminDto } from './dto/change-password-by-admin.dto';
+import { ChangePasswordOtpDto } from './dto/change-password-otp.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -286,7 +287,7 @@ export class AuthService {
       );
     }
 
-    await this.otpService.sendOtp({ email: dto.email });
+    await this.otpService.sendPasswordResetOtp({ email: dto.email });
 
     return { message: 'Se envió un código OTP al correo registrado.' };
   }
@@ -630,6 +631,24 @@ export class AuthService {
     await this.ensureOtpIsValid(dto.email, dto.code);
 
     return { message: 'Código OTP validado correctamente.' };
+  }
+
+  async changePasswordWithOtp(dto: ChangePasswordOtpDto) {
+    const otpRecord = await this.ensureOtpIsValid(dto.email, dto.code);
+
+    const { userId: persistedUserId, userAuth } =
+      await this.getUserAuthContextByEmailOrThrow(dto.email);
+
+    await this.ensureNewPasswordIsDifferent(dto.newPassword, userAuth.password);
+
+    await this.updatePasswordHash(persistedUserId, dto.newPassword);
+
+    await this.prisma.otp.update({
+      where: { id: otpRecord.id },
+      data: { verified: true },
+    });
+
+    return { message: 'Contraseña actualizada correctamente.' };
   }
 
   async changePasswordWithCurrent(userId: number, dto: ChangePasswordDto) {

@@ -40,4 +40,36 @@ export class MailService {
       html: template({ email, otp, url }),
     });
   }
+
+  async sendPasswordResetOtp(email: string, otp: string) {
+    const templatePathFromSrc = join(
+      process.cwd(),
+      'src',
+      'data',
+      'email',
+      'templates',
+      'reset-password.hbs',
+    );
+
+    let templateSource: string;
+
+    try {
+      templateSource = await readFile(templatePathFromSrc, 'utf-8');
+    } catch {
+      const templatePathFromDist = join(
+        __dirname,
+        'templates',
+        'reset-password.hbs',
+      );
+      templateSource = await readFile(templatePathFromDist, 'utf-8');
+    }
+
+    const template = Handlebars.compile(templateSource);
+
+    await this.transporter.sendMail({
+      to: email,
+      subject: 'Código para restablecer tu contraseña',
+      html: template({ email, otp }),
+    });
+  }
 }

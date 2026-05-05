@@ -39,6 +39,24 @@ export class OtpService {
     return { message: 'Código enviado al correo' };
   }
 
+  async sendPasswordResetOtp(dto: SendOtpDto) {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const expiresAt = dayjs().add(5, 'minutes').toDate();
+
+    await this.prisma.otp.create({
+      data: {
+        email: dto.email,
+        code,
+        expiresAt,
+      },
+    });
+
+    await this.mailService.sendPasswordResetOtp(dto.email, code);
+
+    return { message: 'Código enviado al correo' };
+  }
+
   async verifyOtp(dto: VerifyOtpDto) {
     // 1. Permite que la variable sea null.
     //    Quita la anotación de tipo explícita para que TypeScript infiera el tipo correcto.
