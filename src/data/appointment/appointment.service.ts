@@ -109,8 +109,19 @@ export class AppointmentService {
     service?: {
       translations: { language: string; name: string }[];
     } | null;
-    profesional?: { nombre: string } | null;
-    sede?: { nombre: string } | null;
+    profesional?: {
+      id: number;
+      nombre: string;
+      phone: string | null;
+      imagen: string | null;
+    } | null;
+    sede?: {
+      id: number;
+      nombre: string;
+      direccion: string | null;
+      telefono: string | null;
+      imagenes: string[] | null;
+    } | null;
   }) {
     const serviceName =
       appointment.service?.translations.find((translation) =>
@@ -141,8 +152,13 @@ export class AppointmentService {
       serviceName,
       profesionalId: appointment.profesionalId,
       profesionalNombre: appointment.profesional?.nombre ?? null,
+      profesionalTelefono: appointment.profesional?.phone ?? null,
+      profesionalImagen: appointment.profesional?.imagen ?? null,
       sedeId: appointment.sedeId,
       sedeNombre: appointment.sede?.nombre ?? null,
+      sedeDireccion: appointment.sede?.direccion ?? null,
+      sedeTelefono: appointment.sede?.telefono ?? null,
+      sedeImagenes: appointment.sede?.imagenes ?? null,
       estado: appointment.estado,
       fecha: fechaIso,
       horaInicio: horaInicioIso,
@@ -653,8 +669,18 @@ export class AppointmentService {
               translations: { select: { language: true, name: true } },
             },
           },
-          profesional: { select: { nombre: true } },
-          sede: { select: { nombre: true } },
+          profesional: {
+            select: { id: true, nombre: true, phone: true, imagen: true },
+          },
+          sede: {
+            select: {
+              id: true,
+              nombre: true,
+              direccion: true,
+              telefono: true,
+              imagenes: true,
+            },
+          },
         },
       }),
       this.prisma.appointment.findMany({
@@ -669,8 +695,18 @@ export class AppointmentService {
               translations: { select: { language: true, name: true } },
             },
           },
-          profesional: { select: { nombre: true } },
-          sede: { select: { nombre: true } },
+          profesional: {
+            select: { id: true, nombre: true, phone: true, imagen: true },
+          },
+          sede: {
+            select: {
+              id: true,
+              nombre: true,
+              direccion: true,
+              telefono: true,
+              imagenes: true,
+            },
+          },
         },
       }),
     ]);
