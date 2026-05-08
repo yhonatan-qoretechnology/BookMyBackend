@@ -421,4 +421,71 @@ export class SedeService {
       },
     });
   }
+
+  // 🔹 Reemplazar todas las imágenes de una sede
+  async replaceImagesInSede(id: number, files: Express.Multer.File[]) {
+    const sede = await this.prisma.sede.findUnique({ where: { id } });
+    if (!sede) {
+      throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
+    }
+
+    const imagenesActuales = sede.imagenes || [];
+
+    // Eliminar archivos físicos actuales
+    if (imagenesActuales.length > 0) {
+      await Promise.all(
+        imagenesActuales.map((img) => this.safeDeleteRemoteOrLocal(img)),
+      );
+    }
+
+    // Guardar nuevas imágenes
+    const nuevasImagenes = await Promise.all(
+      files.map((file) => this.storeSedeImage(id, file)),
+    );
+
+    return await this.prisma.sede.update({
+      where: { id },
+      data: {
+        imagenes: nuevasImagenes,
+      },
+    });
+  }
+
+  // 🔹 Reemplazar una imagen específica por índice
+  async replaceImageByIndex(
+    id: number,
+    index: number,
+    file: Express.Multer.File,
+  ) {
+    const sede = await this.prisma.sede.findUnique({ where: { id } });
+    if (!sede) {
+      throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
+    }
+
+    const imagenesActuales = sede.imagenes || [];
+
+    if (index < 0 || index >= imagenesActuales.length) {
+      throw new BadRequestException(
+        `Índice ${index} inválido. La sede tiene ${imagenesActuales.length} imágenes.`,
+      );
+    }
+
+    // Eliminar imagen antigua
+    const imagenAntigua = imagenesActuales[index];
+    await this.safeDeleteRemoteOrLocal(imagenAntigua);
+
+    // Guardar nueva imagen
+    const nuevaImagen = await this.storeSedeImage(id, file);
+
+    // Reemplazar en el array
+    const nuevasImagenes = [...imagenesActuales];
+    nuevasImagenes[index] = nuevaImagen;
+
+    return await this.prisma.sede.update({
+      where: { id },
+      data: {
+        imagenes: nuevasImagenes,
+      },
+    });
+  }
 }

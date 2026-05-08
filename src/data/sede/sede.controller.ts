@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UploadedFiles,
@@ -438,5 +439,45 @@ export class SedeController {
       );
     }
     return this.sedeService.removeImagesFromSede(id, imagenes);
+  }
+
+  // Reemplazar una imagen específica de una sede
+  @Put(':id/imagenes/:index')
+  @ApiOperation({
+    summary: 'Reemplazar una imagen específica de una sede por índice',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Imagen reemplazada exitosamente.',
+  })
+  @ApiNotFoundResponse({ description: 'Sede no encontrada o índice inválido.' })
+  @ApiBadRequestResponse({ description: 'Debe subir un archivo de imagen.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        imagen: {
+          type: 'string',
+          format: 'binary',
+          description: 'Nueva imagen para reemplazar la existente',
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('imagen', {
+      dest: './uploads/sedes/temp',
+    }),
+  )
+  async replaceImage(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('index', ParseIntPipe) index: number,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Debe subir un archivo de imagen.');
+    }
+    return this.sedeService.replaceImageByIndex(id, index, file);
   }
 }
