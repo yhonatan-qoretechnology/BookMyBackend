@@ -75,7 +75,7 @@ export class AdminManagementService {
 
   async listAdmins(user: AuthenticatedUser) {
     const baseWhere: Prisma.UsersWhereInput = {
-      role: { in: [Role.COMPANY_ADMIN, Role.BRANCH_ADMIN] },
+      role: { in: [Role.COMPANY_ADMIN, Role.BRANCH_ADMIN, Role.EMPLOYEE] },
       AdminProfile: { isNot: null },
     };
 
@@ -368,6 +368,51 @@ export class AdminManagementService {
     });
   }
 
+  async createBranchEmployee(
+    sedeId: number,
+    dto: CreateAdminUserDto,
+    user: AuthenticatedUser,
+    photoFile?: Express.Multer.File,
+  ) {
+    const sede = await this.prisma.sede.findUnique({
+      where: { id: sedeId },
+      select: { id: true, empresaId: true },
+    });
+
+    if (!sede) {
+      throw new NotFoundException(`La sede con ID ${sedeId} no existe.`);
+    }
+
+    if (dto.empresaId && dto.empresaId !== sede.empresaId) {
+      throw new BadRequestException(
+        'La sede seleccionada no pertenece a la empresa indicada.',
+      );
+    }
+
+    if (user.role === Role.COMPANY_ADMIN) {
+      if (!user.empresaId || user.empresaId !== sede.empresaId) {
+        throw new ForbiddenException(
+          'No puede crear empleados para sedes fuera de su empresa.',
+        );
+      }
+    }
+
+    if (user.role === Role.BRANCH_ADMIN) {
+      if (!user.sedeId || user.sedeId !== sede.id) {
+        throw new ForbiddenException(
+          'No puede crear empleados para otra sede.',
+        );
+      }
+    }
+
+    return this.createAdmin({
+      dto,
+      role: Role.EMPLOYEE,
+      empresaId: sede.empresaId,
+      sedeId: sede.id,
+    });
+  }
+
   private async createAdmin({
     dto,
     role,
@@ -525,9 +570,13 @@ export class AdminManagementService {
       );
     }
 
-    if (admin.role !== Role.COMPANY_ADMIN && admin.role !== Role.BRANCH_ADMIN) {
+    if (
+      admin.role !== Role.COMPANY_ADMIN &&
+      admin.role !== Role.BRANCH_ADMIN &&
+      admin.role !== Role.EMPLOYEE
+    ) {
       throw new BadRequestException(
-        `El usuario con ID ${userId} no es un administrador válido.`,
+        `El usuario con ID ${userId} no es un administrador o empleado válido.`,
       );
     }
 

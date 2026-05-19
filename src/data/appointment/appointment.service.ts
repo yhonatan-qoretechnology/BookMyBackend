@@ -1293,6 +1293,93 @@ export class AppointmentService {
     });
   }
 
+  async getProfesionalAppointments(profesionalId: number) {
+    const profesional = await this.prisma.profesional.findUnique({
+      where: { id: profesionalId },
+    });
+    if (!profesional) {
+      throw new NotFoundException('Profesional no encontrado');
+    }
+
+    const [pendingAppointments, completedAppointments] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          profesionalId,
+          estado: {
+            in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED],
+          },
+        },
+        orderBy: { fecha: 'asc' },
+        include: {
+          service: {
+            select: {
+              translations: { select: { language: true, name: true } },
+            },
+          },
+          profesional: {
+            select: { id: true, nombre: true, phone: true, imagen: true },
+          },
+          sede: {
+            select: {
+              id: true,
+              nombre: true,
+              direccion: true,
+              telefono: true,
+              imagenes: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              UserData: { select: { name: true, phone: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.appointment.findMany({
+        where: {
+          profesionalId,
+          estado: AppointmentStatus.COMPLETED,
+        },
+        orderBy: { fecha: 'desc' },
+        include: {
+          service: {
+            select: {
+              translations: { select: { language: true, name: true } },
+            },
+          },
+          profesional: {
+            select: { id: true, nombre: true, phone: true, imagen: true },
+          },
+          sede: {
+            select: {
+              id: true,
+              nombre: true,
+              direccion: true,
+              telefono: true,
+              imagenes: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              UserData: { select: { name: true, phone: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      pending: pendingAppointments.map((appointment) =>
+        this.buildAppointmentSummary(appointment),
+      ),
+      completed: completedAppointments.map((appointment) =>
+        this.buildAppointmentSummary(appointment),
+      ),
+    };
+  }
+
   async remove(id: number) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');

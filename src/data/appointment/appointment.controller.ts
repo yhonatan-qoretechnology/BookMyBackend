@@ -180,9 +180,54 @@ export class AppointmentController {
     return this.appointmentService.getUserServices(userId);
   }
 
+  @Get('professionals/:profesionalId/reservations')
+  @ApiOperation({
+    summary: 'Listar reservas de un profesional separadas por estado',
+    description:
+      'Obtiene todas las reservas de un profesional, organizadas en pendientes/confirmadas y completadas',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Reservas del profesional obtenidas correctamente',
+    schema: {
+      example: {
+        pending: [
+          {
+            appointmentId: 1,
+            serviceId: 1,
+            serviceName: 'Servicio ejemplo',
+            profesionalId: 1,
+            profesionalNombre: 'Juan Pérez',
+            profesionalTelefono: '123456789',
+            profesionalImagen: 'url-imagen',
+            sedeId: 1,
+            sedeNombre: 'Sede Centro',
+            sedeDireccion: 'Calle Principal 123',
+            sedeTelefono: '987654321',
+            sedeImagenes: ['url-imagen'],
+            estado: 'PENDING',
+            fecha: '2025-01-20T00:00:00.000Z',
+            horaInicio: '2025-01-20T10:00:00.000Z',
+            horaFin: '2025-01-20T11:00:00.000Z',
+          },
+        ],
+        completed: [],
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Profesional no encontrado',
+  })
+  async getProfesionalAppointments(
+    @Param('profesionalId', ParseIntPipe) profesionalId: number,
+  ) {
+    return this.appointmentService.getProfesionalAppointments(profesionalId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Obtener una cita por ID' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  async findOne(@Param('id', ParseIntPipe) id: number) {
     return this.appointmentService.findOne(id);
   }
 

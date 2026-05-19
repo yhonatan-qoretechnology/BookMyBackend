@@ -8,7 +8,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -74,7 +73,9 @@ export class CreateAdminUserDto {
   @IsOptional()
   photoFile?: Express.Multer.File;
 
-  @ApiPropertyOptional({ enum: [Role.COMPANY_ADMIN, Role.BRANCH_ADMIN] })
+  @ApiPropertyOptional({
+    enum: [Role.COMPANY_ADMIN, Role.BRANCH_ADMIN, Role.EMPLOYEE],
+  })
   @IsOptional()
   @IsEnum(Role)
   role?: Role;

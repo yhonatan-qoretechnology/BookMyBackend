@@ -432,6 +432,7 @@ model PaymentCard {
 enum ClientType {
   people
   business
+  employee
 }
 
 enum ClientState {
@@ -444,6 +445,7 @@ enum Role {
   SUPER_ADMIN
   COMPANY_ADMIN
   BRANCH_ADMIN
+  EMPLOYEE
   CLIENT
 }
 

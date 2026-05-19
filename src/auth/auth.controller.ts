@@ -62,7 +62,7 @@ export class AuthController {
     return this.authService.findUserById(id, user);
   }
 
-  @Post('register')
+  @Post(['register', 'users'])
   @ApiOperation({ summary: 'Registrar un nuevo usuario con foto opcional' })
   @ApiResponse({
     status: 201,
