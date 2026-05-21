@@ -106,6 +106,8 @@ export class AppointmentService {
     fecha: Date;
     horaInicio: Date;
     horaFin: Date;
+    duracion?: number;
+    notas?: string | null;
     service?: {
       translations: { language: string; name: string }[];
     } | null;
@@ -121,6 +123,18 @@ export class AppointmentService {
       direccion: string | null;
       telefono: string | null;
       imagenes: string[] | null;
+    } | null;
+    user?: {
+      id: number;
+      email: string;
+      UserData?: { name?: string | null; phone?: string | null } | null;
+    } | null;
+    Payment?: {
+      id: number;
+      method: string | null;
+      totalAmount: number | null;
+      paidAmount: number | null;
+      status: string | null;
     } | null;
   }) {
     const serviceName =
@@ -146,6 +160,9 @@ export class AppointmentService {
       );
     }
 
+    const userName = appointment.user?.UserData?.name ?? null;
+    const userPhone = appointment.user?.UserData?.phone ?? null;
+
     return {
       appointmentId: appointment.id,
       serviceId: appointment.serviceId,
@@ -159,10 +176,25 @@ export class AppointmentService {
       sedeDireccion: appointment.sede?.direccion ?? null,
       sedeTelefono: appointment.sede?.telefono ?? null,
       sedeImagenes: appointment.sede?.imagenes ?? null,
+      userId: appointment.user?.id ?? null,
+      userEmail: appointment.user?.email ?? null,
+      userNombre: userName,
+      userTelefono: userPhone,
       estado: appointment.estado,
       fecha: fechaIso,
       horaInicio: horaInicioIso,
       horaFin: horaFinIso,
+      duracion: appointment.duracion ?? null,
+      notas: appointment.notas ?? null,
+      payment: appointment.Payment
+        ? {
+            id: appointment.Payment.id,
+            method: appointment.Payment.method,
+            totalAmount: appointment.Payment.totalAmount,
+            paidAmount: appointment.Payment.paidAmount,
+            status: appointment.Payment.status,
+          }
+        : null,
     };
   }
 
@@ -1331,6 +1363,7 @@ export class AppointmentService {
           user: {
             select: {
               id: true,
+              email: true,
               UserData: { select: { name: true, phone: true } },
             },
           },
@@ -1363,6 +1396,7 @@ export class AppointmentService {
           user: {
             select: {
               id: true,
+              email: true,
               UserData: { select: { name: true, phone: true } },
             },
           },

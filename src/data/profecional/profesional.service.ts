@@ -588,6 +588,27 @@ export class ProfesionalService {
             nombre: true,
           },
         },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            UserData: {
+              select: {
+                name: true,
+                phone: true,
+              },
+            },
+          },
+        },
+        profesional: {
+          select: {
+            id: true,
+            nombre: true,
+            phone: true,
+            imagen: true,
+          },
+        },
+        Payment: true,
       },
     });
 
@@ -618,6 +639,31 @@ export class ProfesionalService {
             }
           : null,
         sede: appointment.sede,
+        profesional: appointment.profesional
+          ? {
+              id: appointment.profesional.id,
+              nombre: appointment.profesional.nombre,
+              telefono: appointment.profesional.phone,
+              imagen: appointment.profesional.imagen,
+            }
+          : null,
+        user: appointment.user
+          ? {
+              id: appointment.user.id,
+              email: appointment.user.email,
+              nombre: appointment.user.UserData?.name ?? null,
+              telefono: appointment.user.UserData?.phone ?? null,
+            }
+          : null,
+        payment: appointment.Payment
+          ? {
+              id: appointment.Payment.id,
+              method: appointment.Payment.method,
+              totalAmount: appointment.Payment.totalAmount,
+              paidAmount: appointment.Payment.paidAmount,
+              status: appointment.Payment.status,
+            }
+          : null,
       };
     });
   }
