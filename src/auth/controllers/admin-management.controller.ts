@@ -125,6 +125,32 @@ export class AdminManagementController {
     };
   }
 
+  @Post('branches/:sedeId/employees')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary:
+      'Crear un empleado de sede (EMPLOYEE) para la sede indicada',
+  })
+  @UseInterceptors(FileInterceptor('photoFile'))
+  async createBranchEmployee(
+    @Param('sedeId', ParseIntPipe) sedeId: number,
+    @Body() dto: CreateAdminUserDto,
+    @AuthUser() user: AuthenticatedUser,
+    @UploadedFile() photoFile?: Express.Multer.File,
+  ) {
+    const result = await this.adminManagementService.createBranchEmployee(
+      sedeId,
+      dto,
+      user,
+      photoFile,
+    );
+    return {
+      message: 'Empleado creado exitosamente',
+      employee: result.user,
+    };
+  }
+
   @Delete('admins/:userId')
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
   @ApiOperation({ summary: 'Eliminar un administrador por userId' })

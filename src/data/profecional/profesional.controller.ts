@@ -106,6 +106,25 @@ export class ProfesionalController {
     return this.profesionalService.update(id, updateProfesionalDto, user);
   }
 
+  @Patch(':id/datos')
+  @ApiOperation({
+    summary:
+      'Completar o actualizar los datos faltantes de un profesional existente',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Datos del profesional actualizados exitosamente.',
+  })
+  @ApiNotFoundResponse({ description: 'Profesional no encontrado.' })
+  @ApiBadRequestResponse({ description: 'Datos de entrada inválidos.' })
+  async updateMissingData(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateProfesionalDto: UpdateProfesionalDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.profesionalService.update(id, updateProfesionalDto, user);
+  }
+
   @Patch(':id/imagen')
   @ApiOperation({ summary: 'Actualizar la imagen de un profesional' })
   @ApiResponse({ status: 200, description: 'Imagen actualizada exitosamente.' })
