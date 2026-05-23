@@ -50,5 +50,6 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     EmpresaService,
     SedeService,
   ],
+  exports: [HashService, AccessControlService],
 })
 export class AuthModule {}

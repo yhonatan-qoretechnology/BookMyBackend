@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AppointmentStatus, Prisma, Role } from '@prisma/client';
+import { AppointmentStatus, ClientState, ClientType, Prisma, Role } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AccessControlService } from '../../auth/services/access-control/access-control.service';
@@ -15,6 +15,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SftpStorageService } from '../../storage/sftp-storage.service';
 import { CreateProfesionalDto } from './dto/create-profesional.dto';
 import { UpdateProfesionalDto } from './dto/update-profesional.dto';
+import { HashService } from '../../auth/services/hash/hash.service';
 
 @Injectable()
 export class ProfesionalService {
@@ -25,6 +26,7 @@ export class ProfesionalService {
     private readonly accessControlService: AccessControlService,
     private readonly sftpStorage: SftpStorageService,
     private readonly configService: ConfigService,
+    private readonly hashService: HashService,
   ) {}
 
   private async storeProfesionalImage(file: Express.Multer.File) {
@@ -44,6 +46,15 @@ export class ProfesionalService {
     }
 
     return this.moveProfesionalFileToFinalPath(file);
+  }
+
+  private generateTemporaryPassword(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+    let password = '';
+    for (let i = 0; i < 12; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
   }
 
   private async safeDeleteRemoteOrLocal(filePath: string) {
@@ -165,17 +176,64 @@ export class ProfesionalService {
         },
       });
 
-      return profesional;
+      // 4. NUEVO: Crear User automáticamente
+      const tempPassword = this.generateTemporaryPassword();
+      const phoneClean = createProfesionalDto.phone.replace(/\s+/g, '');
+      const email = `${phoneClean}@${createProfesionalDto.nombre.replace(/\s+/g, '').toLowerCase()}.com`;
+
+      const hashedPassword = await this.hashService.hash(tempPassword);
+
+      const createdUser = await this.prisma.users.create({
+        data: {
+          email: email,
+          clientType: ClientType.employee,
+          role: Role.EMPLOYEE,
+          state: ClientState.enabled,
+          UserAuth: {
+            create: {
+              email: email,
+              password: hashedPassword,
+            },
+          },
+          UserData: {
+            create: {
+              name: createProfesionalDto.nombre,
+              phone: createProfesionalDto.phone,
+              email: email,
+              countryId: 1,
+              idioma: 'es',
+              gender: 'No especificado',
+            },
+          },
+        },
+      });
+
+      // 5. Vincular Profesional con User
+      const linkedProfesional = await this.prisma.profesional.update({
+        where: { id: profesional.id },
+        data: { userId: createdUser.id },
+      });
+
+      return {
+        profesional: linkedProfesional,
+        user: {
+          id: createdUser.id,
+          email: createdUser.email,
+          role: createdUser.role,
+        },
+        tempPassword,
+      };
     } catch (error) {
-      // 4. Limpiar el archivo si algo falla
+      // 6. Limpiar el archivo si algo falla
       if (file) {
         await this.safeDeleteRemoteOrLocal(imagenPath || file.path);
       }
-      // 5. Manejar errores de Prisma, por ejemplo, teléfono duplicado
+      // 7. Manejar errores de Prisma, por ejemplo, teléfono duplicado
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
+          const field = error.meta?.target?.[0] || 'campo';
           throw new BadRequestException(
-            'El número de teléfono ya está en uso.',
+            `El ${field} ya está en uso.`,
           );
         }
       }

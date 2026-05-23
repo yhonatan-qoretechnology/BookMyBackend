@@ -22,6 +22,7 @@ import { RequestPasswordOtpDto } from './dto/request-password-otp.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ValidatePasswordOtpDto } from './dto/validate-password-otp.dto';
 import { ValidatePhoneDto } from './dto/validate-phone.dto';
+import { SetupProfessionalCredentialsDto } from './dto/setup-professional-credentials.dto';
 import { HashService } from './services/hash/hash.service';
 import { AuthenticatedUser } from './types/authenticated-user.interface';
 
@@ -888,6 +889,86 @@ export class AuthService {
       success: true,
       message: 'Número válido y disponible',
       formatted: phone,
+    };
+  }
+
+  async setupProfessionalCredentials(
+    dto: SetupProfessionalCredentialsDto,
+  ) {
+    // 1. Verificar que el profesional existe
+    const profesional = await this.prisma.profesional.findUnique({
+      where: { id: dto.profesionalId },
+      include: { user: true },
+    });
+
+    if (!profesional) {
+      throw new NotFoundException(
+        `Profesional con ID ${dto.profesionalId} no encontrado.`,
+      );
+    }
+
+    const hashedPassword = await this.hashService.hash(dto.password);
+
+    // 2. Si ya tiene user: actualizar
+    if (profesional.user) {
+      await this.prisma.userAuth.update({
+        where: { user_id: profesional.user.id },
+        data: {
+          email: dto.email,
+          password: hashedPassword,
+        },
+      });
+
+      await this.prisma.users.update({
+        where: { id: profesional.user.id },
+        data: { email: dto.email },
+      });
+
+      return {
+        message: 'Credenciales actualizadas exitosamente.',
+        profesionalId: dto.profesionalId,
+        email: dto.email,
+        role: 'EMPLOYEE',
+      };
+    }
+
+    // 3. Si NO tiene user: crear nuevo
+    const newUser = await this.prisma.users.create({
+      data: {
+        email: dto.email,
+        clientType: 'employee',
+        role: Role.EMPLOYEE,
+        state: 'enabled',
+        UserAuth: {
+          create: {
+            email: dto.email,
+            password: hashedPassword,
+          },
+        },
+        UserData: {
+          create: {
+            name: profesional.nombre,
+            phone: profesional.phone,
+            email: dto.email,
+            countryId: 1,
+            idioma: 'es',
+            gender: 'No especificado',
+          },
+        },
+      },
+    });
+
+    // 4. Vincular
+    await this.prisma.profesional.update({
+      where: { id: dto.profesionalId },
+      data: { userId: newUser.id },
+    });
+
+    return {
+      message: 'Credenciales creadas exitosamente.',
+      profesionalId: dto.profesionalId,
+      email: dto.email,
+      role: 'EMPLOYEE',
     };
   }
 }

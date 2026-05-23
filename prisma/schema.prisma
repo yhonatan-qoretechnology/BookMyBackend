@@ -27,6 +27,7 @@ model Users {
   UserLocation   UserLocation?  @relation("UserToLocation")
   paymentCards   PaymentCard[]
   payments       Payment[]
+  profesional    Profesional?
 
   @@index([email])
   @@map("users")
@@ -235,11 +236,13 @@ model Profesional {
   createdAt                 DateTime                    @default(now())
   updatedAt                 DateTime                    @updatedAt
   sedeId                    Int
+  userId                    Int?                        @unique @map("user_id")
   Appointment               Appointment[]
   DisponibilidadProfesional DisponibilidadProfesional[]
   sede                      Sede                        @relation(fields: [sedeId], references: [id])
   serviceSedeProfesional    ServiceSedeProfesional[]
   servicios                 Service[]                   @relation("ProfesionalToService")
+  user                      Users?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("profesionales")
 }

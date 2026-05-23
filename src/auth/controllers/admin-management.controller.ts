@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseIntPipe,
@@ -24,9 +25,11 @@ import { AuthUser } from '../common/decorators/auth-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateAdminUserDto } from '../dto/create-admin-user.dto';
 import { UpdateAdminUserDto } from '../dto/update-admin-user.dto';
+import { SetupProfessionalCredentialsDto } from '../dto/setup-professional-credentials.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { AdminManagementService } from '../services/admin-management/admin-management.service';
+import { AuthService } from '../auth.service';
 import { AuthenticatedUser } from '../types/authenticated-user.interface';
 
 @ApiTags('Administración de Administradores')
@@ -36,6 +39,7 @@ import { AuthenticatedUser } from '../types/authenticated-user.interface';
 export class AdminManagementController {
   constructor(
     private readonly adminManagementService: AdminManagementService,
+    private readonly authService: AuthService,
   ) {}
 
   @Get('admins')
@@ -158,5 +162,38 @@ export class AdminManagementController {
     @AuthUser() user: AuthenticatedUser,
   ) {
     return this.adminManagementService.activateUser(userId, user);
+  }
+
+  @Patch('profesionales/:id/setup-credentials')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ApiOperation({
+    summary: 'Configurar credenciales de un profesional existente',
+    description:
+      'Permite asignar email y contraseña a un profesional para que pueda iniciar sesión. Si el profesional ya tiene usuario, actualiza sus credenciales.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Credenciales configuradas exitosamente.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'No tiene permisos para configurar credenciales.',
+  })
+  @ApiResponse({ status: 404, description: 'Profesional no encontrado.' })
+  async setupProfessionalCredentials(
+    @Param('id', ParseIntPipe) profesionalId: number,
+    @Body() dto: SetupProfessionalCredentialsDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    const allowedRoles = [Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN];
+    if (
+      user &&
+      !allowedRoles.includes(user.role as any)
+    ) {
+      throw new ForbiddenException('No tiene permisos para configurar credenciales.');
+    }
+
+    dto.profesionalId = profesionalId;
+    return this.authService.setupProfessionalCredentials(dto);
   }
 }
