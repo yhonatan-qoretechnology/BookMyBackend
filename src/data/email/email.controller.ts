@@ -1,6 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SendEmailDto } from './dto/send-email.dto';
+import { SendInvoiceDto } from './dto/send-invoice.dto';
 import { MailService } from './mail.service';
 
 @ApiTags('Email')
@@ -21,5 +22,19 @@ export class EmailController {
       console.error('Error sending email:', error);
       return { message: 'An error occurred while sending the email.' };
     }
+  }
+
+  // enviar pdf
+
+  @Post('send-invoice')
+  @ApiOperation({
+    summary: 'Enviar factura PDF',
+  })
+  async sendInvoice(@Body() sendInvoiceDto: SendInvoiceDto) {
+    await this.mailService.sendInvoiceEmail(sendInvoiceDto);
+
+    return {
+      message: 'Factura enviada correctamente',
+    };
   }
 }

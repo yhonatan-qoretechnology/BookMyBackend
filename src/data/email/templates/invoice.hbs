@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang='es'>
+
+<head>
+  <meta charset='UTF-8' />
+
+  <style>
+
+    body {
+      font-family: Arial, sans-serif;
+      padding: 40px;
+      color: #1f2937;
+    }
+
+    .header {
+      background: #f3f4f6;
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .title {
+      font-size: 30px;
+      font-weight: bold;
+    }
+
+    table {
+      width: 100%;
+      margin-top: 40px;
+      border-collapse: collapse;
+    }
+
+    th {
+      text-align: left;
+      padding-bottom: 12px;
+      font-size: 13px;
+    }
+
+    td {
+      padding: 14px 0;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .total {
+      margin-top: 40px;
+      width: 250px;
+      margin-left: auto;
+      background: #f3f4f6;
+      padding: 20px;
+      border-radius: 12px;
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+  <div class='header'>
+
+    <div>
+      <div class='title'>Factura</div>
+
+      <p>A nombre de</p>
+
+      <strong>{{clientName}}</strong>
+
+      <p>{{sede}}</p>
+    </div>
+
+    <div>
+      <p>No</p>
+
+      <strong>{{invoiceNumber}}</strong>
+
+      <p>Fecha</p>
+
+      <strong>{{date}}</strong>
+    </div>
+
+  </div>
+
+  <table>
+
+    <thead>
+      <tr>
+        <th>Descripción</th>
+        <th>Qty.</th>
+        <th>Costo</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+
+    <tbody>
+
+      {{#each services}}
+      <tr>
+        <td>{{this.name}}</td>
+        <td>{{this.qty}}</td>
+        <td>€{{this.price}}</td>
+        <td>€{{this.total}}</td>
+      </tr>
+      {{/each}}
+
+    </tbody>
+
+  </table>
+
+  <div class='total'>
+    <p>Subtotal: €{{subtotal}}</p>
+
+    <h2>Total: €{{total}}</h2>
+  </div>
+
+</body>
+
+</html>

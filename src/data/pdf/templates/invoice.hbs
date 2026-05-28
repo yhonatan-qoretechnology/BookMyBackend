@@ -1,0 +1,107 @@
+<html lang='es'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <title>Factura</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; } body { font-family:
+      'Arial', sans-serif; background-color: #f5f5f5; color: #333; }
+      .invoice-container { max-width: 800px; margin: 20px auto;
+      background-color: white; padding: 40px; box-shadow: 0 0 10px
+      rgba(0,0,0,0.1); } .invoice-header { display: flex; justify-content:
+      space-between; align-items: center; margin-bottom: 40px; border-bottom:
+      2px solid #007bff; padding-bottom: 20px; } .company-info h1 { color:
+      #007bff; font-size: 28px; margin-bottom: 5px; } .invoice-number {
+      text-align: right; } .invoice-number h2 { color: #007bff; font-size: 24px;
+      margin-bottom: 10px; } .invoice-number p { margin: 5px 0; font-size: 14px;
+      } .invoice-details { display: flex; justify-content: space-between;
+      margin-bottom: 30px; gap: 40px; } .detail-section { flex: 1; }
+      .detail-section h3 { color: #007bff; font-size: 14px; text-transform:
+      uppercase; margin-bottom: 10px; font-weight: bold; } .detail-section p {
+      font-size: 14px; margin: 5px 0; line-height: 1.6; } .services-table {
+      width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+      .services-table thead { background-color: #007bff; color: white; }
+      .services-table thead th { padding: 12px; text-align: left; font-weight:
+      bold; font-size: 14px; } .services-table tbody td { padding: 12px;
+      border-bottom: 1px solid #ddd; font-size: 14px; } .services-table tbody
+      tr:nth-child(even) { background-color: #f9f9f9; } .text-right {
+      text-align: right; } .text-center { text-align: center; } .totals-section
+      { display: flex; justify-content: flex-end; margin-bottom: 40px; }
+      .totals-box { width: 300px; } .total-row { display: flex; justify-content:
+      space-between; padding: 10px 0; font-size: 14px; border-bottom: 1px solid
+      #ddd; } .total-row.subtotal { font-weight: normal; }
+      .total-row.grand-total { background-color: #007bff; color: white; padding:
+      15px; font-size: 18px; font-weight: bold; margin-top: 10px; border: none;
+      } .footer { border-top: 2px solid #ddd; padding-top: 20px; text-align:
+      center; font-size: 12px; color: #666; margin-top: 40px; }
+    </style>
+  </head>
+  <body>
+    <div class='invoice-container'>
+      <!-- Header -->
+      <div class='invoice-header'>
+        <div class='company-info'>
+          <h1>FACTURA</h1>
+          <p style='color: #666; margin-top: 5px;'>{{sede}}</p>
+        </div>
+        <div class='invoice-number'>
+          <h2>{{invoiceNumber}}</h2>
+          <p><strong>Fecha:</strong> {{date}}</p>
+        </div>
+      </div>
+
+      <!-- Details -->
+      <div class='invoice-details'>
+        <div class='detail-section'>
+          <h3>Cliente</h3>
+          <p><strong>{{clientName}}</strong></p>
+        </div>
+        <div class='detail-section'>
+          <h3>Sede</h3>
+          <p>{{sede}}</p>
+        </div>
+      </div>
+
+      <!-- Services Table -->
+      <table class='services-table'>
+        <thead>
+          <tr>
+            <th style='width: 50%;'>Descripción</th>
+            <th style='width: 15%; text-align: center;'>Cantidad</th>
+            <th style='width: 15%; text-align: right;'>Precio</th>
+            <th style='width: 20%; text-align: right;'>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each services}}
+            <tr>
+              <td>{{this.name}}</td>
+              <td class='text-center'>{{this.qty}}</td>
+              <td class='text-right'>${{this.price}}</td>
+              <td class='text-right'><strong>${{this.total}}</strong></td>
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+
+      <!-- Totals -->
+      <div class='totals-section'>
+        <div class='totals-box'>
+          <div class='total-row subtotal'>
+            <span>Subtotal:</span>
+            <span>${{subtotal}}</span>
+          </div>
+          <div class='total-row grand-total'>
+            <span>Total:</span>
+            <span>${{total}}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class='footer'>
+        <p>Gracias por su compra. Este documento es su recibo de transacción.</p>
+      </div>
+    </div>
+  </body>
+</html>
