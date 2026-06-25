@@ -37,6 +37,18 @@ $ pnpm install -g @nestjs/mau
 $ mau deploy
 ```
 
+//--prisma
+
+Comandos seguros
+
+Estos NO borran datos:
+
+npx prisma db pull
+npx prisma generate
+npx prisma studio // abrir bd
+
+---
+
 --Comandos
 rm node_modules -force
 npm i

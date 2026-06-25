@@ -25,6 +25,7 @@ import { UserCategoriesModule } from './data/userCategory/user-categories.module
 import { PrismaModule } from './prisma/prisma.module';
 import { SeedModule } from './seed/seed.module';
 import { StorageModule } from './storage/storage.module';
+import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { StorageModule } from './storage/storage.module';
     HorarioSedeModule,
     PaymentModule,
     ChatModule,
+    ChatMessageModule,
   ],
 })
 export class AppModule {}

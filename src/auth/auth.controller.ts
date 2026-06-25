@@ -148,15 +148,15 @@ export class AuthController {
     return this.authService.recoveryPass(token, newPassword);
   }
   /*
-  //GET
-/auth/user-existence-contact/{email}/{phone}
-  @Get('user-existence-contact/{:email}/{:phone}')
-  async checkUserExistence(
-    @Param('email') email: string,
-    @Param('phone') phone: string,
-  ) {
-    return this.authService.checkUserExistence(email, phone);
-  }*/
+    //GET
+  /auth/user-existence-contact/{email}/{phone}
+    @Get('user-existence-contact/{:email}/{:phone}')
+    async checkUserExistence(
+      @Param('email') email: string,
+      @Param('phone') phone: string,
+    ) {
+      return this.authService.checkUserExistence(email, phone);
+    }*/
 
   @Post('validate-phone')
   async validatePhone(@Body() dto: ValidatePhoneDto) {

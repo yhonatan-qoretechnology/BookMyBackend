@@ -8,25 +8,33 @@ datasource db {
 }
 
 model Users {
-  id             Int            @id @default(autoincrement()) @map("id")
-  email          String         @unique @map("email") @db.VarChar(100)
-  clientType     ClientType     @default(people) @map("client_type")
-  state          ClientState    @default(disabled) @map("state")
-  acceptTerms    Boolean        @default(false) @map("accept_terms")
-  acceptPolitics Boolean        @default(false) @map("accept_polits")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
-  fotoPerfil     String?        @map("foto_perfil")
-  role           Role           @default(CLIENT) @map("role")
-  Appointment    Appointment[]
-  AdminProfile   AdminProfile?
-  resenas        Resena[]       @relation("UserToResena")
-  UserAuth       UserAuth?      @relation("UserToUserAuth")
-  UserCategories UserCategory[]
-  UserData       UserData?      @relation("UserToUserData")
-  UserLocation   UserLocation?  @relation("UserToLocation")
-  paymentCards   PaymentCard[]
-  payments       Payment[]
+  id                                               Int            @id @default(autoincrement()) @map("id")
+  email                                            String         @unique @map("email") @db.VarChar(100)
+  clientType                                       ClientType     @default(people) @map("client_type")
+  state                                            ClientState    @default(disabled) @map("state")
+  acceptTerms                                      Boolean        @default(false) @map("accept_terms")
+  acceptPolitics                                   Boolean        @default(false) @map("accept_polits")
+  createdAt                                        DateTime       @default(now()) @map("created_at")
+  updatedAt                                        DateTime       @updatedAt @map("updated_at")
+  fotoPerfil                                       String?        @map("foto_perfil")
+  role                                             Role           @default(CLIENT) @map("role")
+  status_id                                        Int?           @default(7)
+  Appointment                                      Appointment[]
+  AdminProfile                                     AdminProfile?
+  chat_chat_receiver_idTousers                     chat[]         @relation("chat_receiver_idTousers")
+  chat_chat_sender_idTousers                       chat[]         @relation("chat_sender_idTousers")
+  chat_contact_chat_contact_owner_user_idTousers   chat_contact[] @relation("chat_contact_owner_user_idTousers")
+  chat_contact_chat_contact_contact_user_idTousers chat_contact[] @relation("chat_contact_contact_user_idTousers")
+  chat_log                                         chat_log[]
+  paymentCards                                     PaymentCard[]
+  payments                                         Payment[]
+  profesionales                                    Profesional?
+  resenas                                          Resena[]       @relation("UserToResena")
+  UserAuth                                         UserAuth?      @relation("UserToUserAuth")
+  UserCategories                                   UserCategory[]
+  UserData                                         UserData?      @relation("UserToUserData")
+  UserLocation                                     UserLocation?  @relation("UserToLocation")
+  UserStatus                                       UserStatus?    @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_status")
 
   @@index([email])
   @@map("users")
@@ -235,12 +243,15 @@ model Profesional {
   createdAt                 DateTime                    @default(now())
   updatedAt                 DateTime                    @updatedAt
   sedeId                    Int
+  user_id                   Int?                        @unique
   Appointment               Appointment[]
   DisponibilidadProfesional DisponibilidadProfesional[]
   sede                      Sede                        @relation(fields: [sedeId], references: [id])
+  users                     Users?                      @relation(fields: [user_id], references: [id])
   serviceSedeProfesional    ServiceSedeProfesional[]
   servicios                 Service[]                   @relation("ProfesionalToService")
 
+  @@index([user_id])
   @@map("profesionales")
 }
 
@@ -281,9 +292,9 @@ model Service {
   categoryId             Int
   imagenes               String[]
   Appointment            Appointment[]
-  payments               Payment[]
   prices                 Price[]
   translations           ServiceTranslation[]
+  payments               Payment[]
   serviceSedeProfesional ServiceSedeProfesional[]
   category               Category                 @relation(fields: [categoryId], references: [id])
   profesionales          Profesional[]            @relation("ProfesionalToService")
@@ -386,9 +397,6 @@ model DisponibilidadProfesional {
 model Payment {
   id             Int           @id @default(autoincrement())
   appointmentId  Int           @unique
-  userId         Int
-  serviceId      Int
-  cardId         Int?
   method         PaymentMethod
   status         PaymentStatus @default(PENDING)
   totalAmount    Float
@@ -398,15 +406,17 @@ model Payment {
   bankResponse   Json?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  cardId         Int?
+  serviceId      Int
+  userId         Int
   appointment    Appointment   @relation(fields: [appointmentId], references: [id])
-  user           Users         @relation(fields: [userId], references: [id])
-  service        Service       @relation(fields: [serviceId], references: [id])
   card           PaymentCard?  @relation(fields: [cardId], references: [id])
+  service        Service       @relation(fields: [serviceId], references: [id])
+  user           Users         @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([serviceId])
   @@index([cardId])
-
   @@map("payments")
 }
 
@@ -429,10 +439,72 @@ model PaymentCard {
   @@map("payment_cards")
 }
 
+model UserStatus {
+  id                    Int                     @id @default(autoincrement())
+  code                  String                  @unique @db.VarChar(50)
+  createdAt             DateTime                @default(now()) @db.Timestamp(6)
+  updatedAt             DateTime                @default(now()) @db.Timestamp(6)
+  UserStatusTranslation UserStatusTranslation[]
+  users                 Users[]
+}
+
+model UserStatusTranslation {
+  id           Int        @id @default(autoincrement())
+  userStatusId Int
+  language     String
+  name         String
+  description  String?
+  UserStatus   UserStatus @relation(fields: [userStatusId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_user_status_translation")
+}
+
+model chat {
+  id                            Int        @id @default(autoincrement())
+  sender_id                     Int
+  receiver_id                   Int
+  sender_email                  String     @db.VarChar(100)
+  receiver_email                String     @db.VarChar(100)
+  message_type                  String     @default("TEXT") @db.VarChar(20)
+  message                       String?
+  file_url                      String?
+  is_read                       Boolean    @default(false)
+  read_at                       DateTime?  @db.Timestamp(6)
+  created_at                    DateTime   @default(now()) @db.Timestamp(6)
+  updated_at                    DateTime   @default(now()) @db.Timestamp(6)
+  users_chat_receiver_idTousers Users      @relation("chat_receiver_idTousers", fields: [receiver_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_chat_receiver")
+  users_chat_sender_idTousers   Users      @relation("chat_sender_idTousers", fields: [sender_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_chat_sender")
+  chat_log                      chat_log[]
+}
+
+model chat_log {
+  id         Int      @id @default(autoincrement())
+  chat_id    Int
+  user_id    Int?
+  action     String   @db.VarChar(50)
+  details    Json?
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  chat       chat     @relation(fields: [chat_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_chat_log_chat")
+  users      Users?   @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_chat_log_user")
+
+  @@index([action], map: "idx_chat_log_action")
+  @@index([chat_id], map: "idx_chat_log_chat_id")
+  @@index([created_at], map: "idx_chat_log_created_at")
+  @@index([user_id], map: "idx_chat_log_user_id")
+}
+
+model chat_contact {
+  id                                        Int      @id @default(autoincrement())
+  owner_user_id                             Int
+  contact_user_id                           Int
+  created_at                                DateTime @default(now()) @db.Timestamp(6)
+  users_chat_contact_owner_user_idTousers   Users    @relation("chat_contact_owner_user_idTousers", fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_chat_contact_owner")
+  users_chat_contact_contact_user_idTousers Users    @relation("chat_contact_contact_user_idTousers", fields: [contact_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_chat_contact_user")
+
+  @@unique([owner_user_id, contact_user_id], map: "uq_chat_contact")
+}
+
 enum ClientType {
   people
   business
-  employee
 }
 
 enum ClientState {
@@ -445,7 +517,6 @@ enum Role {
   SUPER_ADMIN
   COMPANY_ADMIN
   BRANCH_ADMIN
-  EMPLOYEE
   CLIENT
 }
 
