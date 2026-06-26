@@ -54,6 +54,12 @@ export class ChatMessageService {
             },
           },
         },
+        UserData: {
+          select: {
+            name: true,
+            phone: true,
+          },
+        },
       },
     });
   }
