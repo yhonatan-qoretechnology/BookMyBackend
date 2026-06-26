@@ -2,7 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { ChatMessageService } from './chatMessage.service';
-import { SearchUserDto } from './dto/search-user.dto';
+import { SearchUserDto } from './dto/search-chat-user.dto';
 
 @ApiTags('ChatMessage')
 @Controller('ChatMessage')

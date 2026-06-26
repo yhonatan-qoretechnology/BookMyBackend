@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from 'src/prisma/prisma.service';
-import { SearchUserDto } from './dto/search-user.dto';
+import { SearchUserDto } from './dto/search-chat-user.dto';
 
 @Injectable()
 export class ChatMessageService {
