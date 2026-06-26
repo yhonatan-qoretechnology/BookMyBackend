@@ -513,10 +513,13 @@ enum ClientState {
   blocked
 }
 
+
+
 enum Role {
   SUPER_ADMIN
   COMPANY_ADMIN
   BRANCH_ADMIN
+  EMPLOYEE
   CLIENT
 }
 

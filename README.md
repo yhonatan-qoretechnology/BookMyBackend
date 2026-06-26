@@ -235,3 +235,8 @@ npx prisma migrate dev
 npx prisma db push
 npx prisma generate
 npx prisma studio - muetra la db ene le navegador
+
+// se agrego role SELECT unnest(enum_range(NULL::"Role"));
+
+ALTER TYPE "Role"
+ADD VALUE 'EMPLOYEE';
