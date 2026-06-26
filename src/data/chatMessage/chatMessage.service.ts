@@ -160,4 +160,26 @@ export class ChatMessageService {
       },
     });
   }
+
+  //funcion de envio de mensajes de chat
+
+  async getConversation(userA: number, userB: number) {
+    return this.prisma.chat.findMany({
+      where: {
+        OR: [
+          {
+            sender_id: userA,
+            receiver_id: userB,
+          },
+          {
+            sender_id: userB,
+            receiver_id: userA,
+          },
+        ],
+      },
+      orderBy: {
+        created_at: 'asc',
+      },
+    });
+  }
 }

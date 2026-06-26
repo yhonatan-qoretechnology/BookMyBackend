@@ -37,7 +37,9 @@
     "@nestjs/jwt": "11.0.0",
     "@nestjs/passport": "11.0.5",
     "@nestjs/platform-express": "11.1.6",
+    "@nestjs/platform-socket.io": "^11.1.27",
     "@nestjs/swagger": "11.2.0",
+    "@nestjs/websockets": "^11.1.27",
     "@prisma/adapter-pg": "^6.19.2",
     "@prisma/client": "^6.19.2",
     "@types/express": "5.0.0",
@@ -61,6 +63,7 @@
     "reflect-metadata": "0.2.2",
     "rimraf": "5.0.7",
     "rxjs": "7.8.1",
+    "socket.io": "^4.8.3",
     "ssh2-sftp-client": "^12.1.0",
     "twilio": "5.8.0",
     "uuid": "13.0.0"

@@ -47,4 +47,20 @@ export class ChatMessageController {
   async getContacts(@Param('userId', ParseIntPipe) userId: number) {
     return this.chatMessageService.getContacts(userId);
   }
+
+  //enviar mensajes de chat
+
+  /**
+   * Get conversation messages.
+   */
+  @Get('messages/:userA/:userB')
+  @ApiOperation({
+    summary: 'Get conversation messages',
+  })
+  async getConversation(
+    @Param('userA', ParseIntPipe) userA: number,
+    @Param('userB', ParseIntPipe) userB: number,
+  ) {
+    return this.chatMessageService.getConversation(userA, userB);
+  }
 }
