@@ -2,7 +2,9 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateChatContactDto } from './dto/create-chat-contact.dto';
+import { MarkMessageReadDto } from './dto/mark-message-read.dto';
 import { SearchUserDto } from './dto/search-chat-user.dto';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @Injectable()
 export class ChatMessageService {
@@ -185,6 +187,51 @@ export class ChatMessageService {
       },
       orderBy: {
         created_at: 'asc',
+      },
+    });
+  }
+
+  /**
+   * Save a chat message in the database.
+   */
+  async createMessage(dto: SendMessageDto) {
+    return this.prisma.chat.create({
+      data: {
+        sender_id: dto.senderId,
+        receiver_id: dto.receiverId,
+        sender_email: dto.senderEmail,
+        receiver_email: dto.receiverEmail,
+        message_type: dto.messageType,
+        message: dto.message ?? null,
+        file_url: dto.fileUrl ?? null,
+      },
+    });
+  }
+
+  async markMessageAsRead(dto: MarkMessageReadDto) {
+    const message = await this.prisma.chat.findUnique({
+      where: {
+        id: dto.chatId,
+      },
+    });
+
+    if (!message) {
+      throw new BadRequestException('Chat message not found.');
+    }
+
+    if (message.receiver_id !== dto.userId) {
+      throw new BadRequestException(
+        'Only the receiver can mark the message as read.',
+      );
+    }
+
+    return this.prisma.chat.update({
+      where: {
+        id: dto.chatId,
+      },
+      data: {
+        is_read: true,
+        read_at: new Date(),
       },
     });
   }

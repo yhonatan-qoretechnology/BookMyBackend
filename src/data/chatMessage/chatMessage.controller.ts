@@ -11,7 +11,9 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { ChatMessageService } from './chatMessage.service';
 import { CreateChatContactDto } from './dto/create-chat-contact.dto';
+import { MarkMessageReadDto } from './dto/mark-message-read.dto';
 import { SearchUserDto } from './dto/search-chat-user.dto';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @ApiTags('ChatMessage')
 @Controller('ChatMessage')
@@ -62,5 +64,21 @@ export class ChatMessageController {
     @Param('userB', ParseIntPipe) userB: number,
   ) {
     return this.chatMessageService.getConversation(userA, userB);
+  }
+
+  @Post('messages')
+  @ApiOperation({
+    summary: 'Save chat message',
+  })
+  async createMessage(@Body() dto: SendMessageDto) {
+    return this.chatMessageService.createMessage(dto);
+  }
+
+  @Post('messages/read')
+  @ApiOperation({
+    summary: 'Mark a chat message as read',
+  })
+  async markMessageAsRead(@Body() dto: MarkMessageReadDto) {
+    return this.chatMessageService.markMessageAsRead(dto);
   }
 }
