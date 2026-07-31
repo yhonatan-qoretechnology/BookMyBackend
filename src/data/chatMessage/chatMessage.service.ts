@@ -8,7 +8,7 @@ import { AccessControlService } from 'src/auth/services/access-control/access-co
 import { AuthenticatedUser } from 'src/auth/types/authenticated-user.interface';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { SftpStorageService } from 'src/storage/sftp-storage.service';
-import { CHAT_AUDIO_MIME_TYPES, CHAT_UPLOAD_DIR } from './chat-file.constants';
+import { CHAT_AUDIO_UPLOAD_DIR, CHAT_UPLOAD_DIR } from './chat-file.constants';
 import { compressChatImageInPlace } from './chat-image-compressor';
 import { CreateChatContactDto } from './dto/create-chat-contact.dto';
 import { MarkMessageReadDto } from './dto/mark-message-read.dto';
@@ -274,24 +274,21 @@ export class ChatMessageService {
   }
 
   /**
-   * Store a chat attachment (image, PDF or audio) and return its public URL.
-   *
-   * The file is moved to `uploads/chatmessage` (or synced via SFTP when
-   * configured) so both participants of the conversation can load it from
-   * the same public URL once it is attached to a message.
+   * Move a chat attachment to its final storage location (SFTP or local
+   * `uploads/<uploadDir>`) and return its public URL, applying image
+   * compression when applicable. Shared by storeChatFile and
+   * storeChatAudio, each passing its own subfolder so images/PDF and
+   * audio never mix on disk.
    */
-  async storeChatFile(file: Express.Multer.File) {
+  private async persistChatAttachment(
+    file: Express.Multer.File,
+    uploadDir: string,
+  ) {
     const ext = path.extname(file.originalname) || '';
     const finalFileName = `${file.filename}${ext}`;
     const relativePath = path
-      .join('uploads', CHAT_UPLOAD_DIR, finalFileName)
+      .join('uploads', uploadDir, finalFileName)
       .replace(/\\/g, '/');
-
-    const messageType = CHAT_AUDIO_MIME_TYPES.includes(file.mimetype)
-      ? MessageType.AUDIO
-      : file.mimetype === 'application/pdf'
-        ? MessageType.FILE
-        : MessageType.IMAGE;
 
     const tempAbsPath = path.isAbsolute(file.path)
       ? file.path
@@ -310,16 +307,10 @@ export class ChatMessageService {
         deleteLocalAfter: true,
       });
 
-      return {
-        fileUrl: publicUrl,
-        messageType,
-        fileName: file.originalname,
-        mimeType: file.mimetype,
-        sizeBytes,
-      };
+      return { fileUrl: publicUrl, sizeBytes };
     }
 
-    const uploadDirAbs = path.join(process.cwd(), 'uploads', CHAT_UPLOAD_DIR);
+    const uploadDirAbs = path.join(process.cwd(), 'uploads', uploadDir);
     if (!fs.existsSync(uploadDirAbs)) {
       fs.mkdirSync(uploadDirAbs, { recursive: true });
     }
@@ -338,12 +329,45 @@ export class ChatMessageService {
 
     const fileUrl = baseUrl ? `${baseUrl}/${relativePath}` : `/${relativePath}`;
 
+    return { fileUrl, sizeBytes };
+  }
+
+  /**
+   * Store a chat attachment (image or PDF) and return its public URL.
+   */
+  async storeChatFile(file: Express.Multer.File) {
+    const messageType =
+      file.mimetype === 'application/pdf' ? MessageType.FILE : MessageType.IMAGE;
+
+    const { fileUrl, sizeBytes } = await this.persistChatAttachment(
+      file,
+      CHAT_UPLOAD_DIR,
+    );
+
     return {
       fileUrl,
       messageType,
       fileName: file.originalname,
       mimeType: file.mimetype,
-      sizeBytes: file.size,
+      sizeBytes,
+    };
+  }
+
+  /**
+   * Store a chat voice message (audio) and return its public URL.
+   */
+  async storeChatAudio(file: Express.Multer.File) {
+    const { fileUrl, sizeBytes } = await this.persistChatAttachment(
+      file,
+      CHAT_AUDIO_UPLOAD_DIR,
+    );
+
+    return {
+      fileUrl,
+      messageType: MessageType.AUDIO,
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+      sizeBytes,
     };
   }
 }

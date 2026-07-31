@@ -21,7 +21,7 @@ import {
   CHAT_MAX_FILE_SIZE_BYTES,
   CHAT_UPLOAD_TEMP_DIR,
 } from './chat-file.constants';
-import { chatFileFilter } from './chat-file.filter';
+import { chatAudioFileFilter, chatFileFilter } from './chat-file.filter';
 import { ChatMessageService } from './chatMessage.service';
 import { CreateChatContactDto } from './dto/create-chat-contact.dto';
 import { MarkMessageReadDto } from './dto/mark-message-read.dto';
@@ -107,19 +107,19 @@ export class ChatMessageController {
   }
 
   /**
-   * Upload a chat attachment (image, PDF or audio voice message).
+   * Upload a chat attachment (image or PDF).
    *
    * Returns the public fileUrl to send afterwards through the
-   * `send_message` WebSocket event (messageType: IMAGE | FILE | AUDIO).
+   * `send_message` WebSocket event (messageType: IMAGE | FILE).
    */
   @Post('upload')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: 'Upload a chat attachment (image, PDF or audio)',
+    summary: 'Upload a chat attachment (image or PDF)',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    description: 'Attachment file to upload (image, PDF or audio)',
+    description: 'Attachment file to upload (image or PDF)',
     schema: {
       type: 'object',
       properties: {
@@ -139,11 +139,50 @@ export class ChatMessageController {
   )
   async uploadFile(@UploadedFile() file?: Express.Multer.File) {
     if (!file) {
-      throw new BadRequestException(
-        'Debe subir un archivo (imagen, PDF o audio).',
-      );
+      throw new BadRequestException('Debe subir un archivo (imagen o PDF).');
     }
 
     return this.chatMessageService.storeChatFile(file);
+  }
+
+  /**
+   * Upload a chat voice message (audio).
+   *
+   * Separate endpoint from `/upload` so the front-end's file-attachment
+   * flow and its voice-recorder flow stay independent. Returns the public
+   * fileUrl to send afterwards through the `send_message` WebSocket event
+   * (messageType: AUDIO).
+   */
+  @Post('upload-audio')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Upload a chat voice message (audio)',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Audio file to upload (voice message)',
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      dest: CHAT_UPLOAD_TEMP_DIR,
+      limits: { fileSize: CHAT_MAX_FILE_SIZE_BYTES },
+      fileFilter: chatAudioFileFilter,
+    }),
+  )
+  async uploadAudio(@UploadedFile() file?: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Debe subir un archivo de audio.');
+    }
+
+    return this.chatMessageService.storeChatAudio(file);
   }
 }

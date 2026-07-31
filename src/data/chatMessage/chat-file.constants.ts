@@ -23,19 +23,21 @@ export const CHAT_AUDIO_MIME_TYPES = [
 ];
 
 /**
- * Allowed MIME types for chat attachments.
- *
- * Images, PDF and audio (voice messages) today. Extend the type-specific
- * lists above to enable more attachment kinds in the future (e.g. video).
+ * Allowed MIME types for the `POST /ChatMessage/upload` endpoint
+ * (images and PDF). Voice messages go through the separate
+ * `POST /ChatMessage/upload-audio` endpoint — see CHAT_AUDIO_MIME_TYPES.
  */
 export const CHAT_ALLOWED_MIME_TYPES = [
   ...CHAT_IMAGE_MIME_TYPES,
   ...CHAT_DOCUMENT_MIME_TYPES,
-  ...CHAT_AUDIO_MIME_TYPES,
 ];
 
 export const CHAT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 export const CHAT_UPLOAD_TEMP_DIR = './uploads/chatmessage/temp';
 
+/** Base folder for images/PDF from POST /ChatMessage/upload. */
 export const CHAT_UPLOAD_DIR = 'chatmessage';
+
+/** Separate subfolder for voice messages from POST /ChatMessage/upload-audio. */
+export const CHAT_AUDIO_UPLOAD_DIR = 'chatmessage/audio';
