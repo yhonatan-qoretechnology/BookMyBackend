@@ -1,14 +1,29 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Role } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
 
+import { AccessControlService } from 'src/auth/services/access-control/access-control.service';
+import { AuthenticatedUser } from 'src/auth/types/authenticated-user.interface';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { SftpStorageService } from 'src/storage/sftp-storage.service';
+import { CHAT_UPLOAD_DIR } from './chat-file.constants';
+import { compressChatImageInPlace } from './chat-image-compressor';
 import { CreateChatContactDto } from './dto/create-chat-contact.dto';
 import { MarkMessageReadDto } from './dto/mark-message-read.dto';
 import { SearchUserDto } from './dto/search-chat-user.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { MessageType } from './enums/message-type.enum';
 
 @Injectable()
 export class ChatMessageService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+    private readonly sftpStorage: SftpStorageService,
+    private readonly accessControlService: AccessControlService,
+  ) {}
 
   /**
    * Search users for chat.
@@ -171,7 +186,17 @@ export class ChatMessageService {
 
   //funcion de envio de mensajes de chat
 
-  async getConversation(userA: number, userB: number) {
+  async getConversation(
+    userA: number,
+    userB: number,
+    user: AuthenticatedUser,
+  ) {
+    await this.accessControlService.ensureChatAccessForUser(
+      userA,
+      userB,
+      user,
+    );
+
     return this.prisma.chat.findMany({
       where: {
         OR: [
@@ -194,7 +219,13 @@ export class ChatMessageService {
   /**
    * Save a chat message in the database.
    */
-  async createMessage(dto: SendMessageDto) {
+  async createMessage(dto: SendMessageDto, user: AuthenticatedUser) {
+    await this.accessControlService.ensureChatAccessForUser(
+      dto.senderId,
+      dto.receiverId,
+      user,
+    );
+
     return this.prisma.chat.create({
       data: {
         sender_id: dto.senderId,
@@ -208,7 +239,13 @@ export class ChatMessageService {
     });
   }
 
-  async markMessageAsRead(dto: MarkMessageReadDto) {
+  async markMessageAsRead(dto: MarkMessageReadDto, user: AuthenticatedUser) {
+    if (user.role !== Role.SUPER_ADMIN && user.userId !== dto.userId) {
+      throw new ForbiddenException(
+        'No puede marcar como leído un mensaje de otro usuario.',
+      );
+    }
+
     const message = await this.prisma.chat.findUnique({
       where: {
         id: dto.chatId,
@@ -234,5 +271,76 @@ export class ChatMessageService {
         read_at: new Date(),
       },
     });
+  }
+
+  /**
+   * Store a chat attachment (image or PDF) and return its public URL.
+   *
+   * The file is moved to `uploads/chatmessage` (or synced via SFTP when
+   * configured) so both participants of the conversation can load it from
+   * the same public URL once it is attached to a message.
+   */
+  async storeChatFile(file: Express.Multer.File) {
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const relativePath = path
+      .join('uploads', CHAT_UPLOAD_DIR, finalFileName)
+      .replace(/\\/g, '/');
+
+    const messageType =
+      file.mimetype === 'application/pdf' ? MessageType.FILE : MessageType.IMAGE;
+
+    const tempAbsPath = path.isAbsolute(file.path)
+      ? file.path
+      : path.join(process.cwd(), file.path);
+
+    const compressedSize = await compressChatImageInPlace(
+      tempAbsPath,
+      file.mimetype,
+    );
+    const sizeBytes = compressedSize ?? file.size;
+
+    if (this.sftpStorage.isEnabled()) {
+      const { publicUrl } = await this.sftpStorage.uploadLocalFile({
+        localPath: file.path,
+        remoteRelativePath: relativePath,
+        deleteLocalAfter: true,
+      });
+
+      return {
+        fileUrl: publicUrl,
+        messageType,
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        sizeBytes,
+      };
+    }
+
+    const uploadDirAbs = path.join(process.cwd(), 'uploads', CHAT_UPLOAD_DIR);
+    if (!fs.existsSync(uploadDirAbs)) {
+      fs.mkdirSync(uploadDirAbs, { recursive: true });
+    }
+
+    const finalAbsPath = path.join(uploadDirAbs, finalFileName);
+
+    if (tempAbsPath !== finalAbsPath) {
+      fs.renameSync(tempAbsPath, finalAbsPath);
+    }
+
+    const baseUrl = (
+      this.configService.get<string>('UPLOADS_PUBLIC_BASE_URL') ?? ''
+    )
+      .trim()
+      .replace(/\/+$/g, '');
+
+    const fileUrl = baseUrl ? `${baseUrl}/${relativePath}` : `/${relativePath}`;
+
+    return {
+      fileUrl,
+      messageType,
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+      sizeBytes: file.size,
+    };
   }
 }

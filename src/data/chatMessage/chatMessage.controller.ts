@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -6,9 +7,21 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 
+import { AuthUser } from 'src/auth/common/decorators/auth-user.decorator';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { AuthenticatedUser } from 'src/auth/types/authenticated-user.interface';
+import {
+  CHAT_MAX_FILE_SIZE_BYTES,
+  CHAT_UPLOAD_TEMP_DIR,
+} from './chat-file.constants';
+import { chatFileFilter } from './chat-file.filter';
 import { ChatMessageService } from './chatMessage.service';
 import { CreateChatContactDto } from './dto/create-chat-contact.dto';
 import { MarkMessageReadDto } from './dto/mark-message-read.dto';
@@ -56,29 +69,79 @@ export class ChatMessageController {
    * Get conversation messages.
    */
   @Get('messages/:userA/:userB')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: 'Get conversation messages',
+    summary:
+      'Get conversation messages (only participants, sede/company admin of a participant, or super admin)',
   })
   async getConversation(
     @Param('userA', ParseIntPipe) userA: number,
     @Param('userB', ParseIntPipe) userB: number,
+    @AuthUser() user: AuthenticatedUser,
   ) {
-    return this.chatMessageService.getConversation(userA, userB);
+    return this.chatMessageService.getConversation(userA, userB, user);
   }
 
   @Post('messages')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Save chat message',
   })
-  async createMessage(@Body() dto: SendMessageDto) {
-    return this.chatMessageService.createMessage(dto);
+  async createMessage(
+    @Body() dto: SendMessageDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.chatMessageService.createMessage(dto, user);
   }
 
   @Post('messages/read')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Mark a chat message as read',
   })
-  async markMessageAsRead(@Body() dto: MarkMessageReadDto) {
-    return this.chatMessageService.markMessageAsRead(dto);
+  async markMessageAsRead(
+    @Body() dto: MarkMessageReadDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.chatMessageService.markMessageAsRead(dto, user);
+  }
+
+  /**
+   * Upload a chat attachment (image or PDF).
+   *
+   * Returns the public fileUrl to send afterwards through the
+   * `send_message` WebSocket event (messageType: IMAGE | FILE).
+   */
+  @Post('upload')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Upload a chat attachment (image or PDF)',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Attachment file to upload (image or PDF)',
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      dest: CHAT_UPLOAD_TEMP_DIR,
+      limits: { fileSize: CHAT_MAX_FILE_SIZE_BYTES },
+      fileFilter: chatFileFilter,
+    }),
+  )
+  async uploadFile(@UploadedFile() file?: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Debe subir un archivo (imagen o PDF).');
+    }
+
+    return this.chatMessageService.storeChatFile(file);
   }
 }

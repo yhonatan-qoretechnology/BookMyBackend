@@ -9,9 +9,11 @@ import {
 } from '@nestjs/websockets';
 
 import { Logger } from '@nestjs/common';
+import { Role } from '@prisma/client';
 
 import { Server, Socket } from 'socket.io';
 
+import { AuthenticatedUser } from 'src/auth/types/authenticated-user.interface';
 import { CHAT_EVENTS } from './chat.constants';
 import { ChatGatewayService } from './chat.gateway.service';
 import { ChatMessageService } from './chatMessage.service';
@@ -33,6 +35,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly gatewayService: ChatGatewayService,
     private readonly chatMessageService: ChatMessageService,
   ) {}
+
+  /**
+   * Build a minimal AuthenticatedUser from the socket-declared identity.
+   *
+   * The gateway trusts whatever userId/email the client sent on
+   * `connect_user` (there is no JWT handshake at the socket layer yet), so
+   * this only lets the shared ChatMessageService permission checks resolve
+   * the "is a participant" case — it does not add sede/company admin
+   * escalation over the socket path.
+   */
+  private buildSocketAuthUser(
+    userId: number,
+    email: string,
+  ): AuthenticatedUser {
+    return {
+      userId,
+      email,
+      role: Role.CLIENT,
+      empresaId: null,
+      sedeId: null,
+    };
+  }
 
   /**
    * Client connected.
@@ -76,7 +100,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: SendMessageDto,
   ) {
-    const savedMessage = await this.chatMessageService.createMessage(dto);
+    const savedMessage = await this.chatMessageService.createMessage(
+      dto,
+      this.buildSocketAuthUser(dto.senderId, dto.senderEmail),
+    );
     const receiver = this.gatewayService.getUser(dto.receiverId);
 
     if (receiver) {
@@ -120,7 +147,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: MarkMessageReadDto,
   ) {
-    const updatedMessage = await this.chatMessageService.markMessageAsRead(dto);
+    const updatedMessage = await this.chatMessageService.markMessageAsRead(
+      dto,
+      this.buildSocketAuthUser(dto.userId, ''),
+    );
     const sender = this.gatewayService.getUser(updatedMessage.sender_id);
 
     if (sender) {

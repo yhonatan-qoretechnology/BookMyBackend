@@ -146,4 +146,68 @@ export class AccessControlService {
       }
     }
   }
+
+  /**
+   * Ensure a user can access a chat conversation between userAId and userBId.
+   *
+   * Allowed:
+   * - SUPER_ADMIN (always).
+   * - Either participant of the conversation.
+   * - A BRANCH_ADMIN/COMPANY_ADMIN whose sede/empresa matches at least one
+   *   participant (via their Profesional or AdminProfile record).
+   */
+  async ensureChatAccessForUser(
+    userAId: number,
+    userBId: number,
+    user: AuthenticatedUser,
+  ) {
+    if (user.role === Role.SUPER_ADMIN) {
+      return;
+    }
+
+    if (user.userId === userAId || user.userId === userBId) {
+      return;
+    }
+
+    if (user.role !== Role.BRANCH_ADMIN && user.role !== Role.COMPANY_ADMIN) {
+      throw new ForbiddenException(
+        'No tiene permisos para acceder a esta conversación.',
+      );
+    }
+
+    const participants = await this.prisma.users.findMany({
+      where: { id: { in: [userAId, userBId] } },
+      select: {
+        id: true,
+        profesionales: {
+          select: { sedeId: true, sede: { select: { empresaId: true } } },
+        },
+        AdminProfile: { select: { sedeId: true, empresaId: true } },
+      },
+    });
+
+    const hasAccess = participants.some((participant) => {
+      if (user.role === Role.BRANCH_ADMIN) {
+        const sedeIds = [
+          participant.profesionales?.sedeId,
+          participant.AdminProfile?.sedeId,
+        ].filter((id): id is number => id != null);
+
+        return user.sedeId != null && sedeIds.includes(user.sedeId);
+      }
+
+      const empresaIds = [
+        participant.profesionales?.sede?.empresaId,
+        participant.AdminProfile?.empresaId,
+      ].filter((id): id is number => id != null);
+
+      return user.empresaId != null && empresaIds.includes(user.empresaId);
+    });
+
+    if (!hasAccess) {
+      throw new ForbiddenException(
+        'No tiene permisos para acceder a esta conversación.',
+      );
+    }
+  }
 }

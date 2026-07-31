@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AccessControlService } from 'src/auth/services/access-control/access-control.service';
 import { PrismaModule } from 'src/prisma/prisma.module';
 
 import { ChatGateway } from './chat.gateway';
@@ -12,7 +13,12 @@ import { ChatMessageService } from './chatMessage.service';
 
   controllers: [ChatMessageController],
 
-  providers: [ChatMessageService, ChatGateway, ChatGatewayService],
+  providers: [
+    ChatMessageService,
+    ChatGateway,
+    ChatGatewayService,
+    AccessControlService,
+  ],
 
   exports: [ChatMessageService, ChatGatewayService],
 })
