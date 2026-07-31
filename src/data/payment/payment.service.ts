@@ -16,6 +16,11 @@ import { CreatePaymentCardDto } from './dto/create-payment-card.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentCardDto } from './dto/update-payment-card.dto';
 
+type ListPaymentsFilters = {
+  userId?: number;
+  sedeId?: number;
+};
+
 type CardPaymentPayload = {
   cardNumber?: string;
   cardToken?: string;
@@ -205,30 +210,53 @@ export class PaymentService {
   async listPayments(userId?: number) {
     const payments = await this.prisma.payment.findMany({
       where: userId ? { userId } : undefined,
-      include: {
-        appointment: {
-          include: {
-            service: { select: { id: true, translations: true } },
-          },
-        },
-        card: true,
-        user: {
-          select: {
-            id: true,
-            email: true,
-            role: true,
-          },
-        },
-        service: {
-          select: {
-            id: true,
-            translations: true,
-          },
-        },
-      },
+      include: this.paymentListInclude(),
       orderBy: { createdAt: 'desc' },
     });
 
+    return this.mapPaymentsList(payments);
+  }
+
+  async filterPayments(filters: ListPaymentsFilters = {}) {
+    const { userId, sedeId } = filters;
+
+    const payments = await this.prisma.payment.findMany({
+      where: {
+        ...(userId ? { userId } : {}),
+        ...(sedeId ? { appointment: { sedeId } } : {}),
+      },
+      include: this.paymentListInclude(),
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return this.mapPaymentsList(payments);
+  }
+
+  private paymentListInclude() {
+    return {
+      appointment: {
+        include: {
+          service: { select: { id: true, translations: true } },
+        },
+      },
+      card: true,
+      user: {
+        select: {
+          id: true,
+          email: true,
+          role: true,
+        },
+      },
+      service: {
+        select: {
+          id: true,
+          translations: true,
+        },
+      },
+    };
+  }
+
+  private mapPaymentsList(payments) {
     return payments.map((payment) => ({
       ...payment,
       card: payment.card ? this.sanitizeCard(payment.card) : null,

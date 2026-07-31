@@ -57,6 +57,28 @@ export class PaymentController {
     );
   }
 
+  @Get('filter')
+  @ApiOperation({ summary: 'Filtrar pagos por usuario y/o sede' })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    description: 'Filtra los pagos pertenecientes a un usuario específico',
+  })
+  @ApiQuery({
+    name: 'sedeId',
+    required: false,
+    description: 'Filtra los pagos pertenecientes a una sede específica',
+  })
+  async filter(
+    @Query('userId') userId?: string,
+    @Query('sedeId') sedeId?: string,
+  ) {
+    return this.paymentService.filterPayments({
+      userId: userId ? Number(userId) : undefined,
+      sedeId: sedeId ? Number(sedeId) : undefined,
+    });
+  }
+
   @Post('cards')
   @ApiOperation({ summary: 'Registrar una tarjeta para un usuario' })
   @ApiCreatedResponse({ type: PaymentCardResponseDto })
