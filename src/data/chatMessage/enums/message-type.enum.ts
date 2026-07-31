@@ -7,4 +7,6 @@ export enum MessageType {
   IMAGE = 'IMAGE',
 
   FILE = 'FILE',
+
+  AUDIO = 'AUDIO',
 }

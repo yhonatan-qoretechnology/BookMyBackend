@@ -16,7 +16,7 @@ export function chatFileFilter(
   if (!CHAT_ALLOWED_MIME_TYPES.includes(file.mimetype)) {
     callback(
       new BadRequestException(
-        `Tipo de archivo no permitido. Solo se aceptan imágenes o PDF.`,
+        `Tipo de archivo no permitido. Solo se aceptan imágenes, PDF o audio.`,
       ),
       false,
     );

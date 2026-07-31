@@ -107,19 +107,19 @@ export class ChatMessageController {
   }
 
   /**
-   * Upload a chat attachment (image or PDF).
+   * Upload a chat attachment (image, PDF or audio voice message).
    *
    * Returns the public fileUrl to send afterwards through the
-   * `send_message` WebSocket event (messageType: IMAGE | FILE).
+   * `send_message` WebSocket event (messageType: IMAGE | FILE | AUDIO).
    */
   @Post('upload')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
-    summary: 'Upload a chat attachment (image or PDF)',
+    summary: 'Upload a chat attachment (image, PDF or audio)',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
-    description: 'Attachment file to upload (image or PDF)',
+    description: 'Attachment file to upload (image, PDF or audio)',
     schema: {
       type: 'object',
       properties: {
@@ -139,7 +139,9 @@ export class ChatMessageController {
   )
   async uploadFile(@UploadedFile() file?: Express.Multer.File) {
     if (!file) {
-      throw new BadRequestException('Debe subir un archivo (imagen o PDF).');
+      throw new BadRequestException(
+        'Debe subir un archivo (imagen, PDF o audio).',
+      );
     }
 
     return this.chatMessageService.storeChatFile(file);

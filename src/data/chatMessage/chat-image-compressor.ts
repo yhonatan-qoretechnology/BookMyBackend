@@ -27,10 +27,18 @@ const JPEG_QUALITY = 82;
 const WEBP_QUALITY = 82;
 
 /**
+ * Mimetypes sharp can re-encode here. Animated GIFs are excluded (would
+ * need dedicated frame-aware handling); PDF and audio attachments aren't
+ * image data and are left untouched.
+ */
+const COMPRESSIBLE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+
+/**
  * Re-encodes a chat image in place to reduce storage size.
- *
- * Animated GIFs and non-image mimetypes are left untouched — GIF frames
- * would need dedicated handling, and PDFs aren't image data.
  *
  * @returns the new file size in bytes, or null if the file was left as-is.
  */
@@ -38,7 +46,7 @@ export async function compressChatImageInPlace(
   absPath: string,
   mimeType: string,
 ): Promise<number | null> {
-  if (mimeType === 'image/gif') {
+  if (!COMPRESSIBLE_MIME_TYPES.has(mimeType)) {
     return null;
   }
 

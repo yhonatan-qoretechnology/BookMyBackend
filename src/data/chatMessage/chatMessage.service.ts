@@ -8,7 +8,7 @@ import { AccessControlService } from 'src/auth/services/access-control/access-co
 import { AuthenticatedUser } from 'src/auth/types/authenticated-user.interface';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { SftpStorageService } from 'src/storage/sftp-storage.service';
-import { CHAT_UPLOAD_DIR } from './chat-file.constants';
+import { CHAT_AUDIO_MIME_TYPES, CHAT_UPLOAD_DIR } from './chat-file.constants';
 import { compressChatImageInPlace } from './chat-image-compressor';
 import { CreateChatContactDto } from './dto/create-chat-contact.dto';
 import { MarkMessageReadDto } from './dto/mark-message-read.dto';
@@ -274,7 +274,7 @@ export class ChatMessageService {
   }
 
   /**
-   * Store a chat attachment (image or PDF) and return its public URL.
+   * Store a chat attachment (image, PDF or audio) and return its public URL.
    *
    * The file is moved to `uploads/chatmessage` (or synced via SFTP when
    * configured) so both participants of the conversation can load it from
@@ -287,8 +287,11 @@ export class ChatMessageService {
       .join('uploads', CHAT_UPLOAD_DIR, finalFileName)
       .replace(/\\/g, '/');
 
-    const messageType =
-      file.mimetype === 'application/pdf' ? MessageType.FILE : MessageType.IMAGE;
+    const messageType = CHAT_AUDIO_MIME_TYPES.includes(file.mimetype)
+      ? MessageType.AUDIO
+      : file.mimetype === 'application/pdf'
+        ? MessageType.FILE
+        : MessageType.IMAGE;
 
     const tempAbsPath = path.isAbsolute(file.path)
       ? file.path
