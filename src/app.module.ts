@@ -11,6 +11,7 @@ import { DiaCerradoSedeModule } from './data/diaCerradoSede/dia-cerrado-sede.mod
 import { DisponibilidadProfesionalModule } from './data/disponibilidadProfesional/disponibilidad-profesional.module';
 import { MailModule } from './data/email/mail.module';
 import { EmpresaModule } from './data/empresa/empresa.module';
+import { GastoModule } from './data/gasto/gasto.module';
 import { HorarioSedeModule } from './data/HorarioSede/horario-sede.module';
 import { OtpModule } from './data/otp/otp.module';
 import { PaymentModule } from './data/payment/payment.module';
@@ -68,6 +69,7 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     PaymentModule,
     ChatModule,
     ChatMessageModule,
+    GastoModule,
   ],
 })
 export class AppModule {}

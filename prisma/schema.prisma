@@ -35,6 +35,7 @@ model Users {
   UserData                                         UserData?      @relation("UserToUserData")
   UserLocation                                     UserLocation?  @relation("UserToLocation")
   UserStatus                                       UserStatus?    @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_status")
+  gastos                                            Gasto[]
 
   @@index([email])
   @@map("users")
@@ -201,6 +202,7 @@ model Empresa {
   webUrl           String?        @map("web_url")
   adminProfiles    AdminProfile[]
   sedes            Sede[]
+  categoriasGasto  CategoriaGasto[]
 
   @@map("empresas")
 }
@@ -229,6 +231,7 @@ model Sede {
   empresa                Empresa                  @relation(fields: [empresaId], references: [id])
   serviceSedeProfesional ServiceSedeProfesional[]
   Service                Service[]                @relation("SedeServicios")
+  gastos                 Gasto[]
 
   @@map("sedes")
 }
@@ -437,6 +440,39 @@ model PaymentCard {
 
   @@index([userId])
   @@map("payment_cards")
+}
+
+model CategoriaGasto {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  empresaId Int?
+  isBase    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  empresa   Empresa? @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  gastos    Gasto[]
+
+  @@unique([empresaId, nombre])
+  @@map("categorias_gasto")
+}
+
+model Gasto {
+  id          Int            @id @default(autoincrement())
+  descripcion String
+  total       Float
+  fecha       DateTime
+  ticketUrl   String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  categoriaId Int
+  sedeId      Int
+  userId      Int
+  categoria   CategoriaGasto @relation(fields: [categoriaId], references: [id])
+  sede        Sede           @relation(fields: [sedeId], references: [id])
+  user        Users          @relation(fields: [userId], references: [id])
+
+  @@index([sedeId, fecha])
+  @@index([categoriaId])
+  @@map("gastos")
 }
 
 model UserStatus {
