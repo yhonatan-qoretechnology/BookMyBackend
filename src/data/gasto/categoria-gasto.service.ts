@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 
 import { AuthenticatedUser } from 'src/auth/types/authenticated-user.interface';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -23,13 +23,48 @@ export class CategoriaGastoService {
     });
   }
 
+  /**
+   * Crea una categoría de gasto.
+   *
+   * Un SUPER_ADMIN no pertenece a ninguna empresa, así que sus
+   * categorías se crean como base (empresaId null, isBase true) y
+   * quedan disponibles para toda la plataforma. El resto de roles
+   * crean categorías propias de su empresa.
+   */
   async create(dto: CreateCategoriaGastoDto, user: AuthenticatedUser) {
+    const esPlataforma = user.role === Role.SUPER_ADMIN && !user.empresaId;
+
+    if (!esPlataforma && !user.empresaId) {
+      throw new ForbiddenException(
+        'No tiene una empresa asociada para crear categorías propias.',
+      );
+    }
+
+    /* El índice @@unique([empresaId, nombre]) no protege a las base:
+       en PostgreSQL dos NULL se consideran distintos, así que el
+       duplicado hay que detectarlo aquí. */
+    const duplicada = await this.prisma.categoriaGasto.findFirst({
+      where: {
+        nombre: { equals: dto.nombre, mode: 'insensitive' },
+        empresaId: esPlataforma ? null : user.empresaId,
+      },
+      select: { id: true },
+    });
+
+    if (duplicada) {
+      throw new BadRequestException(
+        esPlataforma
+          ? 'Ya existe una categoría base con ese nombre.'
+          : 'Ya existe una categoría con ese nombre en su empresa.',
+      );
+    }
+
     try {
       return await this.prisma.categoriaGasto.create({
         data: {
           nombre: dto.nombre,
-          empresaId: user.empresaId ?? null,
-          isBase: false,
+          empresaId: esPlataforma ? null : user.empresaId,
+          isBase: esPlataforma,
         },
       });
     } catch (error) {
@@ -54,11 +89,15 @@ export class CategoriaGastoService {
       throw new NotFoundException('Categoría no encontrada.');
     }
 
+    /* Las categorías base son de la plataforma: solo el SUPER_ADMIN,
+       que es quien puede crearlas, puede retirarlas. */
     if (categoria.isBase) {
-      throw new ForbiddenException('No se pueden eliminar las categorías base.');
-    }
-
-    if (categoria.empresaId !== (user.empresaId ?? null)) {
+      if (user.role !== Role.SUPER_ADMIN) {
+        throw new ForbiddenException(
+          'No se pueden eliminar las categorías base.',
+        );
+      }
+    } else if (!user.empresaId || categoria.empresaId !== user.empresaId) {
       throw new ForbiddenException(
         'No puede eliminar categorías de otra empresa.',
       );

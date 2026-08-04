@@ -4,14 +4,56 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ClientListDto, UpdateClientDto } from '../../dto/client-management.dto';
 import { AuthenticatedUser } from '../../types/authenticated-user.interface';
 
+/** Relaciones necesarias para componer la respuesta de un cliente. */
+const CLIENT_INCLUDE = {
+  UserData: true,
+  UserLocation: true,
+} as const;
+
+type ClientWithRelations = Prisma.UsersGetPayload<{
+  include: typeof CLIENT_INCLUDE;
+}>;
+
 @Injectable()
 export class ClientManagementService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Forma única de la respuesta de cliente. Antes estaba repetida en
+   * los cuatro métodos, lo que hizo que `fotoPerfil` faltara en todos
+   * y el panel no pudiera mostrar el avatar del cliente.
+   */
+  private toClientResponse(client: ClientWithRelations) {
+    return {
+      id: client.id,
+      email: client.email,
+      state: client.state,
+      createdAt: client.createdAt,
+      /** Avatar del cliente; el panel lo resuelve con fotoUrl() */
+      fotoPerfil: client.fotoPerfil,
+      userData: client.UserData
+        ? {
+            name: client.UserData.name,
+            phone: client.UserData.phone,
+            idioma: client.UserData.idioma,
+            gender: client.UserData.gender,
+            birthdate: client.UserData.birthdate,
+          }
+        : null,
+      userLocation: client.UserLocation
+        ? {
+            address: client.UserLocation.address,
+            latitude: client.UserLocation.latitude,
+            longitude: client.UserLocation.longitude,
+          }
+        : null,
+    };
+  }
 
   async searchClient(email: string) {
     // Buscar por email
@@ -20,35 +62,14 @@ export class ClientManagementService {
         email: email.toLowerCase(),
         role: Role.CLIENT,
       },
-      include: {
-        UserData: true,
-        UserLocation: true,
-      },
+      include: CLIENT_INCLUDE,
     });
 
     if (!client) {
       throw new NotFoundException('Cliente no encontrado con el email proporcionado');
     }
 
-    // Formatear respuesta
-    return {
-      id: client.id,
-      email: client.email,
-      state: client.state,
-      createdAt: client.createdAt,
-      userData: client.UserData ? {
-        name: client.UserData.name,
-        phone: client.UserData.phone,
-        idioma: client.UserData.idioma,
-        gender: client.UserData.gender,
-        birthdate: client.UserData.birthdate,
-      } : null,
-      userLocation: client.UserLocation ? {
-        address: client.UserLocation.address,
-        latitude: client.UserLocation.latitude,
-        longitude: client.UserLocation.longitude,
-      } : null,
-    };
+    return this.toClientResponse(client);
   }
 
   async listClients(filters: ClientListDto, user: AuthenticatedUser) {
@@ -94,10 +115,7 @@ export class ClientManagementService {
     const [clients, total] = await Promise.all([
       this.prisma.users.findMany({
         where: whereClause,
-        include: {
-          UserData: true,
-          UserLocation: true,
-        },
+        include: CLIENT_INCLUDE,
         orderBy: {
           createdAt: 'desc',
         },
@@ -108,24 +126,7 @@ export class ClientManagementService {
     ]);
 
     return {
-      clients: clients.map(client => ({
-        id: client.id,
-        email: client.email,
-        state: client.state,
-        createdAt: client.createdAt,
-        userData: client.UserData ? {
-          name: client.UserData.name,
-          phone: client.UserData.phone,
-          idioma: client.UserData.idioma,
-          gender: client.UserData.gender,
-          birthdate: client.UserData.birthdate,
-        } : null,
-        userLocation: client.UserLocation ? {
-          address: client.UserLocation.address,
-          latitude: client.UserLocation.latitude,
-          longitude: client.UserLocation.longitude,
-        } : null,
-      })),
+      clients: clients.map((client) => this.toClientResponse(client)),
       pagination: {
         page,
         limit,
@@ -143,34 +144,14 @@ export class ClientManagementService {
         id,
         role: Role.CLIENT,
       },
-      include: {
-        UserData: true,
-        UserLocation: true,
-      },
+      include: CLIENT_INCLUDE,
     });
 
     if (!client) {
       throw new NotFoundException(`Cliente con ID ${id} no encontrado`);
     }
 
-    return {
-      id: client.id,
-      email: client.email,
-      state: client.state,
-      createdAt: client.createdAt,
-      userData: client.UserData ? {
-        name: client.UserData.name,
-        phone: client.UserData.phone,
-        idioma: client.UserData.idioma,
-        gender: client.UserData.gender,
-        birthdate: client.UserData.birthdate,
-      } : null,
-      userLocation: client.UserLocation ? {
-        address: client.UserLocation.address,
-        latitude: client.UserLocation.latitude,
-        longitude: client.UserLocation.longitude,
-      } : null,
-    };
+    return this.toClientResponse(client);
   }
 
   async updateClient(id: number, updateClientDto: UpdateClientDto, user: AuthenticatedUser) {
@@ -180,10 +161,7 @@ export class ClientManagementService {
         id,
         role: Role.CLIENT,
       },
-      include: {
-        UserData: true,
-        UserLocation: true,
-      },
+      include: CLIENT_INCLUDE,
     });
 
     if (!existingClient) {
