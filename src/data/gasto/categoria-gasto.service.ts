@@ -17,27 +17,18 @@ export class CategoriaGastoService {
   async list(user: AuthenticatedUser) {
     return this.prisma.categoriaGasto.findMany({
       where: {
-        OR: [
-          { isBase: true },
-          ...(user.empresaId ? [{ empresaId: user.empresaId }] : []),
-        ],
+        OR: [{ isBase: true }, { empresaId: user.empresaId ?? null }],
       },
       orderBy: [{ isBase: 'desc' }, { nombre: 'asc' }],
     });
   }
 
   async create(dto: CreateCategoriaGastoDto, user: AuthenticatedUser) {
-    if (!user.empresaId) {
-      throw new ForbiddenException(
-        'No tiene una empresa asociada para crear categorías propias.',
-      );
-    }
-
     try {
       return await this.prisma.categoriaGasto.create({
         data: {
           nombre: dto.nombre,
-          empresaId: user.empresaId,
+          empresaId: user.empresaId ?? null,
           isBase: false,
         },
       });
@@ -67,7 +58,7 @@ export class CategoriaGastoService {
       throw new ForbiddenException('No se pueden eliminar las categorías base.');
     }
 
-    if (!user.empresaId || categoria.empresaId !== user.empresaId) {
+    if (categoria.empresaId !== (user.empresaId ?? null)) {
       throw new ForbiddenException(
         'No puede eliminar categorías de otra empresa.',
       );
