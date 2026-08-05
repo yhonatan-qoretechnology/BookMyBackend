@@ -18,6 +18,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ApproveResenaDto } from './dto/approve-resena.dto';
 import { CreateResenaDto } from './dto/create-resena.dto';
 import { UpdateResenaDto } from './dto/update-resena.dto';
 import { ResenaService } from './resena.service';
@@ -83,21 +84,10 @@ export class ResenaController {
   @ApiResponse({ status: 200, description: 'Estado de la reseña actualizado.' })
   @ApiNotFoundResponse({ description: 'Reseña no encontrada.' })
   @ApiBadRequestResponse({ description: 'Datos inválidos.' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        aprobado: {
-          type: 'boolean',
-          description: 'true para aprobar, false para rechazar',
-        },
-      },
-      required: ['aprobado'],
-    },
-  })
+  @ApiBody({ type: ApproveResenaDto })
   approve(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { aprobado: boolean },
+    @Body() body: ApproveResenaDto,
   ) {
     return this.resenaService.approve(id, body.aprobado);
   }
