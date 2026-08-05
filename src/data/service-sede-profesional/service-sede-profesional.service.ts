@@ -56,10 +56,15 @@ export class ServiceSedeProfesionalService {
         sedeId,
         profesionalId,
       },
-      select: { serviceId: true },
+      select: { id: true, serviceId: true },
     });
 
-    const asignadosSet = new Set(asignados.map((a) => a.serviceId));
+    /* Se devuelve también el id de la relación: sin él, para quitar una
+       asignación habría que traerse la tabla entera, porque GET /
+       no admite filtros. */
+    const asignadosPorServicio = new Map(
+      asignados.map((a) => [a.serviceId, a.id]),
+    );
 
     const services = await this.prisma.service.findMany({
       include: {
@@ -98,7 +103,9 @@ export class ServiceSedeProfesionalService {
       descripcion: service.translations[0]?.description ?? '',
       categoria: service.category?.translations?.[0]?.name ?? 'Sin categoría',
       precios: service.prices,
-      asignado: asignadosSet.has(service.id),
+      asignado: asignadosPorServicio.has(service.id),
+      /** id de service_sede_profesional; null si no está asignado */
+      asignacionId: asignadosPorServicio.get(service.id) ?? null,
     }));
   }
 
@@ -185,14 +192,27 @@ export class ServiceSedeProfesionalService {
       }
     }
 
-    // 2. Crear el registro en la tabla de relación.
+    // 2. Crear el registro y mantener sincronizada la pertenencia.
     try {
-      return await this.prisma.serviceSedeProfesional.create({
-        data: {
-          sedeId,
-          serviceId,
-          profesionalId,
-        },
+      return await this.prisma.$transaction(async (tx) => {
+        const relacion = await tx.serviceSedeProfesional.create({
+          data: {
+            sedeId,
+            serviceId,
+            profesionalId,
+          },
+        });
+
+        /* La relación Sede<->Service es la que usa el control de acceso
+           para saber de qué empresa es un servicio. Si no se conecta
+           aquí, el servicio se puede reservar pero el administrador de
+           la empresa recibe un 403 al intentar editarlo. */
+        await tx.sede.update({
+          where: { id: sedeId },
+          data: { Service: { connect: { id: serviceId } } },
+        });
+
+        return relacion;
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -328,6 +348,31 @@ export class ServiceSedeProfesionalService {
       }
     }
 
-    return await this.prisma.serviceSedeProfesional.delete({ where: { id } });
+    const relacion = await this.prisma.serviceSedeProfesional.findUnique({
+      where: { id },
+      select: { sedeId: true, serviceId: true },
+    });
+
+    return await this.prisma.$transaction(async (tx) => {
+      const borrada = await tx.serviceSedeProfesional.delete({ where: { id } });
+
+      /* Si ese servicio ya no lo presta nadie en la sede, se desconecta
+         también de la pertenencia para que ambas tablas sigan diciendo
+         lo mismo. Mientras quede algún profesional, se conserva. */
+      if (relacion) {
+        const quedan = await tx.serviceSedeProfesional.count({
+          where: { sedeId: relacion.sedeId, serviceId: relacion.serviceId },
+        });
+
+        if (quedan === 0) {
+          await tx.sede.update({
+            where: { id: relacion.sedeId },
+            data: { Service: { disconnect: { id: relacion.serviceId } } },
+          });
+        }
+      }
+
+      return borrada;
+    });
   }
 }
