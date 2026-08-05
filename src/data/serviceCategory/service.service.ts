@@ -289,7 +289,13 @@ export class ServiceService {
         },
         prices: true,
         sedes: true,
-        category: true,
+        /* La categoría se pedía pero luego no se devolvía, así que el
+           panel mostraba todos los servicios como "Sin categoría".
+           Hace falta incluir también su traducción: `category: true`
+           trae la fila pero no el nombre, que vive en category_translation. */
+        category: {
+          include: { translations: { where: { language }, take: 1 } },
+        },
       },
     });
 
@@ -299,6 +305,14 @@ export class ServiceService {
       description: service.translations[0]?.description ?? '',
       prices: service.prices,
       sedes: service.sedes,
+      categoryId: service.categoryId,
+      category: service.category
+        ? {
+            id: service.category.id,
+            name: service.category.translations[0]?.name ?? null,
+            image: service.category.image,
+          }
+        : null,
     }));
   }
 
