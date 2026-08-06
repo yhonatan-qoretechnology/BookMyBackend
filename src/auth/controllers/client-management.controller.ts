@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -16,7 +17,12 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { AuthenticatedUser } from '../types/authenticated-user.interface';
-import { SearchClientDto, ClientListDto, UpdateClientDto } from '../dto/client-management.dto';
+import {
+  SearchClientDto,
+  ClientListDto,
+  UpdateClientDto,
+  ChangeClientPasswordDto,
+} from '../dto/client-management.dto';
 import { ClientManagementService } from '../services/client-management/client-management.service';
 
 @ApiTags('Gestión de Clientes')
@@ -81,5 +87,44 @@ export class ClientManagementController {
     @AuthUser() user: AuthenticatedUser,
   ) {
     return this.clientManagementService.updateClient(id, updateClientDto, user);
+  }
+
+  /* Las dos operaciones siguientes son sensibles (una cambia las
+     credenciales de acceso y la otra da de baja la cuenta), así que
+     quedan fuera del alcance de un administrador de sede. */
+
+  @Patch(':id/password')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiOperation({
+    summary: 'Cambiar la contraseña de un cliente',
+    description:
+      'Fija una contraseña nueva sin pedir la anterior. Pensado para asistencia al cliente.',
+  })
+  @ApiResponse({ status: 200, description: 'Contraseña actualizada' })
+  @ApiResponse({ status: 404, description: 'Cliente no encontrado' })
+  async changeClientPassword(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ChangeClientPasswordDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.clientManagementService.changeClientPassword(id, dto.password, user);
+  }
+
+  @Delete(':id')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiOperation({
+    summary: 'Dar de baja la cuenta de un cliente',
+    description:
+      'Borra al cliente si no tiene historial. Si tiene citas, pagos, reseñas o gastos, ' +
+      'anonimiza sus datos personales y le retira el acceso, conservando esos registros ' +
+      'porque sostienen la facturación. La respuesta indica en `mode` cuál de las dos ocurrió.',
+  })
+  @ApiResponse({ status: 200, description: 'Cuenta eliminada o anonimizada' })
+  @ApiResponse({ status: 404, description: 'Cliente no encontrado' })
+  async deleteClient(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.clientManagementService.deleteClient(id, user);
   }
 }
