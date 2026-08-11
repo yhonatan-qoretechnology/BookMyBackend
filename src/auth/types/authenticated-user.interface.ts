@@ -6,4 +6,5 @@ export interface AuthenticatedUser {
   role: Role;
   empresaId?: number | null;
   sedeId?: number | null;
+  profesionalId?: number | null;
 }

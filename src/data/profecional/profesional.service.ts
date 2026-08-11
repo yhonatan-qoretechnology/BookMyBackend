@@ -6,7 +6,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AppointmentStatus, Prisma, Role } from '@prisma/client';
+import {
+  AppointmentStatus,
+  ClientState,
+  ClientType,
+  Prisma,
+  Role,
+} from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AccessControlService } from '../../auth/services/access-control/access-control.service';
@@ -14,6 +21,8 @@ import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface
 import { PrismaService } from '../../prisma/prisma.service';
 import { SftpStorageService } from '../../storage/sftp-storage.service';
 import { CreateProfesionalDto } from './dto/create-profesional.dto';
+import { LinkProfesionalAccessDto } from './dto/link-profesional-access.dto';
+import { UpdateProfesionalAccessDto } from './dto/update-profesional-access.dto';
 import { UpdateProfesionalDto } from './dto/update-profesional.dto';
 
 @Injectable()
@@ -109,15 +118,85 @@ export class ProfesionalService {
     }
   }
 
+  /**
+   * Normaliza un texto para usarlo como parte de un email
+   * (sin tildes, espacios ni símbolos).
+   */
+  private slugifyForEmail(text: string): string {
+    // Rango unicode de marcas diacríticas combinantes (U+0300 - U+036F),
+    // construido por código para evitar problemas de codificación en el archivo fuente.
+    const diacriticsRangeStart = String.fromCharCode(0x0300);
+    const diacriticsRangeEnd = String.fromCharCode(0x036f);
+    const diacritics = new RegExp(
+      '[' + diacriticsRangeStart + '-' + diacriticsRangeEnd + ']',
+      'g',
+    );
+    const slug = (text ?? '')
+      .normalize('NFD')
+      .replace(diacritics, '') // quita tildes/diacríticos
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+    return slug || 'profesional';
+  }
+
+  /**
+   * Genera un email único con el patrón nombreProfesional@nombreEmpresa.com,
+   * agregando un número al final si ya existe otro usuario con ese email.
+   */
+  private async generateUniqueProfesionalEmail(
+    tx: Prisma.TransactionClient,
+    nombreProfesional: string,
+    nombreEmpresa: string,
+  ): Promise<string> {
+    const userSlug = this.slugifyForEmail(nombreProfesional);
+    const domainSlug = this.slugifyForEmail(nombreEmpresa);
+
+    let candidate = `${userSlug}@${domainSlug}.com`;
+    let suffix = 2;
+
+    while (
+      await tx.users.findUnique({
+        where: { email: candidate },
+        select: { id: true },
+      })
+    ) {
+      candidate = `${userSlug}${suffix}@${domainSlug}.com`;
+      suffix++;
+    }
+
+    return candidate;
+  }
+
+  /**
+   * Agrega el bloque `acceso` (email vinculado y si tiene login) a un
+   * profesional que fue consultado con `include: { users: { select: { email: true } } }`.
+   */
+  private withAccesoInfo<
+    T extends { users?: { email: string } | null },
+  >(profesional: T): Omit<T, 'users'> & {
+    acceso: { tieneAcceso: boolean; email: string | null };
+  } {
+    const { users, ...rest } = profesional;
+    return {
+      ...rest,
+      acceso: {
+        tieneAcceso: !!users,
+        email: users?.email ?? null,
+      },
+    };
+  }
+
   async create(
     createProfesionalDto: CreateProfesionalDto,
     user?: AuthenticatedUser,
     file?: Express.Multer.File,
   ) {
+    const { password, ...profesionalData } = createProfesionalDto;
+
     // 1. Verificar si la sede existe
     const sede = await this.prisma.sede.findUnique({
       where: { id: createProfesionalDto.sedeId },
-      select: { id: true, empresaId: true },
+      select: { id: true, empresaId: true, empresa: { select: { nombre: true } } },
     });
     if (!sede) {
       if (file) {
@@ -157,25 +236,85 @@ export class ProfesionalService {
         imagenPath = await this.storeProfesionalImage(file);
       }
 
-      // 3. Crear el profesional en la base de datos
-      const profesional = await this.prisma.profesional.create({
-        data: {
-          ...createProfesionalDto,
-          imagen: imagenPath,
-        },
-      });
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-      return profesional;
+      // 3. Crear el profesional junto con su usuario/login (rol EMPLOYEE),
+      //    en una sola transacción: o se crean ambos, o no se crea nada.
+      const { profesional, email } = await this.prisma.$transaction(
+        async (tx) => {
+          const created = await tx.profesional.create({
+            data: {
+              ...profesionalData,
+              imagen: imagenPath,
+            },
+          });
+
+          const email = await this.generateUniqueProfesionalEmail(
+            tx,
+            created.nombre,
+            sede.empresa?.nombre ?? 'empresa',
+          );
+
+          const newUser = await tx.users.create({
+            data: {
+              email,
+              clientType: ClientType.people,
+              state: ClientState.enabled,
+              acceptTerms: true,
+              acceptPolitics: true,
+              role: Role.EMPLOYEE,
+              UserAuth: {
+                create: {
+                  email,
+                  password: hashedPassword,
+                },
+              },
+            },
+          });
+
+          const linked = await tx.profesional.update({
+            where: { id: created.id },
+            data: { user_id: newUser.id },
+          });
+
+          return { profesional: linked, email };
+        },
+      );
+
+      return {
+        ...profesional,
+        acceso: {
+          email,
+          mensaje:
+            'Comparte este email y la contraseña que registraste con el profesional para que pueda iniciar sesión.',
+        },
+      };
     } catch (error) {
       // 4. Limpiar el archivo si algo falla
       if (file) {
         await this.safeDeleteRemoteOrLocal(imagenPath || file.path);
       }
-      // 5. Manejar errores de Prisma, por ejemplo, teléfono duplicado
+      // 5. Manejar errores de Prisma, por ejemplo, teléfono o email duplicado
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
+          const target = Array.isArray((error.meta as any)?.target)
+            ? ((error.meta as any).target as string[]).join(',')
+            : String((error.meta as any)?.target ?? '');
+
+          if (target.includes('phone')) {
+            throw new BadRequestException(
+              'El número de teléfono ya está en uso.',
+            );
+          }
+
+          if (target.includes('email')) {
+            throw new BadRequestException(
+              'El email generado para el acceso ya está en uso, intenta nuevamente.',
+            );
+          }
+
           throw new BadRequestException(
-            'El número de teléfono ya está en uso.',
+            'Ya existe un registro con los datos proporcionados.',
           );
         }
       }
@@ -183,18 +322,150 @@ export class ProfesionalService {
     }
   }
 
-  async findAll() {
-    return this.prisma.profesional.findMany();
-  }
+  async linkAccess(
+    id: number,
+    dto: LinkProfesionalAccessDto,
+    user?: AuthenticatedUser,
+  ) {
+    await this.accessControlService.ensureProfessionalAccessForUser(id, user);
 
-  async findOne(id: number) {
     const profesional = await this.prisma.profesional.findUnique({
       where: { id },
     });
     if (!profesional) {
       throw new NotFoundException(`Profesional con ID ${id} no encontrado.`);
     }
-    return profesional;
+
+    if (profesional.user_id) {
+      throw new BadRequestException(
+        'Este profesional ya tiene acceso vinculado.',
+      );
+    }
+
+    const existingUser = await this.prisma.users.findUnique({
+      where: { email: dto.email },
+      select: { id: true },
+    });
+    if (existingUser) {
+      throw new BadRequestException(
+        'El email ya está en uso por otro usuario.',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    return this.prisma.$transaction(async (tx) => {
+      const newUser = await tx.users.create({
+        data: {
+          email: dto.email,
+          clientType: ClientType.people,
+          state: ClientState.enabled,
+          acceptTerms: true,
+          acceptPolitics: true,
+          role: Role.EMPLOYEE,
+          UserAuth: {
+            create: {
+              email: dto.email,
+              password: hashedPassword,
+            },
+          },
+        },
+      });
+
+      return tx.profesional.update({
+        where: { id },
+        data: { user_id: newUser.id },
+      });
+    });
+  }
+
+  async updateAccess(
+    id: number,
+    dto: UpdateProfesionalAccessDto,
+    user?: AuthenticatedUser,
+  ) {
+    if (!dto.email && !dto.password) {
+      throw new BadRequestException(
+        'Debe enviar al menos un email o una contraseña nueva.',
+      );
+    }
+
+    await this.accessControlService.ensureProfessionalAccessForUser(id, user);
+
+    const profesional = await this.prisma.profesional.findUnique({
+      where: { id },
+    });
+    if (!profesional) {
+      throw new NotFoundException(`Profesional con ID ${id} no encontrado.`);
+    }
+
+    if (!profesional.user_id) {
+      throw new BadRequestException(
+        'Este profesional todavía no tiene acceso vinculado. Usa primero "vincular-acceso".',
+      );
+    }
+
+    if (dto.email) {
+      const existingUser = await this.prisma.users.findFirst({
+        where: { email: dto.email, id: { not: profesional.user_id } },
+        select: { id: true },
+      });
+      if (existingUser) {
+        throw new BadRequestException(
+          'El email ya está en uso por otro usuario.',
+        );
+      }
+    }
+
+    const hashedPassword = dto.password
+      ? await bcrypt.hash(dto.password, 10)
+      : undefined;
+
+    const updatedUser = await this.prisma.$transaction(async (tx) => {
+      if (dto.email) {
+        await tx.users.update({
+          where: { id: profesional.user_id! },
+          data: { email: dto.email },
+        });
+      }
+
+      return tx.userAuth.update({
+        where: { user_id: profesional.user_id! },
+        data: {
+          ...(dto.email ? { email: dto.email } : {}),
+          ...(hashedPassword ? { password: hashedPassword } : {}),
+        },
+        select: { email: true, updatedAt: true },
+      });
+    });
+
+    return {
+      profesionalId: id,
+      acceso: {
+        tieneAcceso: true,
+        email: updatedUser.email,
+      },
+    };
+  }
+
+  async findAll() {
+    const profesionales = await this.prisma.profesional.findMany({
+      include: { users: { select: { email: true } } },
+    });
+    return profesionales.map((profesional) =>
+      this.withAccesoInfo(profesional),
+    );
+  }
+
+  async findOne(id: number) {
+    const profesional = await this.prisma.profesional.findUnique({
+      where: { id },
+      include: { users: { select: { email: true } } },
+    });
+    if (!profesional) {
+      throw new NotFoundException(`Profesional con ID ${id} no encontrado.`);
+    }
+    return this.withAccesoInfo(profesional);
   }
 
   async findProfesionalConServiciosYSede(

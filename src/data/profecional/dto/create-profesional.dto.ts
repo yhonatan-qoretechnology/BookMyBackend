@@ -1,6 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 export class CreateProfesionalDto {
   @ApiProperty({
@@ -37,4 +43,15 @@ export class CreateProfesionalDto {
   @IsInt()
   @Type(() => Number)
   sedeId: number;
+
+  @ApiProperty({
+    example: 'Abc123@',
+    description:
+      'Contraseña de acceso del profesional. El email de acceso se genera automáticamente (nombre+@+empresa.com) y se le debe comunicar al profesional junto con esta contraseña.',
+    minLength: 6,
+  })
+  @IsNotEmpty()
+  @IsString()
+  @MinLength(6)
+  password: string;
 }

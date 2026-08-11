@@ -758,6 +758,18 @@ export class AuthService {
                 sedeId: true,
               },
             },
+            profesionales: {
+              select: {
+                id: true,
+                nombre: true,
+                phone: true,
+                imagen: true,
+                sedeId: true,
+                sede: {
+                  select: { id: true, nombre: true, empresaId: true },
+                },
+              },
+            },
           },
         },
       },
@@ -804,19 +816,23 @@ export class AuthService {
 
     // Generar token con los datos del usuario
     const adminProfile = userAuth.user.AdminProfile;
+    const profesional = userAuth.user.profesionales;
 
     const token = await this.generateToken({
       id: userAuth.user.id,
       email: userAuth.user.email,
-      name: userAuth.user.UserData?.name,
+      // Para EMPLOYEE (profesionales) usamos su nombre/teléfono del registro
+      // de Profesional si no tienen UserData cargado.
+      name: userAuth.user.UserData?.name ?? profesional?.nombre,
       gender: userAuth.user.UserData?.gender,
       birthdate: userAuth.user.UserData?.birthdate,
-      phone: userAuth.user.UserData?.phone,
+      phone: userAuth.user.UserData?.phone ?? profesional?.phone,
       idioma: userAuth.user.UserData?.idioma,
       country: userAuth.user.UserData?.country,
       role: userAuth.user.role,
-      empresaId: adminProfile?.empresaId ?? null,
-      sedeId: adminProfile?.sedeId ?? null,
+      empresaId: adminProfile?.empresaId ?? profesional?.sede?.empresaId ?? null,
+      sedeId: adminProfile?.sedeId ?? profesional?.sedeId ?? null,
+      profesionalId: profesional?.id ?? null,
     });
 
     return {
@@ -838,6 +854,7 @@ export class AuthService {
       role: user.role,
       empresaId: user.empresaId ?? null,
       sedeId: user.sedeId ?? null,
+      profesionalId: user.profesionalId ?? null,
     };
 
     const token = this.jwtService.sign(payload, { expiresIn: '1d' });

@@ -12,11 +12,13 @@ import {
   Post,
   Query,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiBody,
   ApiConsumes,
   ApiNotFoundResponse,
@@ -24,10 +26,16 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateProfesionalWithImageDto } from './dto/create-profesional-with-image.dto';
 import { CreateProfesionalDto } from './dto/create-profesional.dto';
+import { LinkProfesionalAccessDto } from './dto/link-profesional-access.dto';
+import { UpdateProfesionalAccessDto } from './dto/update-profesional-access.dto';
 import { UpdateProfesionalDto } from './dto/update-profesional.dto';
 import { ProfesionalService } from './profesional.service';
 
@@ -150,6 +158,56 @@ export class ProfesionalController {
     @AuthUser() user?: AuthenticatedUser,
   ) {
     return this.profesionalService.remove(id, user);
+  }
+
+  @Patch(':id/vincular-acceso')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Vincular acceso (login) a un profesional ya existente',
+    description:
+      'Crea el usuario y las credenciales para un profesional que fue registrado antes de que existiera el login, y lo vincula a su registro. Requiere sesión de administrador (SUPER_ADMIN, COMPANY_ADMIN o BRANCH_ADMIN de su propia sede/empresa).',
+  })
+  @ApiResponse({ status: 200, description: 'Acceso vinculado correctamente.' })
+  @ApiBadRequestResponse({
+    description:
+      'El profesional ya tiene acceso vinculado o el email ya está en uso.',
+  })
+  @ApiNotFoundResponse({ description: 'Profesional no encontrado.' })
+  async linkAccess(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LinkProfesionalAccessDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.profesionalService.linkAccess(id, dto, user);
+  }
+
+  @Patch(':id/acceso')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Actualizar el email y/o la contraseña de acceso de un profesional que ya tiene login',
+    description:
+      'Permite cambiar el email o resetear la contraseña de un profesional que ya fue vinculado (creado con password o vinculado con "vincular-acceso"). Requiere sesión de administrador.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Acceso actualizado correctamente.',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'No se envió ningún dato, el profesional no tiene acceso vinculado, o el email ya está en uso.',
+  })
+  @ApiNotFoundResponse({ description: 'Profesional no encontrado.' })
+  async updateAccess(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateProfesionalAccessDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.profesionalService.updateAccess(id, dto, user);
   }
 
   @Get('by-sede/:sedeId')
