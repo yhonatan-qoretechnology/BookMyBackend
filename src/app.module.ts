@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { SwaggerModule } from '@nestjs/swagger';
 import * as Joi from 'joi';
+import { AssistantModule } from './assistant/assistant.module';
 import { AuthModule } from './auth/auth.module';
 import { ChatModule } from './chat/chat.module';
 import { AppointmentModule } from './data/appointment/appointment.module';
@@ -19,6 +20,7 @@ import { ProfesionalModule } from './data/profecional/profesional.module';
 import { ResenaModule } from './data/resena/resena.module';
 import { SedeModule } from './data/sede/sede.module';
 import { ServiceSedeProfesionalModule } from './data/service-sede-profesional/service-sede-profesional.module';
+import { SearchModule } from './data/search/search.module';
 import { ServiceModule } from './data/serviceCategory/service.module';
 import { SmsModule } from './data/sms/sms.module';
 import { UserLocationModule } from './data/user-location/user-location.module';
@@ -70,6 +72,8 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     ChatModule,
     ChatMessageModule,
     GastoModule,
+    AssistantModule,
+    SearchModule,
   ],
 })
 export class AppModule {}

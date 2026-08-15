@@ -36,6 +36,7 @@ model Users {
   UserLocation                                     UserLocation?  @relation("UserToLocation")
   UserStatus                                       UserStatus?    @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_status")
   gastos                                            Gasto[]
+  assistantConversations                           AssistantConversation[]
 
   @@index([email])
   @@map("users")
@@ -491,6 +492,27 @@ model UserStatusTranslation {
   name         String
   description  String?
   UserStatus   UserStatus @relation(fields: [userStatusId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_user_status_translation")
+}
+
+/// Log de la conversación con el asistente virtual (POST /assistant/chat):
+/// un registro por cada mensaje de usuario y por cada respuesta/tool_call
+/// del modelo, para poder auditar uso y costos y mejorar el prompt.
+model AssistantConversation {
+  id            Int      @id @default(autoincrement())
+  userId        Int?     @map("user_id")
+  role          String   @db.VarChar(20)
+  content       String?
+  toolName      String?  @map("tool_name") @db.VarChar(100)
+  toolCallId    String?  @map("tool_call_id")
+  toolArguments String?  @map("tool_arguments")
+  provider      String?  @db.VarChar(20)
+  model         String?  @db.VarChar(100)
+  createdAt     DateTime @default(now()) @map("created_at")
+  user          Users?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("assistant_conversations")
 }
 
 model chat {

@@ -1,0 +1,469 @@
+<title>Asistente de Voz Bookmy</title>
+<style>
+  @font-face {
+    font-family: 'Iowan Fallback';
+    src: local('Iowan Old Style'), local('Palatino Linotype'), local('Palatino');
+  }
+
+  :root {
+    --paper: #f6f3ee;
+    --surface: #fffdfa;
+    --ink: #1c2624;
+    --ink-soft: #5b6663;
+    --line: #ddd6cb;
+    --teal: #00a88f;
+    --teal-ink: #00695a;
+    --teal-tint: #e3f3f0;
+    --coral: #e8734a;
+    --coral-tint: #fbe9e1;
+    --shadow: rgba(28, 38, 36, 0.08);
+
+    --serif: 'Iowan Fallback', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Consolas', 'Liberation Mono', monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #121715;
+      --surface: #182220;
+      --ink: #eaf2ef;
+      --ink-soft: #93a19d;
+      --line: #263330;
+      --teal: #2bd1b4;
+      --teal-ink: #7fe9d5;
+      --teal-tint: #17332e;
+      --coral: #f0916b;
+      --coral-tint: #34211a;
+      --shadow: rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #121715;
+    --surface: #182220;
+    --ink: #eaf2ef;
+    --ink-soft: #93a19d;
+    --line: #263330;
+    --teal: #2bd1b4;
+    --teal-ink: #7fe9d5;
+    --teal-tint: #17332e;
+    --coral: #f0916b;
+    --coral-tint: #34211a;
+    --shadow: rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 6rem;
+  }
+
+  header.masthead {
+    margin-bottom: 3rem;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--teal-ink);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .eyebrow::before {
+    content: '';
+    width: 22px;
+    height: 1px;
+    background: var(--teal);
+    display: inline-block;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(2rem, 5vw, 2.6rem);
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    margin: 0.6rem 0 0.8rem;
+    text-wrap: balance;
+  }
+
+  .dek {
+    font-size: 1.08rem;
+    color: var(--ink-soft);
+    max-width: 38rem;
+    margin: 0;
+  }
+
+  h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1.5rem;
+    letter-spacing: -0.005em;
+    margin: 3.2rem 0 1rem;
+    padding-top: 1.6rem;
+    border-top: 1px solid var(--line);
+    text-wrap: balance;
+  }
+  section:first-of-type h2 { border-top: none; padding-top: 0; }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin: 1.8rem 0 0.7rem;
+    color: var(--ink);
+  }
+
+  p { margin: 0.9rem 0; }
+  a { color: var(--teal-ink); text-decoration-color: var(--teal); text-underline-offset: 2px; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--teal-tint);
+    color: var(--teal-ink);
+    padding: 0.12em 0.4em;
+    border-radius: 4px;
+  }
+
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.1rem 1.2rem;
+    overflow-x: auto;
+    box-shadow: 0 1px 2px var(--shadow);
+    margin: 1rem 0;
+  }
+  pre code {
+    background: none;
+    color: var(--ink);
+    padding: 0;
+    font-size: 0.83rem;
+    line-height: 1.6;
+  }
+  .tok-key { color: var(--teal-ink); }
+  .tok-str { color: #a5622f; }
+  .tok-com { color: var(--ink-soft); font-style: italic; }
+
+  ul, ol { padding-left: 1.3rem; margin: 0.9rem 0; }
+  li { margin: 0.4rem 0; }
+  ol.steps { list-style: none; padding-left: 0; counter-reset: step; }
+  ol.steps > li {
+    counter-increment: step;
+    position: relative;
+    padding-left: 2.6rem;
+    margin: 1.1rem 0;
+  }
+  ol.steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 0.05rem;
+    width: 1.8rem; height: 1.8rem;
+    border-radius: 50%;
+    background: var(--teal-tint);
+    color: var(--teal-ink);
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .callout {
+    border: 1px solid var(--coral);
+    background: var(--coral-tint);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    margin: 1.4rem 0;
+  }
+  .callout .label {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--coral);
+    font-weight: 700;
+    display: block;
+    margin-bottom: 0.4rem;
+  }
+  .callout p { margin: 0.4rem 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+    margin: 1rem 0;
+  }
+  thead th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--line);
+    padding: 0 0.7rem 0.6rem 0;
+  }
+  tbody td {
+    padding: 0.65rem 0.7rem 0.65rem 0;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+  .table-scroll { overflow-x: auto; }
+
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 1.4rem 0 1.8rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .flow-step {
+    display: grid;
+    grid-template-columns: 2.2rem 1fr;
+    gap: 0.9rem;
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid var(--line);
+    align-items: start;
+  }
+  .flow-step:last-child { border-bottom: none; }
+  .flow-step .who {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    color: var(--teal-ink);
+    background: var(--teal-tint);
+    border-radius: 5px;
+    padding: 0.15rem 0;
+    text-align: center;
+    align-self: center;
+  }
+  .flow-step .what strong { font-weight: 700; }
+  .flow-step .what span.small {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+    margin-top: 0.15rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 5px;
+    font-weight: 600;
+  }
+  .badge.get { background: var(--teal-tint); color: var(--teal-ink); }
+  .badge.post { background: var(--coral-tint); color: var(--coral); }
+
+  .kv {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    gap: 0.35rem 1rem;
+    font-size: 0.9rem;
+    margin: 1rem 0;
+  }
+  .kv dt { color: var(--ink-soft); font-family: var(--mono); font-size: 0.8rem; padding-top: 0.1rem; }
+  .kv dd { margin: 0; }
+
+  footer.foot {
+    margin-top: 4rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--line);
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+  }
+
+  ::selection { background: var(--teal); color: var(--surface); }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Guía de integración · app móvil</div>
+    <h1>Conectar el asistente de voz</h1>
+    <p class="dek">Todo lo necesario para que la app hable con <code>POST /api/assistant/chat</code>: el flujo completo de audio, el formato exacto de los mensajes, el loop de tools y con qué proveedor probar hoy.</p>
+  </header>
+
+  <section>
+    <h2>El flujo, de punta a punta</h2>
+    <p>El backend nunca toca audio — solo entra y sale texto. Todo lo demás (voz→texto, texto→voz, el avatar) vive en la app.</p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <span class="who">app</span>
+        <div class="what"><strong>Usuario habla</strong> → transcribir on-device con <code>expo-speech-recognition</code><span class="small">No sube audio a ningún servidor. Es gratis y no suma latencia de red.</span></div>
+      </div>
+      <div class="flow-step">
+        <span class="who">app</span>
+        <div class="what"><strong>Enviar el texto</strong> a <code>POST /api/assistant/chat</code><span class="small">Con el historial de la conversación (últimos 10 mensajes).</span></div>
+      </div>
+      <div class="flow-step">
+        <span class="who">back</span>
+        <div class="what"><strong>Responde con texto y/o <code>tool_calls</code></strong><span class="small">Si pide una tool, la app la ejecuta contra los endpoints que ya existen y vuelve a llamar al mismo endpoint (ver más abajo).</span></div>
+      </div>
+      <div class="flow-step">
+        <span class="who">app</span>
+        <div class="what"><strong>Mostrar el modal con el avatar animado</strong>, con el texto de la respuesta<span class="small">Arrancá el modal apenas llega <code>content</code>, no esperes a que termine el audio.</span></div>
+      </div>
+      <div class="flow-step">
+        <span class="who">app</span>
+        <div class="what"><strong>Reproducir en voz</strong> con <code>expo-speech</code> (TTS on-device)<span class="small">Sincronizá el estado "hablando" del avatar con el callback de progreso de <code>Speech.speak()</code>.</span></div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="label">Por qué on-device y no un endpoint de audio</span>
+      <p>Transcribir o sintetizar voz en el servidor cuesta por minuto (además del costo del LLM) y suma segundos de latencia. On-device es instantáneo, gratis, y el audio del usuario nunca sale del teléfono. Si más adelante quieren una voz "premium" (ElevenLabs, etc.), eso sí necesitaría un endpoint nuevo — no está en el alcance de esta versión.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>El endpoint</h2>
+    <p><span class="badge post">POST</span> <code>/api/assistant/chat</code></p>
+    <dl class="kv">
+      <dt>Content-Type</dt><dd><code>application/json</code></dd>
+      <dt>Authorization</dt><dd>Opcional. <code>Bearer &lt;token&gt;</code> si el usuario tiene sesión — habilita <code>consultar_mis_citas</code> y prioriza el límite por usuario en vez de por IP.</dd>
+      <dt>Rate limit</dt><dd><code>8</code> solicitudes / minuto (por usuario si mandás token, si no por IP). Headers <code>X-RateLimit-Limit/Remaining/Reset</code> en cada respuesta.</dd>
+    </dl>
+
+    <div class="callout">
+      <span class="label">Ojo: existe también /api/assistant/chat/test</span>
+      <p>Es un endpoint aparte, solo para pruebas manuales desde Swagger — resuelve las tools él mismo del lado del servidor y devuelve la respuesta ya armada. <strong>La app NO debe usarlo nunca.</strong> La app siempre habla con <code>/api/assistant/chat</code> (este) y es ella quien ejecuta cada tool_call, como está documentado abajo.</p>
+    </div>
+
+    <h3>Si te pasás del límite (429)</h3>
+    <pre><code><span class="tok-com">// Header: Retry-After: 51</span>
+{
+  <span class="tok-key">"statusCode"</span>: <span class="tok-key">429</span>,
+  <span class="tok-key">"error"</span>: <span class="tok-str">"Too Many Requests"</span>,
+  <span class="tok-key">"message"</span>: <span class="tok-str">"Estás enviando mensajes muy rápido. Esperá 51 segundos e intentá de nuevo."</span>,
+  <span class="tok-key">"retryAfterSeconds"</span>: <span class="tok-key">51</span>
+}</code></pre>
+    <p>Usá <code>retryAfterSeconds</code> para deshabilitar el input y mostrar una cuenta regresiva ("Esperá 51s...") en vez de un error genérico. No hace falta parsear el mensaje de texto — el número ya viene aparte.</p>
+
+    <h3>Request</h3>
+    <pre><code><span class="tok-com">// El array NO incluye el mensaje "system": lo agrega el backend.</span>
+{
+  <span class="tok-key">"messages"</span>: [
+    { <span class="tok-key">"role"</span>: <span class="tok-str">"user"</span>, <span class="tok-key">"content"</span>: <span class="tok-str">"Quiero reservar una manicura"</span> }
+  ],
+  <span class="tok-key">"tools_enabled"</span>: <span class="tok-key">true</span>
+}</code></pre>
+
+    <h3>Response</h3>
+    <pre><code>{
+  <span class="tok-key">"choices"</span>: [{
+    <span class="tok-key">"message"</span>: {
+      <span class="tok-key">"role"</span>: <span class="tok-str">"assistant"</span>,
+      <span class="tok-key">"content"</span>: <span class="tok-str">"Tenemos manicura semipermanente por 25€..."</span>,
+      <span class="tok-key">"tool_calls"</span>: <span class="tok-com">null // o un array, ver abajo</span>
+    }
+  }]
+}</code></pre>
+    <p><code>content</code> viene <code>null</code> cuando la respuesta es solo <code>tool_calls</code> — es normal, no es un error.</p>
+  </section>
+
+  <section>
+    <h2>El loop de tools</h2>
+    <p>Cuando <code>tool_calls</code> no es null, la app tiene que resolverlo y volver a preguntar. Es la parte con más detalle fino — un paso mal hecho y el modelo pierde el contexto.</p>
+
+    <ol class="steps">
+      <li>Ejecutar cada <code>tool_call</code> contra el endpoint REST correspondiente (tabla abajo) — ya existen todos, están tipados en <code>services/apiBookmi.ts</code>.</li>
+      <li>Volver a llamar <code>POST /api/assistant/chat</code> con la conversación completa, agregando <strong>dos mensajes nuevos</strong>, en este orden exacto:</li>
+    </ol>
+
+    <div class="callout">
+      <span class="label">El detalle que rompe el loop si se olvida</span>
+      <p>Hay que reenviar el mensaje del <code>assistant</code> que pidió la tool — con su <code>tool_calls</code> — antes del mensaje <code>tool</code> con el resultado. Si se omite, el modelo no puede relacionar el resultado con el pedido y la conversación pierde el hilo.</p>
+    </div>
+
+    <pre><code>{
+  <span class="tok-key">"messages"</span>: [
+    { <span class="tok-key">"role"</span>: <span class="tok-str">"user"</span>, <span class="tok-key">"content"</span>: <span class="tok-str">"quiero manicura"</span> },
+
+    <span class="tok-com">// 1) el turno del assistant que pidió la tool, tal cual llegó</span>
+    {
+      <span class="tok-key">"role"</span>: <span class="tok-str">"assistant"</span>,
+      <span class="tok-key">"content"</span>: <span class="tok-key">null</span>,
+      <span class="tok-key">"tool_calls"</span>: [{
+        <span class="tok-key">"id"</span>: <span class="tok-str">"call_abc123"</span>,
+        <span class="tok-key">"type"</span>: <span class="tok-str">"function"</span>,
+        <span class="tok-key">"function"</span>: { <span class="tok-key">"name"</span>: <span class="tok-str">"buscar_todo"</span>, <span class="tok-key">"arguments"</span>: <span class="tok-str">"{\"q\":\"manicura\"}"</span> }
+      }]
+    },
+
+    <span class="tok-com">// 2) el resultado que ejecutó la app, como JSON en texto</span>
+    {
+      <span class="tok-key">"role"</span>: <span class="tok-str">"tool"</span>,
+      <span class="tok-key">"tool_call_id"</span>: <span class="tok-str">"call_abc123"</span>,
+      <span class="tok-key">"name"</span>: <span class="tok-str">"buscar_todo"</span>,
+      <span class="tok-key">"content"</span>: <span class="tok-str">"{\"servicios\":[{\"nombre\":\"Manicura SPA\",\"precios\":[...]}]}"</span>
+    }
+  ]
+}</code></pre>
+
+    <p>Máximo <strong>4 vueltas</strong> por turno de usuario — si se supera, cortá el loop y mostrá el último texto que haya llegado.</p>
+  </section>
+
+  <section>
+    <h2>Catálogo de tools</h2>
+    <p>Nombres y parámetros exactos — tienen que coincidir 1:1 con <code>assistantToolExecutor.ts</code>.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Tool</th><th>Tipo</th><th>Resuelve con</th></tr></thead>
+        <tbody>
+          <tr><td><code>buscar_todo</code></td><td>lectura</td><td><code>GET /search?q=</code> — preferida para búsquedas abiertas</td></tr>
+          <tr><td><code>buscar_categoria</code></td><td>lectura</td><td><code>GET /categories</code></td></tr>
+          <tr><td><code>listar_servicios_categoria</code></td><td>lectura</td><td><code>GET /services/category/{id}</code></td></tr>
+          <tr><td><code>listar_sedes_empresa</code></td><td>lectura</td><td><code>GET /sedes/empresa/{companyId}</code></td></tr>
+          <tr><td><code>listar_servicios_sede</code></td><td>lectura</td><td><code>GET /services/by-sede/{id}</code></td></tr>
+          <tr><td><code>ver_profesional</code></td><td>lectura</td><td><code>GET /profesionales/{id}/detalle</code></td></tr>
+          <tr><td><code>consultar_mis_citas</code></td><td>lectura, requiere sesión</td><td><code>GET /appointments/users/{userId}/services</code></td></tr>
+          <tr><td><code>iniciar_reserva</code></td><td>navegación</td><td><code>router.push</code> a la pantalla de reserva — no crea ni cobra nada</td></tr>
+          <tr><td><code>ir_a_pantalla</code></td><td>navegación</td><td><code>router.push</code> a una pantalla general</td></tr>
+          <tr><td><code>cancelar_cita</code></td><td><strong>escritura, pide confirmación</strong></td><td><code>PATCH /appointments/{id}/cancel</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><code>cancelar_cita</code> es la única acción irreversible del catálogo. El prompt ya le exige al modelo confirmar antes de llamarla — aun así, mostrá siempre un diálogo de confirmación del lado de la app antes de ejecutarla. Cinturón y tirantes.</p>
+  </section>
+
+  <section>
+    <h2>Qué proveedor usar para probar</h2>
+    <dl class="kv">
+      <dt>Ahora mismo</dt><dd><strong>OpenAI</strong> (<code>gpt-4o-mini</code>) — probado en vivo, function calling funcionando de punta a punta.</dd>
+      <dt>Anthropic</dt><dd>Configurado en el servidor pero la cuenta no tiene crédito cargado todavía. No lo uses hasta que se avise que ya tiene saldo.</dd>
+      <dt>Cómo saber cuál responde</dt><dd>El campo <code>choices[0].message</code> no cambia entre proveedores — el backend normaliza la respuesta, no hace falta que la app sepa cuál está activo.</dd>
+    </dl>
+  </section>
+
+  <footer class="foot">
+    Backend: <code>src/assistant/</code> en <code>bookmy</code>. Cualquier duda sobre una tool puntual o un caso del loop que no cierre, con el <code>request_id</code>/payload exacto se resuelve más rápido.
+  </footer>
+
+</div>
