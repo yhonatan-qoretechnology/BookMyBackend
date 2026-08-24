@@ -37,6 +37,7 @@ model Users {
   UserStatus                                       UserStatus?    @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_status")
   gastos                                            Gasto[]
   assistantConversations                           AssistantConversation[]
+  notifications                                     Notification[]
 
   @@index([email])
   @@map("users")
@@ -513,6 +514,27 @@ model AssistantConversation {
   @@index([userId])
   @@index([createdAt])
   @@map("assistant_conversations")
+}
+
+/// Notificaciones dirigidas a un usuario (hoy: administradores de sede
+/// cuando se crea una reserva). Se persisten para historial/no-leídas y
+/// además se empujan en tiempo real por socket cuando el destinatario
+/// está conectado.
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  type      String    @db.VarChar(50)
+  title     String
+  body      String
+  data      Json?
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now()) @map("created_at")
+  readAt    DateTime? @map("read_at")
+  user      Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([createdAt])
+  @@map("notifications")
 }
 
 model chat {

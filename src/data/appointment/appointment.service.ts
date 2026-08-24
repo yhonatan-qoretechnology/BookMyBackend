@@ -4,11 +4,19 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { AppointmentStatus, ClientState } from '@prisma/client';
+import {
+  AppointmentStatus,
+  ClientState,
+  Profesional,
+  Sede,
+  Service,
+  Users,
+} from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 
+import { NotificationService } from '../notification/notification.service';
 import { PaymentService } from '../payment/payment.service';
 
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Europe/Madrid';
@@ -20,7 +28,50 @@ export class AppointmentService {
   constructor(
     private prisma: PrismaService,
     private paymentService: PaymentService,
+    private notificationService: NotificationService,
   ) {}
+
+  /**
+   * Best-effort: arma y dispara la notificación al BRANCH_ADMIN de la sede.
+   * Nunca debe lanzar hacia arriba (el llamador ya la envuelve en catch,
+   * pero se protege doble acá también).
+   */
+  private async notifyReservationAdmins(
+    appointment: { id: number; fecha: Date; horaInicio: Date },
+    sede: Sede,
+    service: Service,
+    profesional: Profesional,
+    cliente: Users,
+  ): Promise<void> {
+    try {
+      const serviceTranslation = await this.prisma.serviceTranslation.findFirst({
+        where: { serviceId: service.id, language: 'es' },
+        select: { name: true },
+      });
+
+      const clienteData = await this.prisma.userData.findUnique({
+        where: { userId: cliente.id },
+        select: { name: true },
+      });
+
+      await this.notificationService.notifyNewReservation({
+        appointmentId: appointment.id,
+        sedeId: sede.id,
+        sedeNombre: sede.nombre,
+        serviceId: service.id,
+        serviceNombre: serviceTranslation?.name ?? 'un servicio',
+        profesionalId: profesional.id,
+        profesionalNombre: profesional.nombre,
+        clienteNombre: clienteData?.name ?? cliente.email,
+        fecha: appointment.fecha,
+        horaInicio: appointment.horaInicio,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Error armando la notificación de la reserva ${appointment.id}: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  }
 
   private toIsoOrNull(value: unknown) {
     if (!(value instanceof Date)) return null;
@@ -622,6 +673,15 @@ export class AppointmentService {
         cvv: data.cvv,
         saveCard: false, // Por defecto no guardar a menos que se extienda el DTO
       });
+
+      // Avisar al administrador de la sede. Best-effort: si esto falla,
+      // la reserva ya está creada y no debe verse afectada.
+      this.notifyReservationAdmins(appointment, sede, service, profesional, user).catch(
+        (notifyError) =>
+          this.logger.error(
+            `No se pudo notificar la reserva ${appointment.id}: ${notifyError?.message ?? notifyError}`,
+          ),
+      );
 
       return appointment;
     } catch (error) {

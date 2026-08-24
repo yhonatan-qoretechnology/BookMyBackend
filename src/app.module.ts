@@ -14,6 +14,7 @@ import { MailModule } from './data/email/mail.module';
 import { EmpresaModule } from './data/empresa/empresa.module';
 import { GastoModule } from './data/gasto/gasto.module';
 import { HorarioSedeModule } from './data/HorarioSede/horario-sede.module';
+import { NotificationModule } from './data/notification/notification.module';
 import { OtpModule } from './data/otp/otp.module';
 import { PaymentModule } from './data/payment/payment.module';
 import { ProfesionalModule } from './data/profecional/profesional.module';
@@ -74,6 +75,7 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     GastoModule,
     AssistantModule,
     SearchModule,
+    NotificationModule,
   ],
 })
 export class AppModule {}
