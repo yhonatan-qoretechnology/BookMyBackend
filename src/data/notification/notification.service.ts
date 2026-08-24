@@ -51,21 +51,33 @@ export class NotificationService {
   }
 
   /**
-   * Notifica al/los BRANCH_ADMIN de la sede donde se hizo una reserva.
-   * Best-effort: si algo falla acá, nunca debe tumbar la creación de la
-   * cita (el llamador debe atrapar el error, no dejar que se propague).
+   * Notifica al/los BRANCH_ADMIN de la sede donde se hizo una reserva, y
+   * a todos los SUPER_ADMIN de la plataforma. Best-effort: si algo falla
+   * acá, nunca debe tumbar la creación de la cita (el llamador debe
+   * atrapar el error, no dejar que se propague).
    */
   async notifyNewReservation(
     input: NewReservationNotificationInput,
   ): Promise<void> {
-    const admins = await this.prisma.adminProfile.findMany({
-      where: { sedeId: input.sedeId },
-      select: { userId: true },
-    });
+    const [branchAdmins, superAdmins] = await Promise.all([
+      this.prisma.adminProfile.findMany({
+        where: { sedeId: input.sedeId },
+        select: { userId: true },
+      }),
+      this.prisma.users.findMany({
+        where: { role: 'SUPER_ADMIN' },
+        select: { id: true },
+      }),
+    ]);
 
-    if (admins.length === 0) {
+    const recipientIds = new Set<number>([
+      ...branchAdmins.map((a) => a.userId),
+      ...superAdmins.map((u) => u.id),
+    ]);
+
+    if (recipientIds.size === 0) {
       this.logger.warn(
-        `No hay BRANCH_ADMIN configurado para sedeId=${input.sedeId}; no se notifica a nadie de la reserva ${input.appointmentId}.`,
+        `No hay BRANCH_ADMIN ni SUPER_ADMIN a quien notificar la reserva ${input.appointmentId} (sedeId=${input.sedeId}).`,
       );
       return;
     }
@@ -84,8 +96,8 @@ export class NotificationService {
     const body = `${input.clienteNombre} reservó ${input.serviceNombre} con ${input.profesionalNombre} el ${fechaLabel} a las ${horaLabel} en ${sedeNombre}.`;
 
     await Promise.all(
-      admins.map((admin) =>
-        this.create(admin.userId, 'NEW_RESERVATION', title, body, {
+      [...recipientIds].map((userId) =>
+        this.create(userId, 'NEW_RESERVATION', title, body, {
           appointmentId: input.appointmentId,
           sedeId: input.sedeId,
           serviceId: input.serviceId,
