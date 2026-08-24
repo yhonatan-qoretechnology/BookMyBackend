@@ -51,15 +51,16 @@ export class NotificationService {
   }
 
   /**
-   * Notifica al/los BRANCH_ADMIN de la sede donde se hizo una reserva, y
-   * a todos los SUPER_ADMIN de la plataforma. Best-effort: si algo falla
-   * acá, nunca debe tumbar la creación de la cita (el llamador debe
-   * atrapar el error, no dejar que se propague).
+   * Notifica al/los BRANCH_ADMIN de la sede donde se hizo una reserva, a
+   * todos los SUPER_ADMIN de la plataforma, y al profesional asignado (si
+   * ya tiene acceso vinculado — ver profesional.service.ts vincular-acceso).
+   * Best-effort: si algo falla acá, nunca debe tumbar la creación de la
+   * cita (el llamador debe atrapar el error, no dejar que se propague).
    */
   async notifyNewReservation(
     input: NewReservationNotificationInput,
   ): Promise<void> {
-    const [branchAdmins, superAdmins] = await Promise.all([
+    const [branchAdmins, superAdmins, profesional] = await Promise.all([
       this.prisma.adminProfile.findMany({
         where: { sedeId: input.sedeId },
         select: { userId: true },
@@ -68,16 +69,21 @@ export class NotificationService {
         where: { role: 'SUPER_ADMIN' },
         select: { id: true },
       }),
+      this.prisma.profesional.findUnique({
+        where: { id: input.profesionalId },
+        select: { user_id: true },
+      }),
     ]);
 
-    const recipientIds = new Set<number>([
+    const adminIds = new Set<number>([
       ...branchAdmins.map((a) => a.userId),
       ...superAdmins.map((u) => u.id),
     ]);
+    const profesionalUserId = profesional?.user_id ?? null;
 
-    if (recipientIds.size === 0) {
+    if (adminIds.size === 0 && !profesionalUserId) {
       this.logger.warn(
-        `No hay BRANCH_ADMIN ni SUPER_ADMIN a quien notificar la reserva ${input.appointmentId} (sedeId=${input.sedeId}).`,
+        `No hay BRANCH_ADMIN, SUPER_ADMIN ni profesional con acceso a quien notificar la reserva ${input.appointmentId} (sedeId=${input.sedeId}).`,
       );
       return;
     }
@@ -93,18 +99,37 @@ export class NotificationService {
     const sedeNombre = input.sedeNombre.trim();
 
     const title = 'Nueva reserva';
-    const body = `${input.clienteNombre} reservó ${input.serviceNombre} con ${input.profesionalNombre} el ${fechaLabel} a las ${horaLabel} en ${sedeNombre}.`;
+    const data = {
+      appointmentId: input.appointmentId,
+      sedeId: input.sedeId,
+      sedeNombre,
+      serviceId: input.serviceId,
+      serviceNombre: input.serviceNombre,
+      profesionalId: input.profesionalId,
+      profesionalNombre: input.profesionalNombre,
+      clienteNombre: input.clienteNombre,
+      fecha: input.fecha.toISOString(),
+      horaInicio: input.horaInicio.toISOString(),
+    };
 
-    await Promise.all(
-      [...recipientIds].map((userId) =>
-        this.create(userId, 'NEW_RESERVATION', title, body, {
-          appointmentId: input.appointmentId,
-          sedeId: input.sedeId,
-          serviceId: input.serviceId,
-          profesionalId: input.profesionalId,
-        }),
-      ),
-    );
+    const notifications: Promise<unknown>[] = [];
+
+    // Admins: mensaje con el nombre del profesional (no es obvio para ellos).
+    const adminBody = `${input.clienteNombre} reservó ${input.serviceNombre} con ${input.profesionalNombre} el ${fechaLabel} a las ${horaLabel} en ${sedeNombre}.`;
+    for (const userId of adminIds) {
+      if (userId === profesionalUserId) continue; // evita duplicar si coincidiera
+      notifications.push(this.create(userId, 'NEW_RESERVATION', title, adminBody, data));
+    }
+
+    // Profesional: mensaje en segunda persona, sin repetir su propio nombre.
+    if (profesionalUserId) {
+      const profesionalBody = `${input.clienteNombre} te reservó ${input.serviceNombre} el ${fechaLabel} a las ${horaLabel} en ${sedeNombre}.`;
+      notifications.push(
+        this.create(profesionalUserId, 'NEW_RESERVATION', title, profesionalBody, data),
+      );
+    }
+
+    await Promise.all(notifications);
   }
 
   async findForUser(
