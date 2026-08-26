@@ -1,12 +1,16 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AccessControlService } from '../../auth/services/access-control/access-control.service';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
+import { SftpStorageService } from '../../storage/sftp-storage.service';
 import { CreateServiceDto } from '../serviceCategory/dto/create-service.dto';
 import { UpdateServiceDto } from '../serviceCategory/dto/update-service.dto';
 
@@ -15,10 +19,115 @@ export class ServiceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accessControlService: AccessControlService,
+    private readonly sftpStorage: SftpStorageService,
   ) {}
 
-  // 🟢 Crear servicio con traducciones, precios y sedes opcionales
-  async create(dto: CreateServiceDto, user?: AuthenticatedUser) {
+  // 🖼️ Almacenamiento de imágenes — mismo patrón que SedeService
+  // (SFTP si está habilitado, si no disco local en ./uploads/services/:id)
+  private async storeServiceImage(
+    serviceId: number,
+    file: Express.Multer.File,
+  ) {
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const relativePath = path
+      .join(
+        'uploads',
+        'bookmy',
+        'services',
+        serviceId.toString(),
+        finalFileName,
+      )
+      .replace(/\\/g, '/');
+
+    if (this.sftpStorage.isEnabled()) {
+      await this.sftpStorage.uploadLocalFile({
+        localPath: file.path,
+        remoteRelativePath: relativePath,
+        deleteLocalAfter: true,
+      });
+      return relativePath;
+    }
+
+    return this.moveServiceFileToFinalPath(serviceId, file);
+  }
+
+  private moveServiceFileToFinalPath(
+    serviceId: number,
+    file: Express.Multer.File,
+  ) {
+    const uploadDirAbs = path.join(
+      process.cwd(),
+      'uploads',
+      'services',
+      serviceId.toString(),
+    );
+    if (!fs.existsSync(uploadDirAbs)) {
+      fs.mkdirSync(uploadDirAbs, { recursive: true });
+    }
+
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const finalAbsPath = path.join(uploadDirAbs, finalFileName);
+
+    const tempAbsPath = path.isAbsolute(file.path)
+      ? file.path
+      : path.join(process.cwd(), file.path);
+
+    if (tempAbsPath !== finalAbsPath) {
+      fs.renameSync(tempAbsPath, finalAbsPath);
+    }
+
+    return path
+      .join('uploads', 'services', serviceId.toString(), finalFileName)
+      .replace(/\\/g, '/');
+  }
+
+  private safeDeleteServiceFile(filePath: string) {
+    const absPath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(process.cwd(), filePath);
+    if (fs.existsSync(absPath)) {
+      try {
+        fs.unlinkSync(absPath);
+      } catch (error) {
+        console.error(
+          `Error al eliminar archivo de servicio: ${absPath}`,
+          error,
+        );
+      }
+    }
+  }
+
+  private async safeDeleteRemoteOrLocal(filePath: string) {
+    if (!filePath) return;
+    if (this.sftpStorage.isEnabled()) {
+      try {
+        const normalized = filePath.trim();
+        if (/^https?:\/\//i.test(normalized)) {
+          await this.sftpStorage.deleteByPublicUrl(normalized);
+          return;
+        }
+
+        const relative = normalized.replace(/^\/+/, '');
+        await this.sftpStorage.deleteByRelativePath(relative);
+        return;
+      } catch (error) {
+        console.error(
+          `Error al eliminar archivo remoto de servicio: ${filePath}`,
+          error,
+        );
+      }
+    }
+    this.safeDeleteServiceFile(filePath);
+  }
+
+  // 🟢 Crear servicio con traducciones, precios, sedes e imágenes opcionales
+  async create(
+    dto: CreateServiceDto,
+    user?: AuthenticatedUser,
+    files?: Express.Multer.File[],
+  ) {
     const sedeIds = dto.sedeIds ? [...dto.sedeIds] : [];
 
     if (user?.role === Role.BRANCH_ADMIN) {
@@ -51,14 +160,15 @@ export class ServiceService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // Verificar categoría
-      const category = await tx.category.findUnique({
-        where: { id: dto.categoryId },
-      });
-      if (!category) {
-        throw new NotFoundException('La categoría especificada no existe');
-      }
+    try {
+      const created = await this.prisma.$transaction(async (tx) => {
+        // Verificar categoría
+        const category = await tx.category.findUnique({
+          where: { id: dto.categoryId },
+        });
+        if (!category) {
+          throw new NotFoundException('La categoría especificada no existe');
+        }
 
       // Verificar sedes (si se envían)
       let sedeConnect:
@@ -126,28 +236,61 @@ export class ServiceService {
         })),
       });
 
-      // Retornar el servicio completo con sus relaciones
-      return tx.service.findUnique({
-        where: { id: service.id },
+        // Retornar el servicio completo con sus relaciones
+        return tx.service.findUnique({
+          where: { id: service.id },
+          include: {
+            translations: true,
+            prices: true,
+            sedes: true,
+          },
+        });
+      });
+
+      if (!files || files.length === 0 || !created) {
+        return created;
+      }
+
+      // Subir imágenes fuera de la transacción (igual que SedeService.create)
+      const imagenesUrls = await Promise.all(
+        files.map((file) => this.storeServiceImage(created.id, file)),
+      );
+
+      return await this.prisma.service.update({
+        where: { id: created.id },
+        data: { imagenes: imagenesUrls },
         include: {
           translations: true,
           prices: true,
           sedes: true,
         },
       });
-    });
+    } catch (error) {
+      if (files && files.length > 0) {
+        await Promise.all(
+          files.map((file) => this.safeDeleteRemoteOrLocal(file.path)),
+        );
+      }
+      throw error;
+    }
   }
 
   // 🟡 Actualizar servicio
-  async update(id: number, dto: UpdateServiceDto, user?: AuthenticatedUser) {
+  async update(
+    id: number,
+    dto: UpdateServiceDto,
+    user?: AuthenticatedUser,
+    files?: Express.Multer.File[],
+  ) {
     await this.accessControlService.ensureServiceAccessForUser(id, user);
     const existing = await this.findOne(id);
     if (!existing) {
       throw new NotFoundException('El servicio no existe');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      let sedeIds = dto.sedeIds ? [...dto.sedeIds] : undefined;
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        let sedeIds = dto.sedeIds ? [...dto.sedeIds] : undefined;
 
       if (sedeIds) {
         if (user?.role === Role.BRANCH_ADMIN) {
@@ -239,20 +382,48 @@ export class ServiceService {
         };
       }
 
-      // Actualizar datos del servicio
-      return tx.service.update({
+        // Actualizar datos del servicio
+        return tx.service.update({
+          where: { id },
+          data: {
+            categoryId: dto.categoryId ?? existing.categoryId,
+            ...(sedeConnect && { sedes: sedeConnect }),
+          },
+          include: {
+            translations: true,
+            prices: true,
+            sedes: true,
+          },
+        });
+      });
+
+      if (!files || files.length === 0) {
+        return updated;
+      }
+
+      // Las imágenes nuevas se agregan a la galería existente (igual que
+      // SedeService.addImagesToGaleria) — no reemplazan las que ya había.
+      const nuevasImagenes = await Promise.all(
+        files.map((file) => this.storeServiceImage(id, file)),
+      );
+
+      return await this.prisma.service.update({
         where: { id },
-        data: {
-          categoryId: dto.categoryId ?? existing.categoryId,
-          ...(sedeConnect && { sedes: sedeConnect }),
-        },
+        data: { imagenes: { push: nuevasImagenes } },
         include: {
           translations: true,
           prices: true,
           sedes: true,
         },
       });
-    });
+    } catch (error) {
+      if (files && files.length > 0) {
+        await Promise.all(
+          files.map((file) => this.safeDeleteRemoteOrLocal(file.path)),
+        );
+      }
+      throw error;
+    }
   }
 
   // 🟠 Obtener un servicio por ID
@@ -305,6 +476,7 @@ export class ServiceService {
       description: service.translations[0]?.description ?? '',
       prices: service.prices,
       sedes: service.sedes,
+      imagenes: service.imagenes,
       categoryId: service.categoryId,
       category: service.category
         ? {
@@ -316,10 +488,23 @@ export class ServiceService {
     }));
   }
 
-  // 🔴 Eliminar servicio y dependencias
+  // 🔴 Eliminar servicio y dependencias (incluye imágenes en disco/SFTP)
   async remove(id: number, user?: AuthenticatedUser) {
     await this.accessControlService.ensureServiceAccessForUser(id, user);
     const existing = await this.findOne(id);
+
+    if (Array.isArray(existing.imagenes) && existing.imagenes.length) {
+      await Promise.all(
+        existing.imagenes.map((img) => this.safeDeleteRemoteOrLocal(img)),
+      );
+    }
+
+    if (!this.sftpStorage.isEnabled()) {
+      const serviceDir = path.join('./uploads/services', id.toString());
+      if (fs.existsSync(serviceDir)) {
+        fs.rmSync(serviceDir, { recursive: true, force: true });
+      }
+    }
 
     return this.prisma.$transaction(async (tx) => {
       await tx.serviceTranslation.deleteMany({ where: { serviceId: id } });
@@ -399,6 +584,7 @@ export class ServiceService {
       name: service.translations[0]?.name || 'Sin traducción',
       description: service.translations[0]?.description || '',
       prices: service.prices,
+      imagenes: service.imagenes,
       sedes: service.serviceSedeProfesional.map((ssp) => ssp.sede),
       profesionales: service.serviceSedeProfesional
         .map((ssp) => ssp.profesional)
@@ -484,10 +670,114 @@ export class ServiceService {
       description: service.translations[0]?.description ?? '',
       category: service.category?.translations?.[0]?.name ?? 'Sin categoría',
       prices: service.prices,
+      imagenes: service.imagenes,
       profesionales: service.serviceSedeProfesional
         .map((ssp) => ssp.profesional)
         .filter(Boolean),
       sede: service.serviceSedeProfesional[0]?.sede,
     }));
+  }
+
+  // 🖼️ Añadir una sola imagen a un servicio existente
+  async addImageToService(id: number, file: Express.Multer.File) {
+    const service = await this.prisma.service.findUnique({ where: { id } });
+    if (!service) {
+      this.safeDeleteServiceFile(file.path);
+      throw new NotFoundException(`Servicio con ID ${id} no encontrado.`);
+    }
+
+    const finalPublicPath = await this.storeServiceImage(id, file);
+
+    return this.prisma.service.update({
+      where: { id },
+      data: {
+        imagenes: {
+          push: finalPublicPath,
+        },
+      },
+    });
+  }
+
+  // 🖼️ Añadir múltiples imágenes (galería) a un servicio existente
+  async addImagesToService(id: number, files: Express.Multer.File[]) {
+    const service = await this.prisma.service.findUnique({ where: { id } });
+    if (!service) {
+      files.forEach((f) => this.safeDeleteServiceFile(f.path));
+      throw new NotFoundException(`Servicio con ID ${id} no encontrado.`);
+    }
+
+    const newImagePaths = await Promise.all(
+      files.map((file) => this.storeServiceImage(id, file)),
+    );
+
+    return this.prisma.service.update({
+      where: { id },
+      data: {
+        imagenes: {
+          push: newImagePaths,
+        },
+      },
+    });
+  }
+
+  // 🖼️ Eliminar imágenes específicas de un servicio (BD y almacenamiento)
+  async removeImagesFromService(id: number, imagenesParaEliminar: string[]) {
+    const service = await this.prisma.service.findUnique({ where: { id } });
+    if (!service) {
+      throw new NotFoundException(`Servicio con ID ${id} no encontrado.`);
+    }
+
+    const imagenesActuales = service.imagenes || [];
+    const nuevasImagenes = imagenesActuales.filter(
+      (img) => !imagenesParaEliminar.includes(img),
+    );
+
+    await Promise.all(
+      imagenesParaEliminar
+        .filter((imgPath) => imagenesActuales.includes(imgPath))
+        .map((imgPath) => this.safeDeleteRemoteOrLocal(imgPath)),
+    );
+
+    return this.prisma.service.update({
+      where: { id },
+      data: {
+        imagenes: nuevasImagenes,
+      },
+    });
+  }
+
+  // 🖼️ Reemplazar una imagen específica de un servicio por índice
+  async replaceImageByIndex(
+    id: number,
+    index: number,
+    file: Express.Multer.File,
+  ) {
+    const service = await this.prisma.service.findUnique({ where: { id } });
+    if (!service) {
+      throw new NotFoundException(`Servicio con ID ${id} no encontrado.`);
+    }
+
+    const imagenesActuales = service.imagenes || [];
+
+    if (index < 0 || index >= imagenesActuales.length) {
+      throw new BadRequestException(
+        `Índice ${index} inválido. El servicio tiene ${imagenesActuales.length} imágenes.`,
+      );
+    }
+
+    const imagenAntigua = imagenesActuales[index];
+    await this.safeDeleteRemoteOrLocal(imagenAntigua);
+
+    const nuevaImagen = await this.storeServiceImage(id, file);
+
+    const nuevasImagenes = [...imagenesActuales];
+    nuevasImagenes[index] = nuevaImagen;
+
+    return this.prisma.service.update({
+      where: { id },
+      data: {
+        imagenes: nuevasImagenes,
+      },
+    });
   }
 }
