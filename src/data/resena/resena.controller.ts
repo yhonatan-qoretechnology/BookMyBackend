@@ -61,6 +61,19 @@ export class ResenaController {
     return this.resenaService.findOne(id);
   }
 
+  @Get('usuario/:usuarioId')
+  @ApiOperation({
+    summary: 'Obtener las reseñas escritas por un usuario',
+    description:
+      'La app las usa para saber qué servicios ya ha valorado y marcar cada ' +
+      'reserva pasada como pendiente o completa.',
+  })
+  @ApiResponse({ status: 200, description: 'Listado de reseñas del usuario.' })
+  @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
+  findByUsuario(@Param('usuarioId', ParseIntPipe) usuarioId: number) {
+    return this.resenaService.findByUsuario(usuarioId);
+  }
+
   @Get('sede/:sedeId')
   @ApiOperation({ summary: 'Obtener reseñas asociadas a una sede' })
   @ApiResponse({ status: 200, description: 'Listado de reseñas de la sede.' })
