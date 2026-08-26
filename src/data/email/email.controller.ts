@@ -1,6 +1,5 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { SendEmailDto } from './dto/send-email.dto';
 import { SendInvoiceDto } from './dto/send-invoice.dto';
 import { MailService } from './mail.service';
 
@@ -9,20 +8,18 @@ import { MailService } from './mail.service';
 export class EmailController {
   constructor(private readonly mailService: MailService) {}
 
-  @Post('send-confirmation')
-  @ApiOperation({ summary: 'Send a user confirmation email with OTP' })
-  async sendConfirmationEmail(@Body() sendEmailDto: SendEmailDto) {
-    try {
-      await this.mailService.sendUserConfirmation(
-        sendEmailDto.email,
-        sendEmailDto.otp,
-      );
-      return { message: 'Confirmation email sent successfully.' };
-    } catch (error) {
-      console.error('Error sending email:', error);
-      return { message: 'An error occurred while sending the email.' };
-    }
-  }
+  /*
+   * Aquí vivía `POST /email/send-confirmation`, que recibía el OTP en el cuerpo
+   * y lo enviaba por correo. Era una vía de verificación falsificable: el
+   * código lo elegía quien llamaba, así que cualquiera podía pedir que se
+   * enviara el OTP que quisiera y luego "verificarlo". Además estaba abierto
+   * sin autenticación, servía para mandar correos a cualquier dirección en
+   * nombre de Bookmy.
+   *
+   * El alta real va por `POST /otp/send` + `POST /otp/verify`: es
+   * `OtpService.sendOtp` quien genera el código, lo guarda y lo envía con
+   * `MailService.sendUserConfirmation` (que sigue existiendo para ese uso).
+   */
 
   // enviar pdf
 

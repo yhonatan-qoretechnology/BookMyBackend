@@ -13,8 +13,12 @@ import {
   IsOptional,
   IsString,
   MaxLength,
-  MinLength,
 } from 'class-validator';
+import {
+  IsStrongPassword,
+  PASSWORD_EXAMPLE,
+  PASSWORD_RULES_MESSAGE,
+} from '../common/validators/password.decorator';
 
 export enum ClientType {
   people = 'people',
@@ -48,10 +52,11 @@ export class RegisterDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'Abc123@', description: 'Secure password' })
-  @IsNotEmpty()
-  @IsString()
-  @MinLength(6)
+  @ApiProperty({
+    example: PASSWORD_EXAMPLE,
+    description: PASSWORD_RULES_MESSAGE,
+  })
+  @IsStrongPassword()
   password: string;
 
   @ApiProperty({ example: 'Masculino', description: 'Gender' })

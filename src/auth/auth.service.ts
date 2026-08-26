@@ -225,7 +225,13 @@ export class AuthService {
     );
 
     if (!currentPasswordMatches) {
-      throw new BadRequestException('La contraseña actual es incorrecta.');
+      // Se acompaña de un `code` estable: los clientes distinguían estos casos
+      // buscando trozos del mensaje en español, así que cualquier cambio de
+      // redacción o de idioma les rompía el flujo.
+      throw new BadRequestException({
+        message: 'La contraseña actual es incorrecta.',
+        code: 'CURRENT_PASSWORD_INVALID',
+      });
     }
   }
 
@@ -239,9 +245,10 @@ export class AuthService {
     );
 
     if (isSamePassword) {
-      throw new BadRequestException(
-        'La nueva contraseña debe ser diferente a la actual.',
-      );
+      throw new BadRequestException({
+        message: 'La nueva contraseña debe ser diferente a la actual.',
+        code: 'NEW_PASSWORD_SAME_AS_CURRENT',
+      });
     }
   }
 
