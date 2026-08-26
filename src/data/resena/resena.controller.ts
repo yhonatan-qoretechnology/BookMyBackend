@@ -9,9 +9,15 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
+import { Role } from '@prisma/client';
+import { Roles } from 'src/auth/common/decorators/roles.decorator';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiBody,
   ApiNotFoundResponse,
   ApiOperation,
@@ -92,7 +98,13 @@ export class ResenaController {
     return this.resenaService.approve(id, body.aprobado);
   }
 
+  /* El resto del controlador es publico a proposito: la app de
+     clientes crea resenas y la web las lee sin sesion. El borrado
+     no puede serlo: es destructivo e irreversible. */
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Eliminar una reseña por su ID' })
   @ApiResponse({ status: 204, description: 'Reseña eliminada exitosamente.' })
