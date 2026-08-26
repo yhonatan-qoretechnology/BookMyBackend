@@ -30,6 +30,13 @@ import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateServiceWithImagesDto } from '../serviceCategory/dto/create-service-with-images.dto';
 import { CreateServiceDto } from '../serviceCategory/dto/create-service.dto';
+import {
+  ServiceBareResponseDto,
+  ServiceByCategoryItemResponseDto,
+  ServiceBySedeItemResponseDto,
+  ServiceDetailResponseDto,
+  ServiceListItemResponseDto,
+} from '../serviceCategory/dto/service-response.dto';
 import { UpdateServiceWithImagesDto } from '../serviceCategory/dto/update-service-with-images.dto';
 import { UpdateServiceDto } from '../serviceCategory/dto/update-service.dto';
 import { ServiceService } from '../serviceCategory/service.service';
@@ -82,7 +89,11 @@ export class ServiceController {
   })
   @ApiConsumes('multipart/form-data', 'application/json')
   @ApiBody({ type: CreateServiceWithImagesDto })
-  @ApiResponse({ status: 201, description: 'Servicio creado correctamente' })
+  @ApiResponse({
+    status: 201,
+    description: 'Servicio creado correctamente',
+    type: ServiceDetailResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
   @UseInterceptors(
     FilesInterceptor('imagenes', 10, { dest: SERVICE_IMAGES_TEMP_DIR }),
@@ -120,7 +131,11 @@ export class ServiceController {
   @ApiParam({ name: 'id', type: Number, description: 'ID del servicio' })
   @ApiConsumes('multipart/form-data', 'application/json')
   @ApiBody({ type: UpdateServiceWithImagesDto })
-  @ApiResponse({ status: 200, description: 'Servicio actualizado' })
+  @ApiResponse({
+    status: 200,
+    description: 'Servicio actualizado',
+    type: ServiceDetailResponseDto,
+  })
   @ApiResponse({ status: 404, description: 'Servicio no encontrado' })
   @UseInterceptors(
     FilesInterceptor('imagenes', 10, { dest: SERVICE_IMAGES_TEMP_DIR }),
@@ -164,7 +179,11 @@ export class ServiceController {
     required: false,
     description: 'Idioma de las traducciones a devolver (por defecto: es)',
   })
-  @ApiResponse({ status: 200, description: 'Lista de servicios' })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de servicios',
+    type: [ServiceListItemResponseDto],
+  })
   findAll(@Query('language') language: string = 'es') {
     return this.serviceService.findAll(language);
   }
@@ -181,7 +200,11 @@ export class ServiceController {
     description: 'Idioma de las traducciones a devolver (por defecto: es)',
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID del servicio' })
-  @ApiResponse({ status: 200, description: 'Detalles del servicio' })
+  @ApiResponse({
+    status: 200,
+    description: 'Detalles del servicio',
+    type: ServiceDetailResponseDto,
+  })
   @ApiResponse({ status: 404, description: 'Servicio no encontrado' })
   findOne(
     @Query('language') language: string = 'es',
@@ -196,7 +219,11 @@ export class ServiceController {
     summary: 'Eliminar servicio y sus traducciones, precios e imágenes asociadas',
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID del servicio' })
-  @ApiResponse({ status: 200, description: 'Servicio eliminado correctamente' })
+  @ApiResponse({
+    status: 200,
+    description: 'Servicio eliminado correctamente',
+    type: ServiceBareResponseDto,
+  })
   remove(
     @Param('id', ParseIntPipe) id: number,
     @AuthUser() user?: AuthenticatedUser,
@@ -223,7 +250,11 @@ export class ServiceController {
       },
     },
   })
-  @ApiResponse({ status: 200, description: 'Sedes actualizadas correctamente' })
+  @ApiResponse({
+    status: 200,
+    description: 'Sedes actualizadas correctamente',
+    type: ServiceDetailResponseDto,
+  })
   async updateSedes(
     @Param('id', ParseIntPipe) id: number,
     @Body('sedeIds') sedeIds: number[],
@@ -248,6 +279,7 @@ export class ServiceController {
   @ApiResponse({
     status: 200,
     description: 'Lista de servicios filtrados por categoría e idioma',
+    type: [ServiceByCategoryItemResponseDto],
   })
   async getByCategory(
     @Param('categoryId', ParseIntPipe) categoryId: number,
@@ -270,6 +302,7 @@ export class ServiceController {
   @ApiResponse({
     status: 200,
     description: 'Listado de servicios asociados a una sede',
+    type: [ServiceBySedeItemResponseDto],
   })
   async findBySede(
     @Param('sedeId') sedeId: string,
@@ -282,7 +315,11 @@ export class ServiceController {
   @Post(':id/imagen')
   @ApiOperation({ summary: 'Añadir una imagen a un servicio existente' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del servicio' })
-  @ApiResponse({ status: 200, description: 'Imagen añadida exitosamente.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Imagen añadida exitosamente.',
+    type: ServiceBareResponseDto,
+  })
   @ApiResponse({ status: 404, description: 'Servicio no encontrado.' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -313,7 +350,11 @@ export class ServiceController {
     summary: 'Añadir varias imágenes a un servicio existente (galería)',
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID del servicio' })
-  @ApiResponse({ status: 200, description: 'Imágenes añadidas exitosamente.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Imágenes añadidas exitosamente.',
+    type: ServiceBareResponseDto,
+  })
   @ApiResponse({ status: 404, description: 'Servicio no encontrado.' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -368,6 +409,7 @@ export class ServiceController {
     status: 200,
     description:
       'Imágenes eliminadas exitosamente de la base de datos y del servidor.',
+    type: ServiceBareResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Servicio no encontrado.' })
   async removeImages(
@@ -392,6 +434,7 @@ export class ServiceController {
   @ApiResponse({
     status: 200,
     description: 'Imagen reemplazada exitosamente.',
+    type: ServiceBareResponseDto,
   })
   @ApiResponse({
     status: 404,
