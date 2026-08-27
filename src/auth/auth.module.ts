@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { EmpresaService } from '../data/empresa/empresa.service';
 import { OtpModule } from '../data/otp/otp.module';
@@ -21,6 +22,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 @Module({
   imports: [
     PassportModule,
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 10 }]),
     OtpModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

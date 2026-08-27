@@ -35,6 +35,7 @@ import { AuthService } from './auth.service';
 import { AuthUser } from './common/decorators/auth-user.decorator';
 import { Public } from './common/decorators/public.decorator';
 import { Roles } from './common/decorators/roles.decorator';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
@@ -65,7 +66,7 @@ const ADMIN_ROLES = [
  * cerrarla. Antes el controlador no declaraba guards y, al no haber guard
  * global, todas sus rutas quedaban accesibles sin sesión.
  */
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ThrottlerGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -140,6 +141,8 @@ export class AuthController {
   }
 
   @Public()
+  /* fuerza bruta de contraseñas */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   async login(
     @Body() loginDto: LoginDto,
@@ -211,6 +214,8 @@ export class AuthController {
     }*/
 
   @Public()
+  /* enumeración de teléfonos registrados */
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Post('validate-phone')
   async validatePhone(@Body() dto: ValidatePhoneDto) {
     return this.authService.validatePhone(dto);
@@ -278,6 +283,8 @@ export class AuthController {
   // Las tres rutas de OTP son públicas por necesidad: quien ha olvidado la
   // contraseña no tiene sesión. La autenticación es el código enviado al correo.
   @Public()
+  /* cada solicitud manda un correo/SMS */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('users/password/otp/request')
   @ApiOperation({
     summary: 'Solicitar un OTP por correo para iniciar cambio de contraseña',
@@ -288,6 +295,8 @@ export class AuthController {
   }
 
   @Public()
+  /* adivinar el código de 6 dígitos */
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('users/password/otp/validate')
   @ApiOperation({
     summary: 'Validar un código OTP previo al cambio de contraseña',
@@ -299,6 +308,8 @@ export class AuthController {
   }
 
   @Public()
+  /* adivinar el código de 6 dígitos */
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Patch('users/password/otp/change')
   @ApiOperation({
     summary: 'Cambiar contraseña usando OTP (recuperación de contraseña)',

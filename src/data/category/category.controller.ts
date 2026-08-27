@@ -13,6 +13,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Public } from '../../auth/common/decorators/public.decorator';
 import {
   ApiBody,
   ApiConsumes,
@@ -90,16 +91,22 @@ export class CategoryController {
     return this.categoryService.createBulk(bulkDto);
   }
 
+  /* Catálogo público: la app móvil pinta las categorías en el alta de
+     cuenta (app/services.tsx), antes de que exista sesión. Solo lectura;
+     crear, editar y borrar siguen exigiendo token. */
+  @Public()
   @Get()
   findAll(@Query('language') language: string = 'es') {
     return this.categoryService.findAll(language);
   }
 
+  @Public()
   @Get('random')
   findThenRandom(@Query('language') language: string = 'es') {
     return this.categoryService.findThenRandom(language);
   }
 
+  @Public()
   @Get(':id')
   findOne(
     @Param('id', ParseIntPipe) id: number,

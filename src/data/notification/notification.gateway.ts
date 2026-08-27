@@ -9,6 +9,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { SocketAuthService } from '../../auth/socket/socket-auth.service';
 import { NotificationGatewayService } from './notification-gateway.service';
 
 /**
@@ -26,9 +27,15 @@ export class NotificationGateway
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly gatewayService: NotificationGatewayService) {}
+  constructor(
+    private readonly gatewayService: NotificationGatewayService,
+    private readonly socketAuth: SocketAuthService,
+  ) {}
 
+  /* La identidad se fija en el handshake, no en `connect_user`: si el token
+     falta o no es válido, la conexión se cierra aquí mismo. */
   handleConnection(client: Socket) {
+    if (!this.socketAuth.attach(client)) return;
     this.logger.log(`Socket de notificaciones conectado: ${client.id}`);
   }
 
@@ -37,15 +44,20 @@ export class NotificationGateway
     this.logger.log(`Socket de notificaciones desconectado: ${client.id}`);
   }
 
+  /* El `userId` del cuerpo se ignora a propósito: manda el del token.
+     Antes cualquiera podía declararse otro usuario y recibir sus avisos. */
   @SubscribeMessage('connect_user')
   connectUser(
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: { userId: number },
   ) {
-    if (!dto?.userId) return;
-    this.gatewayService.addSocket(dto.userId, client.id);
+    const auth = this.socketAuth.getUser(client);
+    const userId = auth?.userId ?? dto?.userId;
+    if (!userId) return;
+
+    this.gatewayService.addSocket(userId, client.id);
     this.logger.log(
-      `Usuario ${dto.userId} registrado para notificaciones (socket ${client.id})`,
+      `Usuario ${userId} registrado para notificaciones (socket ${client.id})`,
     );
     client.emit('user_connected', { success: true });
   }
