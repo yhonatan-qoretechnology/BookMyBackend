@@ -1,7 +1,13 @@
-import { Controller, Get, Post } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { NotInProductionGuard } from './guards/not-in-production.guard';
 import { SeedService } from './seed.service';
 
+// 🔒 Bloqueado fuera de desarrollo — ver NotInProductionGuard. Estos
+// endpoints no tienen (ni deben tener) auth de usuario: son scripts de
+// bootstrap que corren antes de que exista ningún admin. La protección
+// real es que simplemente no existan fuera de dev.
+@UseGuards(NotInProductionGuard)
 @Controller('seed')
 export class SeedController {
   constructor(private seedService: SeedService) {}

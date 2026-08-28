@@ -235,6 +235,10 @@ model Sede {
   Service                Service[]                @relation("SedeServicios")
   gastos                 Gasto[]
 
+  // Antes no existía ningún constraint real detrás del catch de P2002 en
+  // SedeService.create() — por eso las duplicaba sin avisar (ver seedSedes()
+  // llamado sin querer en prod). Ahora sí lo bloquea la base de datos.
+  @@unique([nombre, empresaId])
   @@map("sedes")
 }
 

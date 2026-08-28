@@ -53,6 +53,23 @@ export class ChatMessageController {
   }
 
   /**
+   * Resolve the chat contact (branch or company admin) for a sede.
+   *
+   * Open to any authenticated user (CLIENT included) — unlike
+   * `/admin/*`, which is role-gated to admins — so a client can start an
+   * in-app conversation about a reservation without a manual "search
+   * contacts" step.
+   */
+  @Get('sede-contact/:sedeId')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Get the chat contact (admin) for a sede',
+  })
+  async getSedeContact(@Param('sedeId', ParseIntPipe) sedeId: number) {
+    return this.chatMessageService.getSedeChatContact(sedeId);
+  }
+
+  /**
    * Get chat contacts.
    */
   @Get('contacts/:userId')

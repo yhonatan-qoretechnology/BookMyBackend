@@ -250,10 +250,25 @@ export class SedeService {
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
     }
 
-    return this.prisma.sede.update({
-      where: { id },
-      data: updateSedeDto,
-    });
+    try {
+      return await this.prisma.sede.update({
+        where: { id },
+        data: updateSedeDto,
+      });
+    } catch (error) {
+      // Antes esto no estaba capturado acá (a diferencia de create()), así
+      // que un rename a un nombre ya usado por otra sede de la misma
+      // empresa tiraba un 500 crudo en vez de un 400 explicable.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException(
+          'Ya existe una sede con ese nombre en esta empresa.',
+        );
+      }
+      throw error;
+    }
   }
 
   // 🔹 Eliminar una sede

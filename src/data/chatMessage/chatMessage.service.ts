@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
 import * as fs from 'fs';
@@ -136,6 +141,65 @@ export class ChatMessageService {
     return {
       success: true,
       message: 'Contact added successfully.',
+    };
+  }
+
+  /**
+   * Resolve who a CLIENT should chat with about a given sede: the admin
+   * assigned to that specific sede (BRANCH_ADMIN) if there is one, or
+   * otherwise any admin of the sede's company (COMPANY_ADMIN) as fallback.
+   *
+   * This exists because a client has no other way to discover a valid
+   * chat `userId` for "message my branch": `findUserByEmail` needs an
+   * exact email, and the admin-listing endpoints in
+   * AdminManagementController are role-gated to admins only.
+   *
+   * @param sedeId Sede (branch) identifier.
+   * @returns Minimal contact info to start/open a conversation.
+   */
+  async getSedeChatContact(sedeId: number) {
+    const sede = await this.prisma.sede.findUnique({
+      where: { id: sedeId },
+      select: { id: true, empresaId: true },
+    });
+
+    if (!sede) {
+      throw new NotFoundException('Sede no encontrada.');
+    }
+
+    const selectContact = {
+      userId: true,
+      firstName: true,
+      lastName: true,
+      photoUrl: true,
+      // `SendMessageDto.receiverEmail` es obligatorio y no hay otra forma
+      // de que el cliente lo consiga (no puede llamar a /admin/*).
+      user: { select: { email: true } },
+    } as const;
+
+    const branchAdmin = await this.prisma.adminProfile.findFirst({
+      where: { sedeId: sede.id },
+      select: selectContact,
+    });
+
+    const adminProfile =
+      branchAdmin ??
+      (await this.prisma.adminProfile.findFirst({
+        where: { empresaId: sede.empresaId, sedeId: null },
+        select: selectContact,
+      }));
+
+    if (!adminProfile) {
+      throw new NotFoundException(
+        'Esta sede no tiene un contacto de chat configurado todavía.',
+      );
+    }
+
+    return {
+      userId: adminProfile.userId,
+      email: adminProfile.user.email,
+      name: `${adminProfile.firstName} ${adminProfile.lastName}`.trim(),
+      photoUrl: adminProfile.photoUrl,
     };
   }
 

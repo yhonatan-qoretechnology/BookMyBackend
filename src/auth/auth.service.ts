@@ -776,18 +776,26 @@ export class AuthService {
     });
 
     // Validaciones
+    //
+    // `code` va aparte del `error` (que sigue siendo el texto legible para
+    // mostrar tal cual) para que el cliente pueda decidir el flujo sin tener
+    // que parsear el mensaje: cuenta inexistente -> ir a registro, contraseña
+    // incorrecta -> avisar y quedarse en login, cuenta inactiva -> activación.
     if (!userAuth || !userAuth.password) {
       console.log(
         `[LOGIN] UserAuth NOT FOUND or NO PASSWORD for email: ${email}`,
       );
-      return { error: 'Credenciales incorrectas.' };
+      return { error: 'Credenciales incorrectas.', code: 'USER_NOT_FOUND' };
     }
 
     if (!userAuth.user) {
       console.log(
         `[LOGIN] UserAuth FOUND but RELATIONAL USER IS MISSING for email: ${email}, authId: ${userAuth.id}`,
       );
-      return { error: 'Error de integridad de cuenta.' };
+      return {
+        error: 'Error de integridad de cuenta.',
+        code: 'ACCOUNT_INTEGRITY',
+      };
     }
 
     const isPasswordValid = await this.hashService.compare(
@@ -797,7 +805,10 @@ export class AuthService {
 
     if (!isPasswordValid) {
       console.log(`[LOGIN] Password INVALID for email: ${email}`);
-      return { error: 'Credenciales incorrectas.' };
+      return {
+        error: 'Usuario o contraseña incorrecta.',
+        code: 'INVALID_PASSWORD',
+      };
     }
 
     console.log(
@@ -808,7 +819,10 @@ export class AuthService {
       console.log(
         `[LOGIN] BLOCK: User state is '${userAuth.user.state}' for email: ${email}`,
       );
-      return { error: 'El usuario no está activo.' };
+      return {
+        error: 'El usuario no está activo.',
+        code: 'ACCOUNT_INACTIVE',
+      };
     }
 
     // Remover password de la respuesta
