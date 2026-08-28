@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpException,
   HttpStatus,
@@ -12,22 +13,31 @@ import {
   Req,
   Res,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiBody,
   ApiConsumes,
+  ApiForbiddenResponse,
   ApiHeader,
   ApiNotFoundResponse,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { AuthUser } from './common/decorators/auth-user.decorator';
+import { Public } from './common/decorators/public.decorator';
+import { Roles } from './common/decorators/roles.decorator';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
 import { ChangePasswordByAdminDto } from './dto/change-password-by-admin.dto';
 import { ChangePasswordOtpDto } from './dto/change-password-otp.dto';
@@ -41,13 +51,50 @@ import { ValidatePasswordOtpDto } from './dto/validate-password-otp.dto';
 import { ValidatePhoneDto } from './dto/validate-phone.dto';
 import { AuthenticatedUser } from './types/authenticated-user.interface';
 
+/** Roles que pueden operar sobre cuentas ajenas. */
+const ADMIN_ROLES = [
+  Role.SUPER_ADMIN,
+  Role.COMPANY_ADMIN,
+  Role.BRANCH_ADMIN,
+] as const;
+
 @ApiTags('Auth')
+@ApiBearerAuth()
+/*
+ * Los guards van a nivel de clase y lo público se marca con `@Public()`, de modo
+ * que una ruta nueva nace protegida: hay que acordarse de abrirla, no de
+ * cerrarla. Antes el controlador no declaraba guards y, al no haber guard
+ * global, todas sus rutas quedaban accesibles sin sesión.
+ */
+@UseGuards(JwtAuthGuard, RolesGuard, ThrottlerGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  /** Solo el propio usuario o un administrador pueden tocar una cuenta. */
+  private assertCanActOnUser(
+    actor: AuthenticatedUser | undefined,
+    targetUserId: number,
+  ) {
+    if (!actor) {
+      throw new ForbiddenException(
+        'No se pudo recuperar el usuario autenticado.',
+      );
+    }
+
+    const isAdmin = (ADMIN_ROLES as readonly Role[]).includes(actor.role);
+
+    if (!isAdmin && actor.userId !== targetUserId) {
+      throw new ForbiddenException(
+        'No puedes acceder a los datos de otro usuario.',
+      );
+    }
+  }
+
   @Get('users')
+  @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Listar todos los usuarios' })
+  @ApiForbiddenResponse({ description: 'Requiere rol administrador.' })
   async findAllUsers(@AuthUser() user: AuthenticatedUser) {
     return this.authService.findAllUsers(user);
   }
@@ -55,13 +102,18 @@ export class AuthController {
   @Get('users/:id')
   @ApiOperation({ summary: 'Obtener un usuario por ID' })
   @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
+  @ApiForbiddenResponse({
+    description: 'Solo el propio usuario o un administrador.',
+  })
   async findUserById(
     @Param('id', ParseIntPipe) id: number,
     @AuthUser() user: AuthenticatedUser,
   ) {
+    this.assertCanActOnUser(user, id);
     return this.authService.findUserById(id, user);
   }
 
+  @Public()
   @Post(['register', 'users'])
   @ApiOperation({ summary: 'Registrar un nuevo usuario con foto opcional' })
   @ApiResponse({
@@ -88,6 +140,9 @@ export class AuthController {
     };
   }
 
+  @Public()
+  /* fuerza bruta de contraseñas */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   async login(
     @Body() loginDto: LoginDto,
@@ -105,6 +160,7 @@ export class AuthController {
     return result;
   }
 
+  @Public()
   @Post('bootstrap-super-admin')
   @ApiOperation({
     summary:
@@ -117,6 +173,9 @@ export class AuthController {
     return this.authService.bootstrapSuperAdmin(dto);
   }
 
+  // Pública a propósito: se autentica con el token de un solo uso que llega por
+  // correo en la cabecera `x-reset-token`, no con la sesión.
+  @Public()
   @Post('reset-password')
   @ApiOperation({ summary: 'Restablecer la contraseña con un token' })
   @ApiHeader({
@@ -136,14 +195,10 @@ export class AuthController {
       );
     }
 
+    // La longitud y la complejidad las valida ya `UpdatePassDto` con la
+    // política común, así que aquí no se vuelve a comprobar a mano (aquel
+    // `length < 6` contradecía al resto de la aplicación).
     const { newPassword } = body;
-
-    if (!newPassword || newPassword.length < 6) {
-      throw new HttpException(
-        'La nueva contraseña es inválida o muy corta',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
 
     return this.authService.recoveryPass(token, newPassword);
   }
@@ -158,6 +213,9 @@ export class AuthController {
       return this.authService.checkUserExistence(email, phone);
     }*/
 
+  @Public()
+  /* enumeración de teléfonos registrados */
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Post('validate-phone')
   async validatePhone(@Body() dto: ValidatePhoneDto) {
     return this.authService.validatePhone(dto);
@@ -171,10 +229,15 @@ export class AuthController {
   })
   @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
   @ApiBadRequestResponse({ description: 'Datos inválidos.' })
+  @ApiForbiddenResponse({
+    description: 'Solo el propio usuario o un administrador.',
+  })
   async updateUser(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateUserDto,
+    @AuthUser() actor: AuthenticatedUser,
   ) {
+    this.assertCanActOnUser(actor, id);
     return this.authService.updateUserProfile(id, dto);
   }
 
@@ -201,16 +264,27 @@ export class AuthController {
       dest: './uploads/users/temp',
     }),
   )
+  @ApiForbiddenResponse({
+    description: 'Solo el propio usuario o un administrador.',
+  })
   async updateUserPhoto(
     @Param('id', ParseIntPipe) id: number,
+    @AuthUser() actor: AuthenticatedUser,
     @UploadedFile() file?: Express.Multer.File,
   ) {
+    this.assertCanActOnUser(actor, id);
+
     if (!file) {
       throw new BadRequestException('Debe adjuntar una imagen.');
     }
     return this.authService.updateUserPhoto(id, file);
   }
 
+  // Las tres rutas de OTP son públicas por necesidad: quien ha olvidado la
+  // contraseña no tiene sesión. La autenticación es el código enviado al correo.
+  @Public()
+  /* cada solicitud manda un correo/SMS */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('users/password/otp/request')
   @ApiOperation({
     summary: 'Solicitar un OTP por correo para iniciar cambio de contraseña',
@@ -220,6 +294,9 @@ export class AuthController {
     return this.authService.requestPasswordOtp(dto);
   }
 
+  @Public()
+  /* adivinar el código de 6 dígitos */
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('users/password/otp/validate')
   @ApiOperation({
     summary: 'Validar un código OTP previo al cambio de contraseña',
@@ -230,6 +307,9 @@ export class AuthController {
     return this.authService.validatePasswordOtp(dto);
   }
 
+  @Public()
+  /* adivinar el código de 6 dígitos */
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Patch('users/password/otp/change')
   @ApiOperation({
     summary: 'Cambiar contraseña usando OTP (recuperación de contraseña)',
@@ -250,17 +330,26 @@ export class AuthController {
   })
   @ApiNotFoundResponse({ description: 'Usuario no encontrado.' })
   @ApiBadRequestResponse({ description: 'Entrada inválida.' })
+  @ApiForbiddenResponse({
+    description: 'Solo el propio usuario o un administrador.',
+  })
   async changePasswordWithCurrent(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ChangePasswordDto,
+    @AuthUser() actor: AuthenticatedUser,
   ) {
+    this.assertCanActOnUser(actor, id);
     return this.authService.changePasswordWithCurrent(id, dto);
   }
 
+  // No pide la contraseña actual, así que queda restringida a administradores:
+  // es la vía que usa el panel para fijar la contraseña de un cliente.
   @Patch('users/:id/password/direct')
+  @Roles(...ADMIN_ROLES)
   @ApiOperation({
     summary: 'Actualizar contraseña únicamente con el ID del usuario',
   })
+  @ApiForbiddenResponse({ description: 'Requiere rol administrador.' })
   @ApiResponse({
     status: 200,
     description: 'Contraseña actualizada correctamente.',

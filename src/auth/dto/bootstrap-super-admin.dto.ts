@@ -6,8 +6,12 @@ import {
   IsNotEmpty,
   IsString,
   MaxLength,
-  MinLength,
 } from 'class-validator';
+import {
+  IsStrongPassword,
+  PASSWORD_EXAMPLE,
+  PASSWORD_RULES_MESSAGE,
+} from '../common/validators/password.decorator';
 import { ClientState, ClientType } from './register.dto';
 
 export class BootstrapSuperAdminDto {
@@ -35,10 +39,11 @@ export class BootstrapSuperAdminDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'Admin123$', description: 'Secure password' })
-  @IsNotEmpty()
-  @IsString()
-  @MinLength(6)
+  @ApiProperty({
+    example: PASSWORD_EXAMPLE,
+    description: PASSWORD_RULES_MESSAGE,
+  })
+  @IsStrongPassword()
   password: string;
 
   @ApiProperty({ example: ' ', description: 'Gender' })

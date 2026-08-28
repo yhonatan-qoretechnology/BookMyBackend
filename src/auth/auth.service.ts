@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Role, UserAuth } from '@prisma/client';
@@ -225,7 +226,13 @@ export class AuthService {
     );
 
     if (!currentPasswordMatches) {
-      throw new BadRequestException('La contraseña actual es incorrecta.');
+      // Se acompaña de un `code` estable: los clientes distinguían estos casos
+      // buscando trozos del mensaje en español, así que cualquier cambio de
+      // redacción o de idioma les rompía el flujo.
+      throw new BadRequestException({
+        message: 'La contraseña actual es incorrecta.',
+        code: 'CURRENT_PASSWORD_INVALID',
+      });
     }
   }
 
@@ -239,9 +246,10 @@ export class AuthService {
     );
 
     if (isSamePassword) {
-      throw new BadRequestException(
-        'La nueva contraseña debe ser diferente a la actual.',
-      );
+      throw new BadRequestException({
+        message: 'La nueva contraseña debe ser diferente a la actual.',
+        code: 'NEW_PASSWORD_SAME_AS_CURRENT',
+      });
     }
   }
 
@@ -876,10 +884,29 @@ export class AuthService {
   }
 
   async recoveryPass(token: string, password: string) {
-    const data = this.jwtService.decode(token);
-    console.log('Decoded data:', data);
-    const userId = data.id;
-    this.checkUser(userId);
+    /* `decode()` NO comprueba la firma: bastaba con enviar un JWT inventado
+       cuyo cuerpo dijera {"id": <cualquiera>} para cambiarle la contraseña a
+       cualquier usuario, incluido el SUPER_ADMIN. `verifyAsync` valida firma y
+       caducidad con la misma clave con la que se emitió en `generateToken`. */
+    let data: { id?: number };
+    try {
+      data = await this.jwtService.verifyAsync<{ id?: number }>(token);
+    } catch {
+      throw new UnauthorizedException(
+        'El enlace de recuperación no es válido o ha caducado.',
+      );
+    }
+
+    const userId = data?.id;
+    if (!userId) {
+      throw new UnauthorizedException(
+        'El enlace de recuperación no es válido o ha caducado.',
+      );
+    }
+
+    /* Sin `await` la excepción de `checkUser` se perdía en una promesa
+       rechazada y la actualización seguía adelante. */
+    await this.checkUser(userId);
     const hashedPassword = await this.hashService.hash(password);
     await this.prisma.userAuth.update({
       where: { id: userId },

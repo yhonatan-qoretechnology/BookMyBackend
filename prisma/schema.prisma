@@ -272,13 +272,23 @@ model Resena {
   estado       ResenaState
   tipo         ResenaType
   sedeId       Int?
+  // Servicio reseñado. El modelo solo guardaba la sede, así que no había forma
+  // de saber qué servicio había valorado el usuario ni de evitar que reseñara
+  // el mismo dos veces. Es opcional porque las reseñas de tipo SEDE no llevan
+  // servicio, y porque las que ya existen en la base de datos no lo tienen.
+  serviceId    Int?
   usuarioId    Int
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   sede         Sede?       @relation(fields: [sedeId], references: [id])
+  service      Service?    @relation(fields: [serviceId], references: [id])
   usuario      Users       @relation("UserToResena", fields: [usuarioId], references: [id])
 
   @@index([sedeId])
+  @@index([serviceId])
+  // La app pregunta "¿ya reseñó este usuario este servicio en esta sede?" en
+  // cada carga de Mis reservas: sin este índice sería un recorrido completo.
+  @@index([usuarioId, sedeId, serviceId])
   @@map("resenas")
 }
 
@@ -305,6 +315,7 @@ model Service {
   translations           ServiceTranslation[]
   payments               Payment[]
   serviceSedeProfesional ServiceSedeProfesional[]
+  resenas                Resena[]
   category               Category                 @relation(fields: [categoryId], references: [id])
   profesionales          Profesional[]            @relation("ProfesionalToService")
   sedes                  Sede[]                   @relation("SedeServicios")

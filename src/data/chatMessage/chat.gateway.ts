@@ -13,6 +13,7 @@ import { Role } from '@prisma/client';
 
 import { Server, Socket } from 'socket.io';
 
+import { SocketAuthService } from 'src/auth/socket/socket-auth.service';
 import { AuthenticatedUser } from 'src/auth/types/authenticated-user.interface';
 import { CHAT_EVENTS } from './chat.constants';
 import { ChatGatewayService } from './chat.gateway.service';
@@ -34,21 +35,24 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly gatewayService: ChatGatewayService,
     private readonly chatMessageService: ChatMessageService,
+    private readonly socketAuth: SocketAuthService,
   ) {}
 
   /**
-   * Build a minimal AuthenticatedUser from the socket-declared identity.
+   * Identidad del socket para los permisos de ChatMessageService.
    *
-   * The gateway trusts whatever userId/email the client sent on
-   * `connect_user` (there is no JWT handshake at the socket layer yet), so
-   * this only lets the shared ChatMessageService permission checks resolve
-   * the "is a participant" case — it does not add sede/company admin
-   * escalation over the socket path.
+   * Sale del JWT verificado en el handshake. Los valores que manda el cliente
+   * (senderId, senderEmail) solo se usan si SOCKET_AUTH_REQUIRED=false, el
+   * modo de compatibilidad con las versiones ya publicadas de la app.
    */
   private buildSocketAuthUser(
+    client: Socket,
     userId: number,
     email: string,
   ): AuthenticatedUser {
+    const auth = this.socketAuth.getUser(client);
+    if (auth) return auth;
+
     return {
       userId,
       email,
@@ -62,6 +66,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * Client connected.
    */
   handleConnection(client: Socket) {
+    if (!this.socketAuth.attach(client)) return;
     this.logger.log(`Socket connected: ${client.id}`);
   }
 
@@ -82,13 +87,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: UserConnectedDto,
   ) {
-    this.gatewayService.addUser({
-      socketId: client.id,
-      userId: dto.userId,
-      email: dto.email,
-    });
+    const auth = this.socketAuth.getUser(client);
+    const userId = auth?.userId ?? dto.userId;
+    const email = auth?.email || dto.email;
 
-    this.logger.log(`User ${dto.userId} connected with socket ${client.id}`);
+    this.gatewayService.addUser({ socketId: client.id, userId, email });
+
+    this.logger.log(`User ${userId} connected with socket ${client.id}`);
 
     client.emit(CHAT_EVENTS.USER_CONNECTED, {
       success: true,
@@ -100,9 +105,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: SendMessageDto,
   ) {
+    /* El remitente es el del token: si no, cualquiera podía enviar
+       mensajes firmados con el id de otra persona. */
+    const remitente = this.buildSocketAuthUser(
+      client,
+      dto.senderId,
+      dto.senderEmail,
+    );
     const savedMessage = await this.chatMessageService.createMessage(
-      dto,
-      this.buildSocketAuthUser(dto.senderId, dto.senderEmail),
+      { ...dto, senderId: remitente.userId, senderEmail: remitente.email },
+      remitente,
     );
     const receiver = this.gatewayService.getUser(dto.receiverId);
 
@@ -147,9 +159,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: MarkMessageReadDto,
   ) {
+    const lector = this.buildSocketAuthUser(client, dto.userId, '');
     const updatedMessage = await this.chatMessageService.markMessageAsRead(
-      dto,
-      this.buildSocketAuthUser(dto.userId, ''),
+      { ...dto, userId: lector.userId },
+      lector,
     );
     const sender = this.gatewayService.getUser(updatedMessage.sender_id);
 

@@ -43,6 +43,17 @@ export class ResenaService {
       }
     }
 
+    if (createResenaDto.serviceId != null) {
+      const service = await this.prisma.service.findUnique({
+        where: { id: createResenaDto.serviceId },
+      });
+      if (!service) {
+        throw new NotFoundException(
+          `Servicio con ID ${createResenaDto.serviceId} no encontrado.`,
+        );
+      }
+    }
+
     const resena = await this.prisma.resena.create({
       data: createResenaDto,
     });
@@ -81,6 +92,30 @@ export class ResenaService {
       throw new NotFoundException(`Reseña con ID ${id} no encontrada.`);
     }
     return resena;
+  }
+
+  /**
+   * Reseñas escritas por un usuario.
+   *
+   * La app las necesita para saber qué servicios ya ha valorado: con eso marca
+   * cada reserva pasada como pendiente o completa y evita que la misma se
+   * reseñe dos veces. Se devuelven todas, aprobadas o no, porque quien las
+   * escribió tiene que ver la suya aunque siga en revisión.
+   */
+  async findByUsuario(usuarioId: number) {
+    const usuario = await this.prisma.users.findUnique({
+      where: { id: usuarioId },
+    });
+    if (!usuario) {
+      throw new NotFoundException(
+        `Usuario con ID ${usuarioId} no encontrado.`,
+      );
+    }
+
+    return this.prisma.resena.findMany({
+      where: { usuarioId },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async findBySede(sedeId: number) {

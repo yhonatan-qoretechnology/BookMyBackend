@@ -7,9 +7,10 @@ import { ChatGateway } from './chat.gateway';
 import { ChatGatewayService } from './chat.gateway.service';
 import { ChatMessageController } from './chatMessage.controller';
 import { ChatMessageService } from './chatMessage.service';
+import { SocketAuthModule } from '../../auth/socket/socket-auth.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [SocketAuthModule, PrismaModule],
 
   controllers: [ChatMessageController],
 

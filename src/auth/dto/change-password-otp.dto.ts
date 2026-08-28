@@ -1,5 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty } from 'class-validator';
+import {
+  IsStrongPassword,
+  PASSWORD_EXAMPLE,
+  PASSWORD_RULES_MESSAGE,
+} from '../common/validators/password.decorator';
 
 export class ChangePasswordOtpDto {
   @ApiProperty({
@@ -17,10 +22,9 @@ export class ChangePasswordOtpDto {
   code: string;
 
   @ApiProperty({
-    example: 'NewPassword123',
-    description: 'Nueva contraseña del usuario. Mínimo 6 caracteres.',
+    example: PASSWORD_EXAMPLE,
+    description: `Nueva contraseña del usuario. ${PASSWORD_RULES_MESSAGE}`,
   })
-  @IsNotEmpty()
-  @MinLength(6)
+  @IsStrongPassword()
   newPassword: string;
 }

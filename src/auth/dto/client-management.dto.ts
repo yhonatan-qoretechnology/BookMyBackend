@@ -4,14 +4,17 @@ import {
   IsEmail,
   IsEnum,
   IsInt,
-  IsNotEmpty,
   IsOptional,
   IsString,
   Max,
   Min,
-  MinLength,
 } from 'class-validator';
 import { ClientState } from '@prisma/client';
+import {
+  IsStrongPassword,
+  PASSWORD_EXAMPLE,
+  PASSWORD_RULES_MESSAGE,
+} from '../common/validators/password.decorator';
 
 export class SearchClientDto {
   @ApiProperty({ example: 'cliente@email.com', description: 'Email del cliente' })
@@ -120,9 +123,10 @@ export class UpdateClientDto {
 
 /** Nueva contraseña fijada por un administrador (no pide la anterior). */
 export class ChangeClientPasswordDto {
-  @ApiProperty({ example: 'Abc123@', description: 'Nueva contraseña (mínimo 6 caracteres)' })
-  @IsNotEmpty()
-  @IsString()
-  @MinLength(6)
+  @ApiProperty({
+    example: PASSWORD_EXAMPLE,
+    description: `Nueva contraseña. ${PASSWORD_RULES_MESSAGE}`,
+  })
+  @IsStrongPassword()
   password: string;
 }
