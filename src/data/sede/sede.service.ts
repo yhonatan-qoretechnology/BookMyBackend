@@ -118,6 +118,24 @@ export class SedeService {
     this.safeDeleteSedeFile(filePath);
   }
 
+  // El @@unique([nombre, empresaId]) de la DB solo pesca el texto EXACTO.
+  // "Glow Marbella" vs "glow marbella " (mayúsculas/espacios distintos) no
+  // choca ahí — por eso este chequeo aparte, case-insensitive y con trim,
+  // antes de siquiera intentar el insert/update.
+  private async findDuplicateSedeName(
+    empresaId: number,
+    nombre: string,
+    excludeId?: number,
+  ) {
+    return this.prisma.sede.findFirst({
+      where: {
+        empresaId,
+        nombre: { equals: nombre.trim(), mode: 'insensitive' },
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+    });
+  }
+
   // 🔹 Crear una nueva sede
   async create(createSedeDto: CreateSedeDto, files?: Express.Multer.File[]) {
     try {
@@ -130,9 +148,21 @@ export class SedeService {
         );
       }
 
+      const nombreNormalizado = createSedeDto.nombre.trim();
+      const duplicada = await this.findDuplicateSedeName(
+        createSedeDto.empresaId,
+        nombreNormalizado,
+      );
+      if (duplicada) {
+        throw new BadRequestException(
+          `Ya existe una sede llamada "${duplicada.nombre}" en esta empresa.`,
+        );
+      }
+
       const sede = await this.prisma.sede.create({
         data: {
           ...createSedeDto,
+          nombre: nombreNormalizado,
         },
       });
 
@@ -250,10 +280,27 @@ export class SedeService {
       throw new NotFoundException(`Sede con ID ${id} no encontrada.`);
     }
 
+    const nombreNormalizado = updateSedeDto.nombre?.trim();
+    if (nombreNormalizado) {
+      const duplicada = await this.findDuplicateSedeName(
+        updateSedeDto.empresaId ?? sede.empresaId,
+        nombreNormalizado,
+        id,
+      );
+      if (duplicada) {
+        throw new BadRequestException(
+          `Ya existe una sede llamada "${duplicada.nombre}" en esta empresa.`,
+        );
+      }
+    }
+
     try {
       return await this.prisma.sede.update({
         where: { id },
-        data: updateSedeDto,
+        data: {
+          ...updateSedeDto,
+          ...(nombreNormalizado ? { nombre: nombreNormalizado } : {}),
+        },
       });
     } catch (error) {
       // Antes esto no estaba capturado acá (a diferencia de create()), así
