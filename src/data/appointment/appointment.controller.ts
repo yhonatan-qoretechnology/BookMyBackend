@@ -283,7 +283,8 @@ export class AppointmentController {
     summary: 'Extender una cita en curso que se está pasando de hora',
     description:
       'El profesional no terminó a tiempo. Si el tramo extra está libre, se ' +
-      'estira la cita sola. Si choca con la siguiente reserva del mismo ' +
+      'crea una cita de extensión enlazada a la original (extensionDeId) con ' +
+      'un pago pendiente proporcional. Si choca con la siguiente reserva del mismo ' +
       'profesional, no se cambia nada y se devuelven las opciones ' +
       '(reasignar a otro especialista libre, reprogramar con huecos ' +
       'sugeridos ese mismo día, o cancelar) para que alguien elija.',
@@ -291,7 +292,7 @@ export class AppointmentController {
   @ApiResponse({
     status: 200,
     description:
-      'EXTENDED si se pudo estirar sola, o CONFLICT con las opciones si choca con otra cita',
+      'EXTENDED con { appointment, extension } si se registró la extensión, o CONFLICT con las opciones si choca con otra cita',
   })
   extend(
     @Param('id', ParseIntPipe) id: number,

@@ -11,6 +11,8 @@ import {
   ClientState,
   DiaCerradoSede,
   HorarioSede,
+  PaymentMethod,
+  PaymentStatus,
   Prisma,
   Profesional,
   Role,
@@ -1263,6 +1265,8 @@ export class AppointmentService {
           service: true,
           profesional: true,
           user: true,
+          // Para marcar en el panel las citas que se extendieron
+          extensiones: { select: { id: true, duracion: true, estado: true } },
         },
         orderBy: [{ fecha: 'desc' }, { horaInicio: 'desc' }],
         skip,
@@ -1539,6 +1543,7 @@ export class AppointmentService {
         service: true,
         profesional: true,
         user: true,
+        extensiones: { select: { id: true, duracion: true, estado: true } },
       },
     });
     if (!appointment) throw new NotFoundException('Cita no encontrada');
@@ -1578,8 +1583,10 @@ export class AppointmentService {
 
   /**
    * El profesional no terminó a tiempo y necesita más minutos con el
-   * cliente. Si el tramo extra que reclama está libre, solo estira
-   * `horaFin`/`duracion`. Si choca con otra cita del mismo profesional,
+   * cliente. Si el tramo extra está libre, crea una cita NUEVA de
+   * extensión enlazada a la original (extensionDeId), con un pago
+   * pendiente proporcional al precio de la original — el tiempo extra
+   * queda registrado al cliente como otra cita. Si choca con otra cita del mismo profesional,
    * NO toca nada — devuelve las 3 opciones (reasignar/reprogramar/cancelar
    * esa otra cita) para que un humano decida y llame al endpoint que
    * corresponda.
@@ -1603,21 +1610,47 @@ export class AppointmentService {
 
     await this.ensureCanManageAppointment(cita, user);
 
-    const nuevaHoraFin = new Date(
-      cita.horaFin.getTime() + dto.extraMinutes * 60 * 1000,
-    );
-    const nuevaDuracion = cita.duracion + dto.extraMinutes;
+    // Si se extiende una extensión, la nueva se enlaza igualmente a la
+    // cita original: el precio se calcula siempre sobre esa.
+    const raizId = cita.extensionDeId ?? cita.id;
+    const [raiz, extensiones] = await Promise.all([
+      this.prisma.appointment.findUnique({
+        where: { id: raizId },
+        include: { Payment: true, service: { include: { prices: true } } },
+      }),
+      this.prisma.appointment.findMany({
+        where: {
+          extensionDeId: raizId,
+          estado: { not: AppointmentStatus.CANCELLED },
+        },
+        select: { id: true, horaFin: true },
+      }),
+    ]);
+    if (!raiz) throw new NotFoundException('Cita original no encontrada');
 
-    // Solo importa lo que choque contra el tramo NUEVO que se reclama — el
-    // tramo original [horaInicio, horaFin) ya estaba libre por definición
-    // (nadie puede tener una cita ahí sin haber chocado ya al crearla).
+    // La extensión empieza donde termina el último tramo de la cadena
+    // (original + extensiones previas), no necesariamente esta cita.
+    const inicioExtension = new Date(
+      Math.max(
+        cita.horaFin.getTime(),
+        raiz.horaFin.getTime(),
+        ...extensiones.map((e) => e.horaFin.getTime()),
+      ),
+    );
+    const finExtension = new Date(
+      inicioExtension.getTime() + dto.extraMinutes * 60 * 1000,
+    );
+    const idsCadena = [raizId, ...extensiones.map((e) => e.id)];
+
+    // Solo importa lo que choque contra el tramo NUEVO que se reclama; los
+    // tramos de la propia cadena ya estaban libres por definición.
     const conflictos = await this.prisma.appointment.findMany({
       where: {
-        id: { not: id },
+        id: { notIn: idsCadena },
         profesionalId: cita.profesionalId,
         estado: { not: AppointmentStatus.CANCELLED },
-        horaInicio: { lt: nuevaHoraFin },
-        horaFin: { gt: cita.horaFin },
+        horaInicio: { lt: finExtension },
+        horaFin: { gt: inicioExtension },
       },
       orderBy: { horaInicio: 'asc' },
       include: {
@@ -1638,21 +1671,75 @@ export class AppointmentService {
     });
 
     if (conflictos.length === 0) {
-      const actualizada = await this.prisma.appointment.update({
-        where: { id },
-        data: { horaFin: nuevaHoraFin, duracion: nuevaDuracion },
+      // Precio proporcional al de la original: importe × minutos extra / duración.
+      const precioBase =
+        raiz.Payment?.totalAmount ??
+        raiz.service.prices.find((p) => p.duration === raiz.duracion)?.amount ??
+        raiz.service.prices[0]?.amount ??
+        0;
+      const importe =
+        raiz.duracion > 0
+          ? Math.round(((precioBase * dto.extraMinutes) / raiz.duracion) * 100) / 100
+          : 0;
+
+      const extension = await this.prisma.$transaction(async (tx) => {
+        const nueva = await tx.appointment.create({
+          data: {
+            fecha: raiz.fecha,
+            horaInicio: inicioExtension,
+            horaFin: finExtension,
+            duracion: dto.extraMinutes,
+            estado:
+              raiz.estado === AppointmentStatus.CONFIRMED
+                ? AppointmentStatus.CONFIRMED
+                : AppointmentStatus.PENDING,
+            notas: dto.motivo
+              ? `Extensión de la cita #${raizId}: ${dto.motivo}`
+              : `Extensión de la cita #${raizId}`,
+            sedeId: raiz.sedeId,
+            serviceId: raiz.serviceId,
+            profesionalId: raiz.profesionalId,
+            userId: raiz.userId,
+            extensionDeId: raizId,
+          },
+        });
+
+        // Directo con Prisma y no con PaymentService.createPayment: ese
+        // intentaría procesar una tarjeta y aquí no hay datos de tarjeta.
+        // Queda pendiente de cobro con el mismo método que la original.
+        if (importe > 0) {
+          await tx.payment.create({
+            data: {
+              appointmentId: nueva.id,
+              userId: raiz.userId,
+              serviceId: raiz.serviceId,
+              method: raiz.Payment?.method ?? PaymentMethod.CASH,
+              totalAmount: importe,
+              paidAmount: 0,
+              status: PaymentStatus.PENDING,
+            },
+          });
+        }
+
+        return nueva;
       });
 
       await this.logAppointmentHistory(
-        id,
+        raizId,
         AppointmentHistoryAction.EXTENDED,
-        { horaFin: cita.horaFin.toISOString(), duracion: cita.duracion },
-        { horaFin: nuevaHoraFin.toISOString(), duracion: nuevaDuracion },
+        { horaFin: inicioExtension.toISOString() },
+        {
+          extensionId: extension.id,
+          horaInicio: inicioExtension.toISOString(),
+          horaFin: finExtension.toISOString(),
+          duracion: dto.extraMinutes,
+          importe,
+        },
         user?.userId,
         dto.motivo,
       );
 
-      return { status: 'EXTENDED' as const, appointment: actualizada };
+      return { status: 'EXTENDED' as const, appointment: cita, extension };
     }
 
     const citasEnConflicto = await Promise.all(
@@ -1662,10 +1749,11 @@ export class AppointmentService {
     await this.logAppointmentHistory(
       id,
       AppointmentHistoryAction.EXTEND_CONFLICT_DETECTED,
-      { horaFin: cita.horaFin.toISOString(), duracion: cita.duracion },
+      { horaFin: inicioExtension.toISOString() },
       {
-        horaFinSolicitada: nuevaHoraFin.toISOString(),
-        duracionSolicitada: nuevaDuracion,
+        horaInicioSolicitada: inicioExtension.toISOString(),
+        horaFinSolicitada: finExtension.toISOString(),
+        extraMinutes: dto.extraMinutes,
       },
       user?.userId,
       dto.motivo,
@@ -1675,7 +1763,7 @@ export class AppointmentService {
       status: 'CONFLICT' as const,
       solicitud: {
         extraMinutes: dto.extraMinutes,
-        nuevaHoraFin: nuevaHoraFin.toISOString(),
+        nuevaHoraFin: finExtension.toISOString(),
       },
       mensaje:
         'Extender esta cita choca con otra reserva del mismo profesional. Elegí una opción para la(s) cita(s) afectada(s).',
