@@ -14,10 +14,8 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import {
-  CreateUserLocationDto,
-  UserLocationService,
-} from './user-location.service';
+import { UserLocationService } from './user-location.service';
+import { CreateUserLocationDto } from './dto/create-user-location.dto';
 
 @ApiTags('User Location')
 @Controller('users/:userId/location')

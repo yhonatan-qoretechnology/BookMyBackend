@@ -1,18 +1,19 @@
 // src/data/user-location/user-location.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CreateUserLocationDto } from './dto/create-user-location.dto';
 
-export interface CreateUserLocationDto {
-  latitude: number;
-  longitude: number;
-  address?: string;
-}
+/* El DTO real vive en ./dto/create-user-location.dto.ts. Aqui habia una
+   interfaz local con los mismos campos menos los geograficos: al hacer
+   `...dto` los valores si llegaban a Prisma, pero el tipo mentia y cualquiera
+   que se fiara de el habria dado por hecho que la ciudad no se guarda. */
+type DatosUbicacion = Omit<CreateUserLocationDto, 'userId'>;
 
 @Injectable()
 export class UserLocationService {
   constructor(private prisma: PrismaService) {}
 
-  async save(userId: number, dto: CreateUserLocationDto) {
+  async save(userId: number, dto: DatosUbicacion) {
     // opcional: validar que el usuario exista
     await this.ensureUser(userId);
 
