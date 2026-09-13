@@ -367,8 +367,18 @@ model Appointment {
   user          Users             @relation(fields: [userId], references: [id])
   Payment       Payment?
   history       AppointmentHistory[]
+  // Extender una cita en curso crea OTRA cita (mismo cliente, profesional y
+  // servicio) enlazada a la original, para que el tiempo extra quede
+  // registrado y cobrado al cliente. Null = cita normal.
+  extensionDeId Int?
+  extensionDe   Appointment?  @relation("AppointmentExtensiones", fields: [extensionDeId], references: [id], onDelete: SetNull)
+  extensiones   Appointment[] @relation("AppointmentExtensiones")
 
-  @@unique([profesionalId, horaInicio])
+  // Antes era @@unique: una cita cancelada conserva su horaInicio y
+  // bloqueaba crear otra (p. ej. la extensión) a esa misma hora. Los
+  // solapes ya se validan en create()/extend()/reschedule().
+  @@index([profesionalId, horaInicio])
+  @@index([extensionDeId])
   @@index([fecha])
   @@index([profesionalId, fecha])
   @@index([sedeId, fecha])
