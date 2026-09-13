@@ -33,6 +33,25 @@ export class CreateSedeDto {
   @IsString()
   telefono?: string;
 
+  /* Geografia de la sede. Los rellena el buscador de direcciones de Google
+     Places en el panel; `provincia` ya existia (y hoy guarda municipios,
+     p. ej. "Benalmadena"), asi que se conserva tal cual para no romper datos. */
+
+  @ApiProperty({ example: 'Espana', description: 'Pais de la sede', required: false })
+  @IsOptional()
+  @IsString()
+  pais?: string;
+
+  @ApiProperty({ example: 'Benalmadena', description: 'Municipio o ciudad', required: false })
+  @IsOptional()
+  @IsString()
+  municipio?: string;
+
+  @ApiProperty({ example: 'Arroyo de la Miel', description: 'Localidad o barriada', required: false })
+  @IsOptional()
+  @IsString()
+  localidad?: string;
+
   @ApiProperty({
     example: 39.85775568894994,
     description: 'Latitud de la sede',

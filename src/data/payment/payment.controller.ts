@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { CreatePaymentCardDto } from './dto/create-payment-card.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreatePaymentItemDto } from './dto/create-payment-item.dto';
 import { PaymentCardResponseDto } from './dto/payment-card-response.dto';
 import { UpdatePaymentCardDto } from './dto/update-payment-card.dto';
 import { PaymentService } from './payment.service';
@@ -25,6 +26,31 @@ import { PaymentService } from './payment.service';
 @Controller('payments')
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
+
+  @Get(':id/items')
+  @ApiOperation({ summary: 'Adicionales de una factura' })
+  @ApiOkResponse({ description: 'Lista de conceptos adicionales.' })
+  async listItems(@Param('id') id: string) {
+    return this.paymentService.listPaymentItems(Number(id));
+  }
+
+  @Post(':id/items')
+  @ApiOperation({
+    summary: 'Anadir un adicional a la factura',
+    description:
+      'Suma el concepto al total de la factura. El total se recalcula en el servidor: base del servicio + adicionales.',
+  })
+  @ApiCreatedResponse({ description: 'Factura con el total actualizado.' })
+  async addItem(@Param('id') id: string, @Body() dto: CreatePaymentItemDto) {
+    return this.paymentService.addPaymentItem(Number(id), dto);
+  }
+
+  @Delete('items/:itemId')
+  @ApiOperation({ summary: 'Quitar un adicional de la factura' })
+  @ApiOkResponse({ description: 'Factura con el total actualizado.' })
+  async removeItem(@Param('itemId') itemId: string) {
+    return this.paymentService.removePaymentItem(Number(itemId));
+  }
 
   @Post()
   @ApiOperation({ summary: 'Crear un pago (total o parcial)' })

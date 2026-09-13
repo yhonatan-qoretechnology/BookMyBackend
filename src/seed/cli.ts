@@ -35,6 +35,9 @@ async function main() {
     case 'services':
       await seedService.seedServices();
       break;
+    case 'festivos':
+      await seedService.seedFestivos();
+      break;
     case 'user-status':
       await seedService.seedUserStatus();
       break;
@@ -43,6 +46,7 @@ async function main() {
       // Primero: Users.status_id apunta aqui por clave foranea.
       await seedService.seedUserStatus();
       await seedService.seedEmpresas();
+      await seedService.seedFestivos();
       await seedService.seedSuperAdmin();
       await seedService.seedCategories();
       await seedService.seedSedes();

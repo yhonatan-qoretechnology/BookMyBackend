@@ -14,6 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreatePaymentCardDto } from './dto/create-payment-card.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreatePaymentItemDto } from './dto/create-payment-item.dto';
 import { UpdatePaymentCardDto } from './dto/update-payment-card.dto';
 
 type ListPaymentsFilters = {
@@ -183,6 +184,92 @@ export class PaymentService {
   }
 
   // Confirmar el pago restante en establecimiento
+  /**
+   * Recalcula el total de una factura: precio base del servicio + adicionales.
+   *
+   * El precio base se deriva igual que en createPayment (la tarifa del
+   * servicio para la duracion de la cita) en vez de guardarse aparte, para
+   * que no haya dos fuentes de verdad que puedan separarse.
+   */
+  private async recalcularTotal(paymentId: number) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        items: true,
+        appointment: { include: { service: { include: { prices: true } } } },
+      },
+    });
+    if (!payment) throw new BadRequestException('La factura no existe');
+
+    const cita = payment.appointment;
+    const tarifa = cita?.service?.prices?.find(
+      (precio) => precio.duration === cita.duracion,
+    );
+    const base = tarifa?.amount ?? cita?.service?.prices?.[0]?.amount ?? 0;
+
+    const adicionales = payment.items.reduce(
+      (suma, item) => suma + item.cantidad * item.precioUnitario,
+      0,
+    );
+
+    const totalAmount = Number((base + adicionales).toFixed(2));
+
+    return this.prisma.payment.update({
+      where: { id: paymentId },
+      data: { totalAmount },
+      include: { items: true },
+    });
+  }
+
+  /** Adicionales de una factura. */
+  async listPaymentItems(paymentId: number) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { items: { orderBy: { id: 'asc' } } },
+    });
+    if (!payment) throw new BadRequestException('La factura no existe');
+    return payment.items;
+  }
+
+  /** Anade un concepto adicional y actualiza el total. */
+  async addPaymentItem(paymentId: number, dto: CreatePaymentItemDto) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+    });
+    if (!payment) throw new BadRequestException('La factura no existe');
+
+    if (
+      payment.status === PaymentStatus.CANCELLED ||
+      payment.status === PaymentStatus.FAILED
+    ) {
+      throw new BadRequestException(
+        'No se pueden anadir adicionales a una factura cancelada o fallida',
+      );
+    }
+
+    await this.prisma.paymentItem.create({
+      data: {
+        paymentId,
+        concepto: dto.concepto.trim(),
+        cantidad: dto.cantidad,
+        precioUnitario: dto.precioUnitario,
+      },
+    });
+
+    return this.recalcularTotal(paymentId);
+  }
+
+  /** Quita un adicional y actualiza el total. */
+  async removePaymentItem(itemId: number) {
+    const item = await this.prisma.paymentItem.findUnique({
+      where: { id: itemId },
+    });
+    if (!item) throw new BadRequestException('El adicional no existe');
+
+    await this.prisma.paymentItem.delete({ where: { id: itemId } });
+    return this.recalcularTotal(item.paymentId);
+  }
+
   async confirmRemainingPayment(paymentId: number) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },

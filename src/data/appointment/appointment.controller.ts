@@ -14,6 +14,8 @@ import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { ExtendAppointmentDto } from './dto/extend-appointment.dto';
+import { ObservacionEsperaDto } from './dto/observacion-espera.dto';
 
 @ApiTags('Appointments')
 @Controller('appointments')
@@ -269,6 +271,38 @@ export class AppointmentController {
     @Body() rescheduleDto: RescheduleAppointmentDto,
   ) {
     return this.appointmentService.reschedule(id, rescheduleDto);
+  }
+
+  @Patch(':id/extend')
+  @ApiOperation({
+    summary: 'Alargar una cita',
+    description:
+      'Mantiene la hora de inicio y recalcula la de fin. Rechaza la ampliacion si pisa otra cita del mismo profesional.',
+  })
+  @ApiResponse({ status: 200, description: 'Cita alargada.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Duracion no mayor que la actual, cita cancelada o solapamiento.',
+  })
+  extend(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() extendDto: ExtendAppointmentDto,
+  ) {
+    return this.appointmentService.extend(id, extendDto);
+  }
+
+  @Patch(':id/observacion-espera')
+  @ApiOperation({
+    summary: 'Fijar la observacion de espera',
+    description:
+      'Nota sobre el cliente que espera a ser atendido. Enviar vacio o null la borra.',
+  })
+  @ApiResponse({ status: 200, description: 'Observacion guardada.' })
+  observacionEspera(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ObservacionEsperaDto,
+  ) {
+    return this.appointmentService.setObservacionEspera(id, dto);
   }
 
   @Delete(':id')

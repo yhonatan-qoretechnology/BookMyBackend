@@ -15,6 +15,8 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { ExtendAppointmentDto } from './dto/extend-appointment.dto';
+import { ObservacionEsperaDto } from './dto/observacion-espera.dto';
 
 import { NotificationService } from '../notification/notification.service';
 import { PaymentService } from '../payment/payment.service';
@@ -1115,16 +1117,113 @@ export class AppointmentService {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
 
+    /* UpdateAppointmentDto hereda de CreateAppointmentDto, que incluye los
+       campos del cobro (paymentMethod, paymentAmount, cardNumber...). Esos
+       campos SI pasan el ValidationPipe, pero no son columnas de Appointment:
+       con el spread anterior llegaban a Prisma y reventaban con un 500.
+       Se descartan aqui, igual que hace create(). */
+    const {
+      paymentMethod: _paymentMethod,
+      paymentAmount: _paymentAmount,
+      cardNumber: _cardNumber,
+      expiryDate: _expiryDate,
+      cvv: _cvv,
+      ...campos
+    } = data as UpdateAppointmentDto & Record<string, unknown>;
+
     return this.prisma.appointment.update({
       where: { id },
       data: {
-        ...data,
+        ...campos,
         fecha: data.fecha ? new Date(data.fecha) : cita.fecha,
         horaInicio: data.horaInicio
           ? new Date(data.horaInicio)
           : cita.horaInicio,
         horaFin: data.horaFin ? new Date(data.horaFin) : cita.horaFin,
       },
+    });
+  }
+
+  /**
+   * Alarga una cita dejando la hora de inicio donde esta.
+   *
+   * No se reutiliza reschedule() porque aquel EXIGE que la duracion no cambie
+   * y ademas machaca `notas` con "Reagendado...", lo que borraria la nota del
+   * cliente. Aqui se repite la comprobacion de solapamiento de reschedule
+   * (appointment.service.ts, bloque `overlapping`) porque sin ella el PATCH
+   * generico permitia pisar la cita siguiente del mismo profesional: el
+   * @@unique([profesionalId, horaInicio]) no protege, ya que al extender la
+   * hora de inicio no cambia.
+   */
+  async extend(id: number, dto: ExtendAppointmentDto) {
+    const cita = await this.prisma.appointment.findUnique({ where: { id } });
+    if (!cita) throw new NotFoundException('Cita no encontrada');
+
+    if (
+      cita.estado === AppointmentStatus.CANCELLED ||
+      cita.estado === AppointmentStatus.NO_SHOW
+    ) {
+      throw new BadRequestException(
+        'No se puede alargar una cita cancelada o marcada como no asistida',
+      );
+    }
+
+    if (dto.duracion <= cita.duracion) {
+      throw new BadRequestException(
+        `La nueva duracion debe ser mayor que la actual (${cita.duracion} minutos)`,
+      );
+    }
+
+    const horaFin = new Date(
+      cita.horaInicio.getTime() + dto.duracion * 60 * 1000,
+    );
+
+    const profesional = await this.prisma.profesional.findUnique({
+      where: { id: cita.profesionalId },
+    });
+    if (!profesional) throw new BadRequestException('El profesional no existe');
+    if (profesional.state !== ClientState.enabled) {
+      throw new BadRequestException('El profesional no esta disponible');
+    }
+
+    const overlapping = await this.prisma.appointment.findFirst({
+      where: {
+        id: { not: id },
+        profesionalId: cita.profesionalId,
+        fecha: cita.fecha,
+        horaInicio: { lt: horaFin },
+        horaFin: { gt: cita.horaInicio },
+        estado: { notIn: [AppointmentStatus.CANCELLED] },
+      },
+    });
+    if (overlapping) {
+      throw new BadRequestException(
+        'No se puede alargar: el profesional ya tiene otra cita en ese horario',
+      );
+    }
+
+    /* El motivo va a observacionEspera y NUNCA a notas, que son del cliente. */
+    const observacionEspera = dto.motivo
+      ? [cita.observacionEspera, `Ampliada a ${dto.duracion} min: ${dto.motivo}`]
+          .filter(Boolean)
+          .join(' | ')
+      : cita.observacionEspera;
+
+    return this.prisma.appointment.update({
+      where: { id },
+      data: { duracion: dto.duracion, horaFin, observacionEspera },
+    });
+  }
+
+  /** Nota sobre el cliente que espera a ser atendido. */
+  async setObservacionEspera(id: number, dto: ObservacionEsperaDto) {
+    const cita = await this.prisma.appointment.findUnique({ where: { id } });
+    if (!cita) throw new NotFoundException('Cita no encontrada');
+
+    const texto = dto.observacionEspera?.trim();
+    return this.prisma.appointment.update({
+      where: { id },
+      data: { observacionEspera: texto ? texto : null },
     });
   }
 

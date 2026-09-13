@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
-import { Prisma, Role } from '@prisma/client';
+import { AmbitoFestivo, Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -41,6 +41,85 @@ export class SeedService {
    * en el primer usuario con "P2003: fk_users_status". En produccion no se
    * notaba porque la tabla venia de un `db push` antiguo y ya tenia datos.
    */
+  /**
+   * Festivos de Espana (nacionales + Andalucia + locales de Malaga) 2026-2027.
+   *
+   * Son informativos: el calendario los pinta en rojo pero NO bloquean el
+   * agendado. Si una sede no trabaja ese dia, se cierra con dias_cerrados_sede.
+   *
+   * OJO: los festivos LOCALES los fija cada ayuntamiento y cambian de un ano a
+   * otro; los de aqui son los habituales de Malaga capital y conviene
+   * confirmarlos en el BOJA antes de darlos por buenos.
+   */
+  async seedFestivos() {
+    type F = { fecha: string; nombre: string; ambito: AmbitoFestivo; ccaa?: string; municipio?: string };
+
+    const nacionales2026: F[] = [
+      { fecha: '2026-01-01', nombre: 'Ano Nuevo', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-01-06', nombre: 'Epifania del Senor', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-04-03', nombre: 'Viernes Santo', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-05-01', nombre: 'Fiesta del Trabajo', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-08-15', nombre: 'Asuncion de la Virgen', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-10-12', nombre: 'Fiesta Nacional de Espana', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-11-01', nombre: 'Todos los Santos', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-12-08', nombre: 'Inmaculada Concepcion', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-12-25', nombre: 'Natividad del Senor', ambito: AmbitoFestivo.NACIONAL },
+    ];
+    const nacionales2027: F[] = [
+      { fecha: '2027-01-01', nombre: 'Ano Nuevo', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-01-06', nombre: 'Epifania del Senor', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-03-26', nombre: 'Viernes Santo', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-05-01', nombre: 'Fiesta del Trabajo', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-08-15', nombre: 'Asuncion de la Virgen', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-10-12', nombre: 'Fiesta Nacional de Espana', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-11-01', nombre: 'Todos los Santos', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-12-06', nombre: 'Dia de la Constitucion', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-12-08', nombre: 'Inmaculada Concepcion', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-12-25', nombre: 'Natividad del Senor', ambito: AmbitoFestivo.NACIONAL },
+    ];
+    const andaluces: F[] = [
+      { fecha: '2026-02-28', nombre: 'Dia de Andalucia', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
+      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
+      { fecha: '2027-02-28', nombre: 'Dia de Andalucia', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
+      { fecha: '2027-03-25', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
+    ];
+    const locales: F[] = [
+      { fecha: '2026-08-19', nombre: 'Feria de Malaga', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
+      { fecha: '2026-09-08', nombre: 'Virgen de la Victoria', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
+      { fecha: '2027-08-19', nombre: 'Feria de Malaga', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
+      { fecha: '2027-09-08', nombre: 'Virgen de la Victoria', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
+    ];
+
+    const todos = [...nacionales2026, ...nacionales2027, ...andaluces, ...locales];
+
+    for (const f of todos) {
+      const fecha = new Date(`${f.fecha}T00:00:00.000Z`);
+      const existe = await this.prisma.festivo.findFirst({
+        where: {
+          fecha,
+          ambito: f.ambito,
+          ccaa: f.ccaa ?? null,
+          municipio: f.municipio ?? null,
+        },
+        select: { id: true },
+      });
+      if (existe) continue;
+      await this.prisma.festivo.create({
+        data: {
+          fecha,
+          nombre: f.nombre,
+          ambito: f.ambito,
+          pais: 'ES',
+          ccaa: f.ccaa ?? null,
+          municipio: f.municipio ?? null,
+        },
+      });
+    }
+
+    this.logger.log(`Festivos sembrados: ${todos.length}`);
+    return { message: 'Festivos sembrados', total: todos.length };
+  }
+
   async seedUserStatus() {
     const estados: Array<{ id: number; code: string; name: string; description: string }> = [
       { id: 1, code: 'DISPONIBLE', name: 'Disponible', description: 'Usuario disponible' },
