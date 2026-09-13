@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsEmail,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -33,6 +34,20 @@ export class CreateProfesionalDto {
   @IsNotEmpty()
   @IsString()
   phone: string;
+
+  /* Correo REAL del empleado, al que se le manda el enlace para fijar su
+     contrasena. El de login lo genera el backend (nombre@empresa.com) y es
+     sintetico: no es un buzon al que se pueda escribir. Opcional, porque hay
+     empleados que no dan correo; sin el, el admin le dicta las credenciales
+     como hasta ahora. */
+  @ApiProperty({
+    example: 'ana.perez@gmail.com',
+    description: 'Correo personal del empleado, para enviarle el enlace de acceso.',
+    required: false,
+  })
+  @IsOptional()
+  @IsEmail()
+  emailPersonal?: string;
 
   @ApiProperty({
     type: 'number',

@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   UploadedFile,
@@ -36,6 +37,8 @@ import { AuthUser } from './common/decorators/auth-user.decorator';
 import { Public } from './common/decorators/public.decorator';
 import { Roles } from './common/decorators/roles.decorator';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { CompletePasswordSetupDto } from './dto/complete-password-setup.dto';
+import { PasswordSetupService } from './services/password-setup/password-setup.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
@@ -69,7 +72,10 @@ const ADMIN_ROLES = [
 @UseGuards(JwtAuthGuard, RolesGuard, ThrottlerGuard)
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private readonly passwordSetupService: PasswordSetupService,
+  ) {}
 
   /** Solo el propio usuario o un administrador pueden tocar una cuenta. */
   private assertCanActOnUser(
@@ -175,6 +181,30 @@ export class AuthController {
 
   // Pública a propósito: se autentica con el token de un solo uso que llega por
   // correo en la cabecera `x-reset-token`, no con la sesión.
+  /* Publicas a proposito: quien las usa todavia NO tiene contrasena, asi que
+     no puede tener sesion. Las protege el propio token de un solo uso. */
+  @Public()
+  @Get('password-setup/validate')
+  @ApiOperation({
+    summary: 'Comprobar el enlace de alta de un empleado',
+    description: 'Dice si el enlace sigue sirviendo, sin gastarlo.',
+  })
+  async validatePasswordSetup(@Query('token') token: string) {
+    if (!token) throw new BadRequestException('Falta el token');
+    return this.passwordSetupService.validate(token);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Patch('password-setup/complete')
+  @ApiOperation({
+    summary: 'Fijar la contrasena con el enlace del correo',
+    description: 'Gasta el token y deja la cuenta lista para iniciar sesion.',
+  })
+  async completePasswordSetup(@Body() dto: CompletePasswordSetupDto) {
+    return this.passwordSetupService.complete(dto.token, dto.password);
+  }
+
   @Public()
   @Post('reset-password')
   @ApiOperation({ summary: 'Restablecer la contraseña con un token' })

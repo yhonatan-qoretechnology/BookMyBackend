@@ -19,6 +19,8 @@ import * as path from 'path';
 import { AccessControlService } from '../../auth/services/access-control/access-control.service';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PasswordSetupService } from '../../auth/services/password-setup/password-setup.service';
+import { MailService } from '../email/mail.service';
 import { SftpStorageService } from '../../storage/sftp-storage.service';
 import { CreateProfesionalDto } from './dto/create-profesional.dto';
 import { LinkProfesionalAccessDto } from './dto/link-profesional-access.dto';
@@ -34,6 +36,8 @@ export class ProfesionalService {
     private readonly accessControlService: AccessControlService,
     private readonly sftpStorage: SftpStorageService,
     private readonly configService: ConfigService,
+    private readonly passwordSetupService: PasswordSetupService,
+    private readonly mailService: MailService,
   ) {}
 
   private async storeProfesionalImage(file: Express.Multer.File) {
@@ -281,8 +285,45 @@ export class ProfesionalService {
         },
       );
 
+      /* Si dio correo personal, se le manda un enlace de un solo uso para que
+         elija su contrasena, y la cuenta queda marcada para obligarle a
+         hacerlo. Si el envio falla NO se tumba el alta: el profesional ya
+         existe y el admin puede dictarle las credenciales como hasta ahora. */
+      let enlaceEnviado = false;
+      if (profesionalData.emailPersonal && profesional.user_id) {
+        try {
+          const userAuth = await this.prisma.userAuth.findUnique({
+            where: { user_id: profesional.user_id },
+            select: { id: true },
+          });
+          if (userAuth) {
+            const { token, expiresAt } =
+              await this.passwordSetupService.createForUserAuth(userAuth.id);
+            await this.prisma.userAuth.update({
+              where: { id: userAuth.id },
+              data: { mustChangePassword: true },
+            });
+            await this.mailService.sendEmployeeSetupLink({
+              to: profesionalData.emailPersonal,
+              nombre: profesional.nombre,
+              empresa: sede.empresa?.nombre ?? 'Bookmy',
+              loginEmail: email,
+              token,
+              expiresAt,
+            });
+            enlaceEnviado = true;
+          }
+        } catch (error) {
+          this.logger.error(
+            `No se pudo enviar el enlace de acceso a ${profesionalData.emailPersonal}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+        }
+      }
+
       return {
         ...profesional,
+        enlaceEnviado,
         acceso: {
           email,
           mensaje:

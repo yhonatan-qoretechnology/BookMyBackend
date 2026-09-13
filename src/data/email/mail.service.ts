@@ -57,6 +57,70 @@ export class MailService {
     });
   }
 
+  /**
+   * Enlace de alta para un empleado recien creado.
+   *
+   * Se manda al correo PERSONAL, no al de login: el de login lo genera el
+   * backend con el patron nombre@empresa.com y es un identificador sintetico,
+   * no un buzon al que se pueda escribir.
+   *
+   * El enlace apunta al PANEL (APP_URL), no al backend, porque quien pinta el
+   * formulario de "elige tu contrasena" es el panel.
+   */
+  async sendEmployeeSetupLink(params: {
+    to: string;
+    nombre: string;
+    empresa: string;
+    loginEmail: string;
+    token: string;
+    expiresAt: Date;
+  }) {
+    const base =
+      this.configService.get<string>('APP_URL') ?? 'http://localhost:3000';
+    const url = `${base.replace(/\/$/, '')}/fijar-password?token=${encodeURIComponent(params.token)}`;
+
+    const templatePathFromSrc = join(
+      process.cwd(),
+      'src',
+      'data',
+      'email',
+      'templates',
+      'employee-setup.hbs',
+    );
+
+    let templateSource: string;
+    try {
+      templateSource = await readFile(templatePathFromSrc, 'utf-8');
+    } catch {
+      const templatePathFromDist = join(
+        __dirname,
+        'templates',
+        'employee-setup.hbs',
+      );
+      templateSource = await readFile(templatePathFromDist, 'utf-8');
+    }
+
+    const template = Handlebars.compile(templateSource);
+
+    await this.transporter.sendMail({
+      to: params.to,
+      subject: `Activa tu acceso a ${params.empresa}`,
+      html: template({
+        nombre: params.nombre,
+        empresa: params.empresa,
+        loginEmail: params.loginEmail,
+        url,
+        caduca: params.expiresAt.toLocaleDateString('es-ES', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+        }),
+      }),
+    });
+
+    return { url };
+  }
+
   async sendPasswordResetOtp(email: string, otp: string) {
     const templatePathFromSrc = join(
       process.cwd(),

@@ -321,6 +321,7 @@ export class PaymentService {
 
   private paymentListInclude() {
     return {
+      items: true,
       appointment: {
         include: {
           service: { select: { id: true, translations: true } },

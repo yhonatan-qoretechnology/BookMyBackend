@@ -17,6 +17,7 @@ import { AccessControlService } from './services/access-control/access-control.s
 import { AdminManagementService } from './services/admin-management/admin-management.service';
 import { ClientManagementService } from './services/client-management/client-management.service';
 import { HashService } from './services/hash/hash.service';
+import { PasswordSetupService } from './services/password-setup/password-setup.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
@@ -44,6 +45,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtStrategy,
     AuthService,
     HashService,
+    PasswordSetupService,
     AccessControlService,
     AdminManagementService,
     ClientManagementService,
