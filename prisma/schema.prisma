@@ -8,6 +8,7 @@ datasource db {
 }
 
 model Users {
+  appointmentHistory AppointmentHistory[]
   entityViews EntityView[]
   id                                               Int            @id @default(autoincrement()) @map("id")
   email                                            String         @unique @map("email") @db.VarChar(100)
@@ -365,6 +366,7 @@ model ServiceSedeProfesional {
 }
 
 model Appointment {
+  history AppointmentHistory[]
   /* Texto libre para el cliente que espera a ser atendido. Va aparte de
      `notas` porque reschedule machaca notas con "Reagendado...". */
   observacionEspera String? @map("observacion_espera")
@@ -763,4 +765,44 @@ model EntityView {
   @@index([createdAt])
   @@index([empresaId])
   @@map("entity_views")
+}
+
+
+/* ============================================================
+   Historial de cambios de una cita.
+   ------------------------------------------------------------
+   NO lo creo yo: esta tabla ya existe en PRODUCCION, aplicada con la
+   migracion 20260913121207_add_appointment_history, que no esta en ninguna
+   rama del repositorio. Se modela aqui para que Prisma la conozca; si no,
+   cualquier `db push` o `migrate dev` posterior la habria BORRADO junto con
+   su enum, porque para Prisma seria una tabla sobrante.
+
+   Los campos y tipos son los que tiene la tabla real en produccion.
+   OJO: no hay fichero de migracion para ella, asi que un entorno nuevo
+   levantado desde cero con `migrate deploy` NO la tendria. Quien la aplico
+   deberia commitear su migracion.
+============================================================ */
+enum AppointmentHistoryAction {
+  EXTENDED
+  EXTEND_CONFLICT_DETECTED
+  REASSIGNED
+  RESCHEDULED
+  CANCELLED
+}
+
+model AppointmentHistory {
+  id                Int                      @id @default(autoincrement())
+  appointmentId     Int
+  action            AppointmentHistoryAction
+  previousData      Json?
+  newData           Json?
+  performedByUserId Int?
+  reason            String?
+  createdAt         DateTime                 @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  performedBy Users?      @relation(fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId])
+  @@map("appointment_history")
 }
