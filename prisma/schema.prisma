@@ -38,6 +38,7 @@ model Users {
   gastos                                            Gasto[]
   assistantConversations                           AssistantConversation[]
   notifications                                     Notification[]
+  appointmentHistories                              AppointmentHistory[]
 
   @@index([email])
   @@map("users")
@@ -365,11 +366,40 @@ model Appointment {
   service       Service           @relation(fields: [serviceId], references: [id])
   user          Users             @relation(fields: [userId], references: [id])
   Payment       Payment?
+  history       AppointmentHistory[]
 
   @@unique([profesionalId, horaInicio])
   @@index([fecha])
   @@index([profesionalId, fecha])
   @@index([sedeId, fecha])
+}
+
+// Auditoría de cambios sobre una cita ya creada: extender duración,
+// reasignar especialista, reprogramar o cancelar. Pedido explícitamente
+// para poder rastrear qué pasó cuando una cita se atrasa y choca con la
+// siguiente reserva del mismo profesional.
+model AppointmentHistory {
+  id                Int                      @id @default(autoincrement())
+  appointmentId     Int
+  action            AppointmentHistoryAction
+  previousData      Json?
+  newData           Json?
+  performedByUserId Int?
+  reason            String?
+  createdAt         DateTime                 @default(now())
+  appointment       Appointment              @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  performedBy       Users?                   @relation(fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId])
+  @@map("appointment_history")
+}
+
+enum AppointmentHistoryAction {
+  EXTENDED
+  EXTEND_CONFLICT_DETECTED
+  REASSIGNED
+  RESCHEDULED
+  CANCELLED
 }
 
 model HorarioSede {

@@ -145,9 +145,14 @@ export class ProfesionalController {
     return this.profesionalService.updateImage(id, user, file);
   }
 
+  /* Eliminar es exclusivo de SUPER_ADMIN; el resto de administradores
+     inhabilita con PATCH :id { state: "disabled" }. */
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Eliminar un profesional por su ID' })
+  @ApiOperation({ summary: 'Eliminar un profesional por su ID (solo SUPER_ADMIN)' })
   @ApiResponse({
     status: 204,
     description: 'Profesional eliminado exitosamente.',

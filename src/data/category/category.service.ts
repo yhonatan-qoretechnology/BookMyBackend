@@ -21,6 +21,27 @@ export class CategoryService {
     private readonly sftpStorage: SftpStorageService,
   ) {}
 
+  // 🔒 Las categorías son un catálogo global (no tienen empresaId), así
+  // que el nombre se cuida único por idioma en toda la plataforma —
+  // mismo patrón que SedeService.findDuplicateSedeName.
+  private async findDuplicateCategoryName(
+    translations: { language: string; name: string }[],
+    excludeId?: number,
+  ) {
+    for (const t of translations) {
+      if (!t.name?.trim()) continue;
+      const duplicada = await this.prisma.categoryTranslation.findFirst({
+        where: {
+          language: t.language,
+          name: { equals: t.name.trim(), mode: 'insensitive' },
+          ...(excludeId ? { categoryId: { not: excludeId } } : {}),
+        },
+      });
+      if (duplicada) return duplicada;
+    }
+    return null;
+  }
+
   async createBulk(bulkDto: BulkCreateCategoriesDto) {
     const results: any[] = [];
     for (const categoryDto of bulkDto.categories) {
@@ -132,6 +153,14 @@ export class CategoryService {
       );
     }
 
+    const duplicada = await this.findDuplicateCategoryName(translations);
+    if (duplicada) {
+      if (file) await this.safeDeleteRemoteOrLocal(file.path);
+      throw new BadRequestException(
+        `Ya existe una categoría llamada "${duplicada.name}".`,
+      );
+    }
+
     let imagePath: string | null = null;
     if (file) {
       imagePath = await this.storeCategoryImage(file);
@@ -236,6 +265,17 @@ export class CategoryService {
     if (!category) {
       if (file) await this.safeDeleteRemoteOrLocal(file.path);
       throw new NotFoundException(`Categoría con ID ${id} no encontrada.`);
+    }
+
+    const duplicada = await this.findDuplicateCategoryName(
+      updateCategoryDto.translations,
+      id,
+    );
+    if (duplicada) {
+      if (file) await this.safeDeleteRemoteOrLocal(file.path);
+      throw new BadRequestException(
+        `Ya existe una categoría llamada "${duplicada.name}".`,
+      );
     }
 
     let imagePath = category.image;
