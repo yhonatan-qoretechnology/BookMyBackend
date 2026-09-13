@@ -35,8 +35,13 @@ async function main() {
     case 'services':
       await seedService.seedServices();
       break;
+    case 'user-status':
+      await seedService.seedUserStatus();
+      break;
     case 'all':
       console.log('Ejecutando todos los seeds...');
+      // Primero: Users.status_id apunta aqui por clave foranea.
+      await seedService.seedUserStatus();
       await seedService.seedEmpresas();
       await seedService.seedSuperAdmin();
       await seedService.seedCategories();
@@ -48,6 +53,7 @@ async function main() {
       break;
     default:
       console.log('Comandos disponibles:');
+      console.log('  npm run seed -- user-status');
       console.log('  npm run seed -- empresas');
       console.log('  npm run seed -- super-admin');
       console.log('  npm run seed -- company-admin');

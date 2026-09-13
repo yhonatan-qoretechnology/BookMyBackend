@@ -33,6 +33,58 @@ export class SeedService {
 
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Catalogo de estados de usuario.
+   *
+   * `Users.status_id` tiene DEFAULT 7 y una FK contra UserStatus, pero ningun
+   * seed llenaba esa tabla: sobre una base recien creada, `seed -- all` moria
+   * en el primer usuario con "P2003: fk_users_status". En produccion no se
+   * notaba porque la tabla venia de un `db push` antiguo y ya tenia datos.
+   */
+  async seedUserStatus() {
+    const estados: Array<{ id: number; code: string; name: string; description: string }> = [
+      { id: 1, code: 'DISPONIBLE', name: 'Disponible', description: 'Usuario disponible' },
+      { id: 2, code: 'OCUPADO', name: 'Ocupado', description: 'Usuario ocupado' },
+      { id: 3, code: 'EN_REUNION', name: 'En reunion', description: 'Participando en una reunion' },
+      { id: 4, code: 'ALMORZANDO', name: 'Almorzando', description: 'Hora de almuerzo' },
+      { id: 5, code: 'AUSENTE', name: 'Ausente', description: 'Usuario ausente' },
+      { id: 6, code: 'VACACIONES', name: 'Vacaciones', description: 'Usuario en vacaciones' },
+      { id: 7, code: 'DESCONECTADO', name: 'Desconectado', description: 'Usuario fuera de linea' },
+    ];
+
+    for (const e of estados) {
+      await this.prisma.userStatus.upsert({
+        where: { id: e.id },
+        update: { code: e.code },
+        create: { id: e.id, code: e.code },
+      });
+
+      await this.prisma.userStatusTranslation.upsert({
+        where: { id: e.id },
+        update: { name: e.name, description: e.description },
+        create: {
+          id: e.id,
+          userStatusId: e.id,
+          language: LanguageCode.ES,
+          name: e.name,
+          description: e.description,
+        },
+      });
+    }
+
+    /* Las filas se insertan con id fijo, asi que la secuencia se queda en 0 y
+       el siguiente insert automatico chocaria con la clave primaria. */
+    await this.prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"UserStatus"', 'id'), 7, true)`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `SELECT setval(pg_get_serial_sequence('"UserStatusTranslation"', 'id'), 7, true)`,
+    );
+
+    this.logger.log('Catalogo UserStatus sembrado');
+    return { message: 'UserStatus sembrado', total: estados.length };
+  }
+
   async seedSuperAdmin() {
     const email = 'superadmin@bookmy.com';
     const password = 'SuperAdmin123$';

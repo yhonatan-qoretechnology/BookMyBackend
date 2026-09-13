@@ -8,6 +8,7 @@ datasource db {
 }
 
 model Users {
+  entityViews EntityView[]
   id                                               Int            @id @default(autoincrement()) @map("id")
   email                                            String         @unique @map("email") @db.VarChar(100)
   clientType                                       ClientType     @default(people) @map("client_type")
@@ -62,6 +63,10 @@ model AdminProfile {
 }
 
 model UserAuth {
+  /* Obliga a fijar contrasena propia en el primer acceso. */
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  passwordChangedAt  DateTime? @map("password_changed_at")
+  setupTokens        PasswordSetupToken[]
   id        Int      @id @default(autoincrement()) @map("id")
   email     String   @unique @map("email")
   password  String   @map("password")
@@ -175,6 +180,11 @@ model UserCategory {
 }
 
 model UserLocation {
+  /* Ciudad resuelta por geocodificacion inversa, para 2.1 y 2.8. */
+  city           String? @map("city") @db.VarChar(120)
+  cityNormalized String? @map("city_normalized") @db.VarChar(120)
+  region         String? @map("region") @db.VarChar(120)
+  country        String? @map("country") @db.VarChar(120)
   id        Int      @id @default(autoincrement()) @map("id")
   latitude  Float    @map("latitude")
   longitude Float    @map("longitude")
@@ -210,6 +220,11 @@ model Empresa {
 }
 
 model Sede {
+  /* Geografia de la sede. `provincia` ya existia (y hoy guarda municipios).
+     Los rellena el buscador de direcciones de Google Places en el alta. */
+  pais         String? @map("pais")
+  municipio    String? @map("municipio")
+  localidad    String? @map("localidad")
   id                     Int                      @id @default(autoincrement())
   nombre                 String
   direccion              String
@@ -243,6 +258,9 @@ model Sede {
 }
 
 model Profesional {
+  /* Correo REAL del empleado. El de `Users.email` es sintetico
+     (nombre@empresa.com) y no es un buzon al que se pueda escribir. */
+  emailPersonal String? @map("email_personal")
   id                        Int                         @id @default(autoincrement())
   nombre                    String
   biografia                 String?
@@ -347,6 +365,9 @@ model ServiceSedeProfesional {
 }
 
 model Appointment {
+  /* Texto libre para el cliente que espera a ser atendido. Va aparte de
+     `notas` porque reschedule machaca notas con "Reagendado...". */
+  observacionEspera String? @map("observacion_espera")
   id            Int               @id @default(autoincrement())
   fecha         DateTime
   createdAt     DateTime          @default(now())
@@ -415,6 +436,7 @@ model DisponibilidadProfesional {
 }
 
 model Payment {
+  items PaymentItem[]
   id             Int           @id @default(autoincrement())
   appointmentId  Int           @unique
   method         PaymentMethod
@@ -648,4 +670,97 @@ enum PaymentStatus {
   PAID
   FAILED
   CANCELLED
+}
+
+
+/* ============================================================
+   Lineas de detalle de una factura (adicionales)
+   Payment solo tenia un importe total, asi que no habia donde
+   guardar "recubrimiento en gel +5 EUR". El total se recalcula
+   en el backend sumando las lineas.
+============================================================ */
+model PaymentItem {
+  id            Int      @id @default(autoincrement())
+  paymentId     Int      @map("payment_id")
+  concepto      String   @map("concepto") @db.VarChar(160)
+  cantidad      Int      @default(1) @map("cantidad")
+  precioUnitario Float   @map("precio_unitario")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@map("payment_items")
+}
+
+enum AmbitoFestivo {
+  NACIONAL
+  AUTONOMICO
+  LOCAL
+}
+
+/* Festivos: se pintan en rojo en el calendario pero NO bloquean
+   el agendado (decision del cliente). Si una sede cierra ese dia,
+   se cierra con el mecanismo existente de dias cerrados. */
+model Festivo {
+  id        Int           @id @default(autoincrement())
+  fecha     DateTime      @map("fecha") @db.Date
+  nombre    String        @map("nombre") @db.VarChar(160)
+  ambito    AmbitoFestivo @map("ambito")
+  pais      String        @default("ES") @map("pais") @db.VarChar(2)
+  ccaa      String?       @map("ccaa") @db.VarChar(60)
+  municipio String?       @map("municipio") @db.VarChar(120)
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  @@unique([fecha, ambito, ccaa, municipio])
+  @@index([fecha])
+  @@map("festivos")
+}
+
+/* Token de un solo uso del enlace "fija tu contrasena" que recibe
+   el empleado por correo. Se guarda el hash, nunca el token. */
+model PasswordSetupToken {
+  id        Int       @id @default(autoincrement())
+  userAuthId Int      @map("user_auth_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  userAuth UserAuth @relation(fields: [userAuthId], references: [id], onDelete: Cascade)
+
+  @@index([userAuthId])
+  @@map("password_setup_tokens")
+}
+
+enum ViewEntityType {
+  EMPRESA
+  SEDE
+  SERVICIO
+  PROFESIONAL
+  CATEGORIA
+}
+
+/* Registro de vistas del catalogo (2.2-2.5 y 2.7). Una sola tabla
+   generica en vez de una por entidad: los rankings son la misma
+   consulta con distinto entityType. empresaId/sedeId van
+   desnormalizados para poder acotar el ranking por negocio sin
+   encadenar joins. */
+model EntityView {
+  id         Int            @id @default(autoincrement())
+  entityType ViewEntityType @map("entity_type")
+  entityId   Int            @map("entity_id")
+  userId     Int?           @map("user_id")
+  empresaId  Int?           @map("empresa_id")
+  sedeId     Int?           @map("sede_id")
+  city       String?        @map("city") @db.VarChar(120)
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  user Users? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([empresaId])
+  @@map("entity_views")
 }
