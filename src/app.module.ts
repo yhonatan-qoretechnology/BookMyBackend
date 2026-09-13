@@ -16,6 +16,7 @@ import { MailModule } from './data/email/mail.module';
 import { EmpresaModule } from './data/empresa/empresa.module';
 import { FestivoModule } from './data/festivo/festivo.module';
 import { EntityViewModule } from './data/entity-view/entity-view.module';
+import { EstadisticasModule } from './data/estadisticas/estadisticas.module';
 import { GastoModule } from './data/gasto/gasto.module';
 import { HorarioSedeModule } from './data/HorarioSede/horario-sede.module';
 import { NotificationModule } from './data/notification/notification.module';
@@ -87,6 +88,7 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     SearchModule,
     FestivoModule,
     EntityViewModule,
+    EstadisticasModule,
     NotificationModule,
   ],
   providers: [
