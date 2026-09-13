@@ -11,10 +11,12 @@ import {
   Query,
   UploadedFile,
   UploadedFiles,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import {
+  ApiBearerAuth,
   ApiBody,
   ApiConsumes,
   ApiOperation,
@@ -26,7 +28,11 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import * as fs from 'fs';
+import { Role } from '@prisma/client';
 import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateServiceWithImagesDto } from '../serviceCategory/dto/create-service-with-images.dto';
 import { CreateServiceDto } from '../serviceCategory/dto/create-service.dto';
@@ -213,10 +219,14 @@ export class ServiceController {
     return this.serviceService.findOne(id, language);
   }
 
-  // 🔴 Eliminar un servicio
+  // 🔴 Eliminar un servicio — exclusivo de SUPER_ADMIN
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Eliminar servicio y sus traducciones, precios e imágenes asociadas',
+    summary:
+      'Eliminar servicio y sus traducciones, precios e imágenes asociadas (solo SUPER_ADMIN)',
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID del servicio' })
   @ApiResponse({

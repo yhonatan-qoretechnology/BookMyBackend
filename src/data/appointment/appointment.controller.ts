@@ -10,11 +10,14 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { ExtendAppointmentDto } from './dto/extend-appointment.dto';
+import { ReassignAppointmentDto } from './dto/reassign-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
-import { ExtendAppointmentDto } from './dto/extend-appointment.dto';
 import { ObservacionEsperaDto } from './dto/observacion-espera.dto';
 
 @ApiTags('Appointments')
@@ -260,8 +263,9 @@ export class AppointmentController {
   cancel(
     @Param('id', ParseIntPipe) id: number,
     @Body('motivo') motivo?: string,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
-    return this.appointmentService.cancel(id, motivo);
+    return this.appointmentService.cancel(id, motivo, user);
   }
 
   @Patch(':id/reschedule')
@@ -269,26 +273,47 @@ export class AppointmentController {
   reschedule(
     @Param('id', ParseIntPipe) id: number,
     @Body() rescheduleDto: RescheduleAppointmentDto,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
-    return this.appointmentService.reschedule(id, rescheduleDto);
+    return this.appointmentService.reschedule(id, rescheduleDto, user);
   }
 
   @Patch(':id/extend')
   @ApiOperation({
-    summary: 'Alargar una cita',
+    summary: 'Extender una cita en curso que se está pasando de hora',
     description:
-      'Mantiene la hora de inicio y recalcula la de fin. Rechaza la ampliacion si pisa otra cita del mismo profesional.',
+      'El profesional no terminó a tiempo. Si el tramo extra está libre, se ' +
+      'estira la cita sola. Si choca con la siguiente reserva del mismo ' +
+      'profesional, no se cambia nada y se devuelven las opciones ' +
+      '(reasignar a otro especialista libre, reprogramar con huecos ' +
+      'sugeridos ese mismo día, o cancelar) para que alguien elija.',
   })
-  @ApiResponse({ status: 200, description: 'Cita alargada.' })
   @ApiResponse({
-    status: 400,
-    description: 'Duracion no mayor que la actual, cita cancelada o solapamiento.',
+    status: 200,
+    description:
+      'EXTENDED si se pudo estirar sola, o CONFLICT con las opciones si choca con otra cita',
   })
   extend(
     @Param('id', ParseIntPipe) id: number,
     @Body() extendDto: ExtendAppointmentDto,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
-    return this.appointmentService.extend(id, extendDto);
+    return this.appointmentService.extend(id, extendDto, user);
+  }
+
+  @Patch(':id/reassign')
+  @ApiOperation({
+    summary: 'Reasignar una cita a otro especialista',
+    description:
+      'El nuevo profesional debe ofrecer el mismo servicio en la misma ' +
+      'sede y estar libre en ese horario exacto. Avisa al cliente del cambio.',
+  })
+  reassign(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() reassignDto: ReassignAppointmentDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.appointmentService.reassign(id, reassignDto, user);
   }
 
   @Patch(':id/observacion-espera')

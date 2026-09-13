@@ -99,6 +99,41 @@ export class ServiceService {
     }
   }
 
+  // 🔒 A diferencia de sede/categoría, un servicio no tiene empresaId
+  // propio — pero SÍ sedes (y las sedes sí pertenecen a una empresa).
+  // Acotamos "duplicado" a: misma categoría + comparte al menos una
+  // sede + mismo nombre (por idioma). Así dos empresas distintas
+  // pueden tener cada una su propio "Corte de pelo" en "Peluquería"
+  // sin chocar entre sí — solo se bloquea el duplicado dentro del
+  // mismo negocio, que es el caso real que generaba el bug del doble
+  // clic (ver SedeService.findDuplicateSedeName, mismo patrón).
+  private async findDuplicateServiceName(
+    categoryId: number,
+    sedeIds: number[],
+    translations: { language: string; name?: string }[],
+    excludeId?: number,
+  ) {
+    if (sedeIds.length === 0) return null;
+    for (const t of translations) {
+      if (!t.name?.trim()) continue;
+      const duplicado = await this.prisma.service.findFirst({
+        where: {
+          categoryId,
+          sedes: { some: { id: { in: sedeIds } } },
+          translations: {
+            some: {
+              language: t.language,
+              name: { equals: t.name.trim(), mode: 'insensitive' },
+            },
+          },
+          ...(excludeId ? { id: { not: excludeId } } : {}),
+        },
+      });
+      if (duplicado) return { name: t.name.trim() };
+    }
+    return null;
+  }
+
   private async safeDeleteRemoteOrLocal(filePath: string) {
     if (!filePath) return;
     if (this.sftpStorage.isEnabled()) {
@@ -158,6 +193,17 @@ export class ServiceService {
           'Debe asociar el servicio al menos a una sede de su empresa.',
         );
       }
+    }
+
+    const duplicado = await this.findDuplicateServiceName(
+      dto.categoryId,
+      sedeIds,
+      dto.translations,
+    );
+    if (duplicado) {
+      throw new BadRequestException(
+        `Ya existe un servicio llamado "${duplicado.name}" en esta categoría para esa sede.`,
+      );
     }
 
     try {
@@ -312,6 +358,37 @@ export class ServiceService {
           if (!user.empresaId) {
             throw new ForbiddenException(
               'El administrador de empresa no tiene empresa asociada.',
+            );
+          }
+        }
+      }
+
+      // Mismo chequeo que en create(), pero dentro de la transacción
+      // (acá sedeIds recién termina de resolverse según el rol) y
+      // usando la categoría/sedes actuales como fallback si el
+      // request no las manda (no se están cambiando).
+      if (dto.translations) {
+        const categoriaEfectiva = dto.categoryId ?? existing.categoryId;
+        const sedeIdsEfectivos =
+          sedeIds ?? existing.sedes.map((s) => s.id);
+        for (const t of dto.translations) {
+          if (!t.name?.trim() || sedeIdsEfectivos.length === 0) continue;
+          const duplicado = await tx.service.findFirst({
+            where: {
+              categoryId: categoriaEfectiva,
+              sedes: { some: { id: { in: sedeIdsEfectivos } } },
+              translations: {
+                some: {
+                  language: t.language,
+                  name: { equals: t.name.trim(), mode: 'insensitive' },
+                },
+              },
+              id: { not: id },
+            },
+          });
+          if (duplicado) {
+            throw new BadRequestException(
+              `Ya existe un servicio llamado "${t.name.trim()}" en esta categoría para esa sede.`,
             );
           }
         }

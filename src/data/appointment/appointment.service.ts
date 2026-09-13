@@ -1,27 +1,42 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AppointmentHistoryAction,
   AppointmentStatus,
   ClientState,
+  DiaCerradoSede,
+  HorarioSede,
+  Prisma,
   Profesional,
+  Role,
   Sede,
   Service,
   Users,
 } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { AccessControlService } from '../../auth/services/access-control/access-control.service';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
-import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { ExtendAppointmentDto } from './dto/extend-appointment.dto';
+import { ReassignAppointmentDto } from './dto/reassign-appointment.dto';
+import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { ObservacionEsperaDto } from './dto/observacion-espera.dto';
 
 import { NotificationService } from '../notification/notification.service';
 import { PaymentService } from '../payment/payment.service';
 
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Europe/Madrid';
+const SAME_DAY_SUGGESTION_STEP_MINUTES = 15;
+
+type SedeConHorarios = Sede & {
+  HorarioSede: HorarioSede[];
+  DiaCerradoSede: DiaCerradoSede[];
+};
 
 @Injectable()
 export class AppointmentService {
@@ -31,6 +46,7 @@ export class AppointmentService {
     private prisma: PrismaService,
     private paymentService: PaymentService,
     private notificationService: NotificationService,
+    private accessControlService: AccessControlService,
   ) {}
 
   /**
@@ -313,6 +329,422 @@ export class AppointmentService {
       throw new BadRequestException('Fecha inválida');
     }
     return date;
+  }
+
+  /**
+   * Registro de auditoría best-effort: nunca debe tumbar la operación que
+   * la disparó (extender, reasignar, reprogramar, cancelar una cita).
+   */
+  private async logAppointmentHistory(
+    appointmentId: number,
+    action: AppointmentHistoryAction,
+    previousData: Record<string, unknown> | null,
+    newData: Record<string, unknown> | null,
+    performedByUserId?: number,
+    reason?: string,
+  ): Promise<void> {
+    try {
+      await this.prisma.appointmentHistory.create({
+        data: {
+          appointmentId,
+          action,
+          previousData: (previousData ?? undefined) as
+            | Prisma.InputJsonValue
+            | undefined,
+          newData: (newData ?? undefined) as
+            | Prisma.InputJsonValue
+            | undefined,
+          performedByUserId: performedByUserId ?? undefined,
+          reason,
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `No se pudo registrar el historial de la cita ${appointmentId} (${action}): ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Solo el profesional dueño de la cita, un admin con alcance sobre esa
+   * sede/empresa, o un SUPER_ADMIN pueden extender o reasignar una cita.
+   * A propósito NO se aplica este chequeo a cancel()/reschedule(), que ya
+   * existían antes y son usados también por el cliente dueño de la
+   * reserva desde la app móvil — agregar esta restricción ahí rompería
+   * ese flujo existente.
+   */
+  private async ensureCanManageAppointment(
+    cita: { profesionalId: number; sedeId: number },
+    user?: AuthenticatedUser,
+  ): Promise<void> {
+    if (!user) return;
+    if (user.role === Role.SUPER_ADMIN) return;
+
+    if (user.role === Role.EMPLOYEE) {
+      if (user.profesionalId !== cita.profesionalId) {
+        throw new ForbiddenException(
+          'No puede gestionar citas de otro profesional.',
+        );
+      }
+      return;
+    }
+
+    if (user.role === Role.COMPANY_ADMIN || user.role === Role.BRANCH_ADMIN) {
+      await this.accessControlService.ensureSedeAccessForUser(
+        cita.sedeId,
+        user,
+      );
+      return;
+    }
+
+    throw new ForbiddenException('No tiene permisos para gestionar esta cita.');
+  }
+
+  /**
+   * Best-effort: avisa al cliente cuando SU cita cambia por una acción de
+   * otra persona (reasignación, reprogramación, cancelación).
+   */
+  private async notifyClientAboutChange(
+    cita: {
+      id: number;
+      serviceId: number;
+      sedeId: number;
+      profesionalId: number;
+      userId: number;
+      fecha: Date;
+      horaInicio: Date;
+    },
+    changeType: 'REASSIGNED' | 'RESCHEDULED' | 'CANCELLED',
+  ): Promise<void> {
+    try {
+      const [service, sede, profesional, cliente] = await Promise.all([
+        this.prisma.service.findUnique({
+          where: { id: cita.serviceId },
+          include: { translations: { where: { language: 'es' }, take: 1 } },
+        }),
+        this.prisma.sede.findUnique({ where: { id: cita.sedeId } }),
+        this.prisma.profesional.findUnique({
+          where: { id: cita.profesionalId },
+        }),
+        this.prisma.users.findUnique({ where: { id: cita.userId } }),
+      ]);
+
+      if (!service || !sede || !cliente) return;
+
+      await this.notificationService.notifyAppointmentChanged({
+        appointmentId: cita.id,
+        clienteUserId: cliente.id,
+        changeType,
+        serviceNombre: service.translations[0]?.name ?? 'tu servicio',
+        sedeNombre: sede.nombre,
+        fecha: cita.fecha,
+        horaInicio: cita.horaInicio,
+        profesionalNombre: profesional?.nombre,
+      });
+    } catch (error) {
+      this.logger.error(
+        `No se pudo notificar el cambio (${changeType}) de la cita ${cita.id}: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Especialistas que ofrecen el mismo servicio en la misma sede (excepto
+   * el actual) y que están libres en el rango exacto solicitado — para la
+   * opción "reasignar" cuando extender una cita choca con la siguiente.
+   */
+  private async findFreeProfesionalesForSlot(
+    sedeId: number,
+    serviceId: number,
+    excludeProfesionalId: number,
+    horaInicio: Date,
+    horaFin: Date,
+  ): Promise<
+    { id: number; nombre: string; phone: string | null; imagen: string | null }[]
+  > {
+    const candidatos = await this.prisma.serviceSedeProfesional.findMany({
+      where: {
+        sedeId,
+        serviceId,
+        profesionalId: { not: excludeProfesionalId },
+      },
+      include: { profesional: true },
+    });
+
+    const libres: {
+      id: number;
+      nombre: string;
+      phone: string | null;
+      imagen: string | null;
+    }[] = [];
+
+    for (const candidato of candidatos) {
+      const profesional = candidato.profesional;
+      if (!profesional || profesional.state !== ClientState.enabled) continue;
+      // Ya se pudo repetir el mismo profesional en más de una fila (varias
+      // sedes/servicios); no lo proceses dos veces.
+      if (libres.some((p) => p.id === profesional.id)) continue;
+
+      const ocupado = await this.prisma.appointment.findFirst({
+        where: {
+          profesionalId: profesional.id,
+          estado: { not: AppointmentStatus.CANCELLED },
+          horaInicio: { lt: horaFin },
+          horaFin: { gt: horaInicio },
+        },
+      });
+
+      if (!ocupado) {
+        libres.push({
+          id: profesional.id,
+          nombre: profesional.nombre,
+          phone: profesional.phone,
+          imagen: profesional.imagen,
+        });
+      }
+    }
+
+    return libres;
+  }
+
+  /**
+   * Huecos libres del mismo profesional, más tarde ese mismo día, con la
+   * misma duración que la cita en conflicto — para la opción "reprogramar".
+   * Reusa exactamente la misma lógica de horario/cierres/disponibilidad
+   * que ya usan create()/reschedule(), pero como enumeración de huecos en
+   * vez de validación de un horario puntual.
+   */
+  private async findSameDayFreeSlots(
+    profesionalId: number,
+    sede: SedeConHorarios,
+    fecha: Date,
+    durationMinutes: number,
+    notBeforeMinutes: number,
+    maxSuggestions = 3,
+  ): Promise<{ horaInicio: string; horaFin: string }[]> {
+    const dayOfWeek = this.getDayOfWeekInTimezone(fecha);
+    const dayNames = [
+      'domingo',
+      'lunes',
+      'martes',
+      'miércoles',
+      'jueves',
+      'viernes',
+      'sábado',
+    ];
+
+    const horarioRegistro = sede.HorarioSede.find(
+      (r) => r.diaSemana === dayOfWeek && r.activo,
+    );
+    let scheduleRanges: { start: number; end: number }[] = [];
+    if (horarioRegistro) {
+      scheduleRanges = [
+        {
+          start: this.getMinutesFromHourString(horarioRegistro.horaApertura),
+          end: this.getMinutesFromHourString(horarioRegistro.horaCierre),
+        },
+      ];
+    } else if (sede.horario && typeof sede.horario === 'object') {
+      const normalizedTarget = this.normalizeKey(dayNames[dayOfWeek]);
+      const entry = Object.entries(
+        sede.horario as Record<string, string | null>,
+      ).find(([key]) => this.normalizeKey(key) === normalizedTarget)?.[1];
+      scheduleRanges = this.parseScheduleRanges(entry ?? undefined);
+    }
+
+    if (!scheduleRanges.length) return [];
+
+    const appointmentDay = this.getDateInTimezone(fecha);
+    const diasCerradosRegistros = sede.DiaCerradoSede.length
+      ? sede.DiaCerradoSede
+      : Array.isArray(sede.diasCerrado)
+        ? (sede.diasCerrado as string[]).map((d) => ({
+            fecha: new Date(`${d}T00:00:00Z`),
+            todoElDia: true,
+            horaInicio: null as string | null,
+            horaFin: null as string | null,
+          }))
+        : [];
+
+    const cierresParciales: { start: number; end: number }[] = [];
+    for (const cierre of diasCerradosRegistros) {
+      if (!cierre.fecha) continue;
+      const cierreFecha = new Date(cierre.fecha);
+      if (Number.isNaN(cierreFecha.getTime())) continue;
+      if (this.getDateInTimezone(cierreFecha) !== appointmentDay) continue;
+      if (cierre.todoElDia ?? true) return [];
+      if (cierre.horaInicio && cierre.horaFin) {
+        cierresParciales.push({
+          start: this.getMinutesFromHourString(cierre.horaInicio),
+          end: this.getMinutesFromHourString(cierre.horaFin),
+        });
+      }
+    }
+
+    const disponibilidad =
+      await this.prisma.disponibilidadProfesional.findUnique({
+        where: {
+          profesionalId_fecha: {
+            profesionalId,
+            fecha: this.normalizeToDay(fecha),
+          },
+        },
+      });
+
+    if (disponibilidad && !disponibilidad.disponible) return [];
+
+    let dispoRange: { start: number; end: number } | null = null;
+    if (disponibilidad?.horaInicio && disponibilidad?.horaFin) {
+      dispoRange = {
+        start: this.getMinutesFromHourString(disponibilidad.horaInicio),
+        end: this.getMinutesFromHourString(disponibilidad.horaFin),
+      };
+    }
+
+    const existentes = await this.prisma.appointment.findMany({
+      where: {
+        profesionalId,
+        fecha,
+        estado: { not: AppointmentStatus.CANCELLED },
+      },
+      select: { horaInicio: true, horaFin: true },
+    });
+    const ocupados = existentes.map((a) => ({
+      start: this.getMinutesFromDate(a.horaInicio),
+      end: this.getMinutesFromDate(a.horaFin),
+    }));
+
+    const year = fecha.getUTCFullYear();
+    const month = fecha.getUTCMonth();
+    const day = fecha.getUTCDate();
+    const sugerencias: { horaInicio: string; horaFin: string }[] = [];
+
+    for (const range of scheduleRanges) {
+      let cursor = Math.max(range.start, notBeforeMinutes);
+      cursor =
+        Math.ceil(cursor / SAME_DAY_SUGGESTION_STEP_MINUTES) *
+        SAME_DAY_SUGGESTION_STEP_MINUTES;
+
+      while (cursor + durationMinutes <= range.end) {
+        const candidateEnd = cursor + durationMinutes;
+        const dentroDeDispo =
+          !dispoRange ||
+          (cursor >= dispoRange.start && candidateEnd <= dispoRange.end);
+        const chocaCierre = cierresParciales.some((c) =>
+          this.rangesOverlap(cursor, candidateEnd, c.start, c.end),
+        );
+        const chocaCita = ocupados.some((o) =>
+          this.rangesOverlap(cursor, candidateEnd, o.start, o.end),
+        );
+
+        if (dentroDeDispo && !chocaCierre && !chocaCita) {
+          sugerencias.push({
+            horaInicio: new Date(
+              Date.UTC(
+                year,
+                month,
+                day,
+                Math.floor(cursor / 60),
+                cursor % 60,
+              ),
+            ).toISOString(),
+            horaFin: new Date(
+              Date.UTC(
+                year,
+                month,
+                day,
+                Math.floor(candidateEnd / 60),
+                candidateEnd % 60,
+              ),
+            ).toISOString(),
+          });
+          if (sugerencias.length >= maxSuggestions) return sugerencias;
+        }
+        cursor += SAME_DAY_SUGGESTION_STEP_MINUTES;
+      }
+    }
+
+    return sugerencias;
+  }
+
+  /**
+   * Arma las 3 opciones para resolver una cita que quedó en conflicto por
+   * extender otra: reasignar a otro especialista libre, reprogramar (con
+   * huecos sugeridos ese mismo día), o cancelar. No aplica nada solo —
+   * un humano elige y llama al endpoint correspondiente.
+   */
+  private async buildConflictOptions(conflicto: {
+    id: number;
+    sedeId: number;
+    serviceId: number;
+    profesionalId: number;
+    fecha: Date;
+    horaInicio: Date;
+    horaFin: Date;
+    duracion: number;
+    estado: AppointmentStatus;
+    notas: string | null;
+    userId: number;
+    service?: {
+      translations: { language: string; name: string }[];
+    } | null;
+    sede: SedeConHorarios;
+    user?: {
+      id: number;
+      email: string;
+      UserData?: { name?: string | null; phone?: string | null } | null;
+    } | null;
+  }) {
+    const [especialistasLibres, huecosMismoDia] = await Promise.all([
+      this.findFreeProfesionalesForSlot(
+        conflicto.sedeId,
+        conflicto.serviceId,
+        conflicto.profesionalId,
+        conflicto.horaInicio,
+        conflicto.horaFin,
+      ),
+      this.findSameDayFreeSlots(
+        conflicto.profesionalId,
+        conflicto.sede,
+        conflicto.fecha,
+        conflicto.duracion,
+        this.getMinutesFromDate(conflicto.horaFin),
+      ),
+    ]);
+
+    return {
+      appointment: this.buildAppointmentSummary({
+        id: conflicto.id,
+        serviceId: conflicto.serviceId,
+        profesionalId: conflicto.profesionalId,
+        sedeId: conflicto.sedeId,
+        estado: conflicto.estado,
+        fecha: conflicto.fecha,
+        horaInicio: conflicto.horaInicio,
+        horaFin: conflicto.horaFin,
+        duracion: conflicto.duracion,
+        notas: conflicto.notas,
+        service: conflicto.service,
+        user: conflicto.user,
+      }),
+      opciones: {
+        reasignarEspecialista: {
+          endpoint: `PATCH /appointments/${conflicto.id}/reassign`,
+          especialistasDisponibles: especialistasLibres,
+        },
+        reprogramar: {
+          endpoint: `PATCH /appointments/${conflicto.id}/reschedule`,
+          huecosSugeridosMismoDia: huecosMismoDia,
+        },
+        cancelar: {
+          endpoint: `PATCH /appointments/${conflicto.id}/cancel`,
+        },
+      },
+    };
   }
 
   async create(data: CreateAppointmentDto) {
@@ -1145,74 +1577,201 @@ export class AppointmentService {
   }
 
   /**
-   * Alarga una cita dejando la hora de inicio donde esta.
-   *
-   * No se reutiliza reschedule() porque aquel EXIGE que la duracion no cambie
-   * y ademas machaca `notas` con "Reagendado...", lo que borraria la nota del
-   * cliente. Aqui se repite la comprobacion de solapamiento de reschedule
-   * (appointment.service.ts, bloque `overlapping`) porque sin ella el PATCH
-   * generico permitia pisar la cita siguiente del mismo profesional: el
-   * @@unique([profesionalId, horaInicio]) no protege, ya que al extender la
-   * hora de inicio no cambia.
+   * El profesional no terminó a tiempo y necesita más minutos con el
+   * cliente. Si el tramo extra que reclama está libre, solo estira
+   * `horaFin`/`duracion`. Si choca con otra cita del mismo profesional,
+   * NO toca nada — devuelve las 3 opciones (reasignar/reprogramar/cancelar
+   * esa otra cita) para que un humano decida y llame al endpoint que
+   * corresponda.
    */
-  async extend(id: number, dto: ExtendAppointmentDto) {
+  async extend(
+    id: number,
+    dto: ExtendAppointmentDto,
+    user?: AuthenticatedUser,
+  ) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
 
-    if (
-      cita.estado === AppointmentStatus.CANCELLED ||
-      cita.estado === AppointmentStatus.NO_SHOW
-    ) {
+    if (cita.estado === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('No se puede extender una cita cancelada');
+    }
+    if (cita.estado === AppointmentStatus.COMPLETED) {
       throw new BadRequestException(
-        'No se puede alargar una cita cancelada o marcada como no asistida',
+        'No se puede extender una cita ya finalizada',
       );
     }
 
-    if (dto.duracion <= cita.duracion) {
-      throw new BadRequestException(
-        `La nueva duracion debe ser mayor que la actual (${cita.duracion} minutos)`,
-      );
-    }
+    await this.ensureCanManageAppointment(cita, user);
 
-    const horaFin = new Date(
-      cita.horaInicio.getTime() + dto.duracion * 60 * 1000,
+    const nuevaHoraFin = new Date(
+      cita.horaFin.getTime() + dto.extraMinutes * 60 * 1000,
     );
+    const nuevaDuracion = cita.duracion + dto.extraMinutes;
 
-    const profesional = await this.prisma.profesional.findUnique({
-      where: { id: cita.profesionalId },
-    });
-    if (!profesional) throw new BadRequestException('El profesional no existe');
-    if (profesional.state !== ClientState.enabled) {
-      throw new BadRequestException('El profesional no esta disponible');
-    }
-
-    const overlapping = await this.prisma.appointment.findFirst({
+    // Solo importa lo que choque contra el tramo NUEVO que se reclama — el
+    // tramo original [horaInicio, horaFin) ya estaba libre por definición
+    // (nadie puede tener una cita ahí sin haber chocado ya al crearla).
+    const conflictos = await this.prisma.appointment.findMany({
       where: {
         id: { not: id },
         profesionalId: cita.profesionalId,
-        fecha: cita.fecha,
-        horaInicio: { lt: horaFin },
-        horaFin: { gt: cita.horaInicio },
-        estado: { notIn: [AppointmentStatus.CANCELLED] },
+        estado: { not: AppointmentStatus.CANCELLED },
+        horaInicio: { lt: nuevaHoraFin },
+        horaFin: { gt: cita.horaFin },
+      },
+      orderBy: { horaInicio: 'asc' },
+      include: {
+        service: {
+          include: {
+            translations: { where: { language: 'es' }, take: 1 },
+          },
+        },
+        sede: { include: { HorarioSede: true, DiaCerradoSede: true } },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            UserData: { select: { name: true, phone: true } },
+          },
+        },
       },
     });
-    if (overlapping) {
+
+    if (conflictos.length === 0) {
+      const actualizada = await this.prisma.appointment.update({
+        where: { id },
+        data: { horaFin: nuevaHoraFin, duracion: nuevaDuracion },
+      });
+
+      await this.logAppointmentHistory(
+        id,
+        AppointmentHistoryAction.EXTENDED,
+        { horaFin: cita.horaFin.toISOString(), duracion: cita.duracion },
+        { horaFin: nuevaHoraFin.toISOString(), duracion: nuevaDuracion },
+        user?.userId,
+        dto.motivo,
+      );
+
+      return { status: 'EXTENDED' as const, appointment: actualizada };
+    }
+
+    const citasEnConflicto = await Promise.all(
+      conflictos.map((conflicto) => this.buildConflictOptions(conflicto)),
+    );
+
+    await this.logAppointmentHistory(
+      id,
+      AppointmentHistoryAction.EXTEND_CONFLICT_DETECTED,
+      { horaFin: cita.horaFin.toISOString(), duracion: cita.duracion },
+      {
+        horaFinSolicitada: nuevaHoraFin.toISOString(),
+        duracionSolicitada: nuevaDuracion,
+      },
+      user?.userId,
+      dto.motivo,
+    );
+
+    return {
+      status: 'CONFLICT' as const,
+      solicitud: {
+        extraMinutes: dto.extraMinutes,
+        nuevaHoraFin: nuevaHoraFin.toISOString(),
+      },
+      mensaje:
+        'Extender esta cita choca con otra reserva del mismo profesional. Elegí una opción para la(s) cita(s) afectada(s).',
+      citasEnConflicto,
+    };
+  }
+
+  /**
+   * Mueve la cita a otro especialista que ofrezca el mismo servicio en la
+   * misma sede y esté libre en ese horario exacto. Pensado como una de las
+   * opciones para resolver el conflicto que devuelve extend().
+   */
+  async reassign(
+    id: number,
+    dto: ReassignAppointmentDto,
+    user?: AuthenticatedUser,
+  ) {
+    const cita = await this.prisma.appointment.findUnique({ where: { id } });
+    if (!cita) throw new NotFoundException('Cita no encontrada');
+
+    if (cita.estado === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('No se puede reasignar una cita cancelada');
+    }
+    if (cita.estado === AppointmentStatus.COMPLETED) {
       throw new BadRequestException(
-        'No se puede alargar: el profesional ya tiene otra cita en ese horario',
+        'No se puede reasignar una cita ya finalizada',
       );
     }
 
-    /* El motivo va a observacionEspera y NUNCA a notas, que son del cliente. */
-    const observacionEspera = dto.motivo
-      ? [cita.observacionEspera, `Ampliada a ${dto.duracion} min: ${dto.motivo}`]
-          .filter(Boolean)
-          .join(' | ')
-      : cita.observacionEspera;
+    await this.ensureCanManageAppointment(cita, user);
 
-    return this.prisma.appointment.update({
+    if (dto.nuevoProfesionalId === cita.profesionalId) {
+      throw new BadRequestException(
+        'La cita ya está asignada a ese profesional',
+      );
+    }
+
+    const [nuevoProfesional, relacion, ocupado] = await Promise.all([
+      this.prisma.profesional.findUnique({
+        where: { id: dto.nuevoProfesionalId },
+      }),
+      this.prisma.serviceSedeProfesional.findFirst({
+        where: {
+          sedeId: cita.sedeId,
+          serviceId: cita.serviceId,
+          profesionalId: dto.nuevoProfesionalId,
+        },
+      }),
+      this.prisma.appointment.findFirst({
+        where: {
+          id: { not: id },
+          profesionalId: dto.nuevoProfesionalId,
+          estado: { not: AppointmentStatus.CANCELLED },
+          horaInicio: { lt: cita.horaFin },
+          horaFin: { gt: cita.horaInicio },
+        },
+      }),
+    ]);
+
+    if (!nuevoProfesional) {
+      throw new NotFoundException('El nuevo profesional no existe');
+    }
+    if (nuevoProfesional.state !== ClientState.enabled) {
+      throw new BadRequestException('El nuevo profesional no está disponible');
+    }
+    if (!relacion) {
+      throw new BadRequestException(
+        'El nuevo profesional no ofrece este servicio en esta sede',
+      );
+    }
+    if (ocupado) {
+      throw new BadRequestException(
+        'El nuevo profesional ya tiene una cita en ese horario',
+      );
+    }
+
+    const actualizada = await this.prisma.appointment.update({
       where: { id },
-      data: { duracion: dto.duracion, horaFin, observacionEspera },
+      data: { profesionalId: dto.nuevoProfesionalId },
     });
+
+    await this.logAppointmentHistory(
+      id,
+      AppointmentHistoryAction.REASSIGNED,
+      { profesionalId: cita.profesionalId },
+      { profesionalId: dto.nuevoProfesionalId },
+      user?.userId,
+      dto.motivo,
+    );
+
+    await this.notifyClientAboutChange(
+      { ...cita, profesionalId: dto.nuevoProfesionalId },
+      'REASSIGNED',
+    );
+
+    return actualizada;
   }
 
   /** Nota sobre el cliente que espera a ser atendido. */
@@ -1235,6 +1794,7 @@ export class AppointmentService {
       horaFin?: string;
       motivo?: string;
     },
+    user?: AuthenticatedUser,
   ) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
@@ -1460,7 +2020,7 @@ export class AppointmentService {
       ? `Reagendado: ${data.motivo}`
       : `Reagendado el ${new Date().toISOString()}. Fecha anterior: ${oldFecha} ${oldHoraInicio}`;
 
-    return this.prisma.appointment.update({
+    const actualizada = await this.prisma.appointment.update({
       where: { id },
       data: {
         fecha,
@@ -1469,19 +2029,60 @@ export class AppointmentService {
         notas: motivo,
       },
     });
+
+    await this.logAppointmentHistory(
+      id,
+      AppointmentHistoryAction.RESCHEDULED,
+      {
+        fecha: cita.fecha.toISOString(),
+        horaInicio: cita.horaInicio.toISOString(),
+        horaFin: cita.horaFin.toISOString(),
+      },
+      {
+        fecha: fecha.toISOString(),
+        horaInicio: horaInicio.toISOString(),
+        horaFin: horaFin.toISOString(),
+      },
+      user?.userId,
+      data.motivo,
+    );
+
+    await this.notifyClientAboutChange(
+      { ...cita, fecha, horaInicio },
+      'RESCHEDULED',
+    );
+
+    return actualizada;
   }
 
-  async cancel(id: number, motivo = 'Cancelado por el usuario') {
+  async cancel(
+    id: number,
+    motivo = 'Cancelado por el usuario',
+    user?: AuthenticatedUser,
+  ) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
 
-    return this.prisma.appointment.update({
+    const actualizada = await this.prisma.appointment.update({
       where: { id },
       data: {
         estado: AppointmentStatus.CANCELLED,
         notas: motivo,
       },
     });
+
+    await this.logAppointmentHistory(
+      id,
+      AppointmentHistoryAction.CANCELLED,
+      { estado: cita.estado },
+      { estado: AppointmentStatus.CANCELLED },
+      user?.userId,
+      motivo,
+    );
+
+    await this.notifyClientAboutChange(cita, 'CANCELLED');
+
+    return actualizada;
   }
 
   async getProfesionalAppointments(profesionalId: number) {

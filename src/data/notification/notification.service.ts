@@ -16,6 +16,22 @@ export interface NewReservationNotificationInput {
   horaInicio: Date;
 }
 
+export type AppointmentChangeType =
+  | 'REASSIGNED'
+  | 'RESCHEDULED'
+  | 'CANCELLED';
+
+export interface AppointmentChangedNotificationInput {
+  appointmentId: number;
+  clienteUserId: number;
+  changeType: AppointmentChangeType;
+  serviceNombre: string;
+  sedeNombre: string;
+  fecha: Date;
+  horaInicio: Date;
+  profesionalNombre?: string | null;
+}
+
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
@@ -130,6 +146,57 @@ export class NotificationService {
     }
 
     await Promise.all(notifications);
+  }
+
+  /**
+   * Avisa al cliente cuando SU cita cambia por una acción de otra persona
+   * (se reasigna a otro especialista, se reprograma, o se cancela) — por
+   * ejemplo cuando resuelve un choque generado por AppointmentService.extend().
+   * Best-effort, igual que notifyNewReservation: nunca debe tumbar la
+   * operación que la disparó.
+   */
+  async notifyAppointmentChanged(
+    input: AppointmentChangedNotificationInput,
+  ): Promise<void> {
+    const horaLabel = input.horaInicio.toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Europe/Madrid',
+    });
+    const fechaLabel = input.fecha.toLocaleDateString('es-ES', {
+      timeZone: 'Europe/Madrid',
+    });
+    const sedeNombre = input.sedeNombre.trim();
+
+    const titles: Record<AppointmentChangeType, string> = {
+      REASSIGNED: 'Cambio de especialista',
+      RESCHEDULED: 'Tu cita fue reprogramada',
+      CANCELLED: 'Tu cita fue cancelada',
+    };
+
+    const bodies: Record<AppointmentChangeType, string> = {
+      REASSIGNED: `Tu cita de ${input.serviceNombre} el ${fechaLabel} a las ${horaLabel} en ${sedeNombre} ahora la atiende ${input.profesionalNombre ?? 'otro especialista'}.`,
+      RESCHEDULED: `Tu cita de ${input.serviceNombre} en ${sedeNombre} se reprogramó para el ${fechaLabel} a las ${horaLabel}.`,
+      CANCELLED: `Tu cita de ${input.serviceNombre} el ${fechaLabel} a las ${horaLabel} en ${sedeNombre} fue cancelada.`,
+    };
+
+    const data = {
+      appointmentId: input.appointmentId,
+      changeType: input.changeType,
+      sedeNombre,
+      serviceNombre: input.serviceNombre,
+      profesionalNombre: input.profesionalNombre ?? null,
+      fecha: input.fecha.toISOString(),
+      horaInicio: input.horaInicio.toISOString(),
+    };
+
+    await this.create(
+      input.clienteUserId,
+      `APPOINTMENT_${input.changeType}`,
+      titles[input.changeType],
+      bodies[input.changeType],
+      data,
+    );
   }
 
   async findForUser(

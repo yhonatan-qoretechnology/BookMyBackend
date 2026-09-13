@@ -110,8 +110,10 @@ export class ClientManagementController {
     return this.clientManagementService.changeClientPassword(id, dto.password, user);
   }
 
+  /* Eliminar es exclusivo de SUPER_ADMIN; el resto de administradores
+     inhabilita con PATCH :id { state: "disabled" }. */
   @Delete(':id')
-  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @Roles(Role.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Dar de baja la cuenta de un cliente',
     description:
