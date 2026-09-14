@@ -55,38 +55,38 @@ export class SeedService {
     type F = { fecha: string; nombre: string; ambito: AmbitoFestivo; ccaa?: string; municipio?: string };
 
     const nacionales2026: F[] = [
-      { fecha: '2026-01-01', nombre: 'Ano Nuevo', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2026-01-06', nombre: 'Epifania del Senor', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-01-01', nombre: 'Año Nuevo', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-01-06', nombre: 'Epifanía del Señor', ambito: AmbitoFestivo.NACIONAL },
       { fecha: '2026-04-03', nombre: 'Viernes Santo', ambito: AmbitoFestivo.NACIONAL },
       { fecha: '2026-05-01', nombre: 'Fiesta del Trabajo', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2026-08-15', nombre: 'Asuncion de la Virgen', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2026-10-12', nombre: 'Fiesta Nacional de Espana', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-08-15', nombre: 'Asunción de la Virgen', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-10-12', nombre: 'Fiesta Nacional de España', ambito: AmbitoFestivo.NACIONAL },
       { fecha: '2026-11-01', nombre: 'Todos los Santos', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2026-12-08', nombre: 'Inmaculada Concepcion', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2026-12-25', nombre: 'Natividad del Senor', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-12-08', nombre: 'Inmaculada Concepción', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2026-12-25', nombre: 'Natividad del Señor', ambito: AmbitoFestivo.NACIONAL },
     ];
     const nacionales2027: F[] = [
-      { fecha: '2027-01-01', nombre: 'Ano Nuevo', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2027-01-06', nombre: 'Epifania del Senor', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-01-01', nombre: 'Año Nuevo', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-01-06', nombre: 'Epifanía del Señor', ambito: AmbitoFestivo.NACIONAL },
       { fecha: '2027-03-26', nombre: 'Viernes Santo', ambito: AmbitoFestivo.NACIONAL },
       { fecha: '2027-05-01', nombre: 'Fiesta del Trabajo', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2027-08-15', nombre: 'Asuncion de la Virgen', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2027-10-12', nombre: 'Fiesta Nacional de Espana', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-08-15', nombre: 'Asunción de la Virgen', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-10-12', nombre: 'Fiesta Nacional de España', ambito: AmbitoFestivo.NACIONAL },
       { fecha: '2027-11-01', nombre: 'Todos los Santos', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2027-12-06', nombre: 'Dia de la Constitucion', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2027-12-08', nombre: 'Inmaculada Concepcion', ambito: AmbitoFestivo.NACIONAL },
-      { fecha: '2027-12-25', nombre: 'Natividad del Senor', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-12-06', nombre: 'Día de la Constitución', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-12-08', nombre: 'Inmaculada Concepción', ambito: AmbitoFestivo.NACIONAL },
+      { fecha: '2027-12-25', nombre: 'Natividad del Señor', ambito: AmbitoFestivo.NACIONAL },
     ];
     const andaluces: F[] = [
-      { fecha: '2026-02-28', nombre: 'Dia de Andalucia', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
+      { fecha: '2026-02-28', nombre: 'Día de Andalucía', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
       { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
-      { fecha: '2027-02-28', nombre: 'Dia de Andalucia', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
+      { fecha: '2027-02-28', nombre: 'Día de Andalucía', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
       { fecha: '2027-03-25', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
     ];
     const locales: F[] = [
-      { fecha: '2026-08-19', nombre: 'Feria de Malaga', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
+      { fecha: '2026-08-19', nombre: 'Feria de Málaga', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
       { fecha: '2026-09-08', nombre: 'Virgen de la Victoria', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
-      { fecha: '2027-08-19', nombre: 'Feria de Malaga', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
+      { fecha: '2027-08-19', nombre: 'Feria de Málaga', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
       { fecha: '2027-09-08', nombre: 'Virgen de la Victoria', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
     ];
 

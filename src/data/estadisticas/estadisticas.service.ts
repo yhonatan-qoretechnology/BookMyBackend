@@ -190,7 +190,7 @@ export class EstadisticasService {
   /** 2.2-2.5 y 2.7 — lo mas visto de cada tipo. */
   async masVistos(tipo: ViewEntityType, q: QueryEstadisticasDto) {
     const { desde, hasta } = this.rango(q);
-    return this.entityViews.ranking({
+    const filas = await this.entityViews.ranking({
       entityType: tipo,
       desde,
       hasta,
@@ -198,5 +198,82 @@ export class EstadisticasService {
       sedeId: q.sedeId,
       limit: q.limit,
     });
+    const nombres = await this.nombresDe(
+      tipo,
+      filas.map((f) => f.entityId),
+    );
+    return filas.map((f) => ({
+      ...f,
+      nombre: nombres.get(f.entityId) ?? `#${f.entityId}`,
+    }));
+  }
+
+  /**
+   * Nombre visible de cada entidad vista. El registro de vistas solo guarda
+   * ids; sin esto el panel tendria que pedir cinco catalogos para pintar una
+   * lista. Servicios y categorias salen en espanol si tienen esa traduccion.
+   */
+  private async nombresDe(
+    tipo: ViewEntityType,
+    ids: number[],
+  ): Promise<Map<number, string>> {
+    if (ids.length === 0) return new Map();
+    const where = { id: { in: ids } };
+    const traducido = (ts: { language: string; name: string }[]) =>
+      (ts.find((t) => t.language === 'es') ?? ts[0])?.name;
+
+    switch (tipo) {
+      case ViewEntityType.EMPRESA: {
+        const filas = await this.prisma.empresa.findMany({
+          where,
+          select: { id: true, nombre: true },
+        });
+        return new Map(filas.map((e) => [e.id, e.nombre] as [number, string]));
+      }
+      case ViewEntityType.SEDE: {
+        const filas = await this.prisma.sede.findMany({
+          where,
+          select: { id: true, nombre: true },
+        });
+        return new Map(filas.map((s) => [s.id, s.nombre] as [number, string]));
+      }
+      case ViewEntityType.PROFESIONAL: {
+        const filas = await this.prisma.profesional.findMany({
+          where,
+          select: { id: true, nombre: true },
+        });
+        return new Map(filas.map((p) => [p.id, p.nombre] as [number, string]));
+      }
+      case ViewEntityType.SERVICIO: {
+        const filas = await this.prisma.service.findMany({
+          where,
+          select: {
+            id: true,
+            translations: { select: { language: true, name: true } },
+          },
+        });
+        return new Map(
+          filas.map(
+            (s) => [s.id, traducido(s.translations) ?? `#${s.id}`] as [number, string],
+          ),
+        );
+      }
+      case ViewEntityType.CATEGORIA: {
+        const filas = await this.prisma.category.findMany({
+          where,
+          select: {
+            id: true,
+            translations: { select: { language: true, name: true } },
+          },
+        });
+        return new Map(
+          filas.map(
+            (c) => [c.id, traducido(c.translations) ?? `#${c.id}`] as [number, string],
+          ),
+        );
+      }
+      default:
+        return new Map();
+    }
   }
 }

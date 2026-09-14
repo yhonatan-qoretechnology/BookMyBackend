@@ -13,6 +13,13 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   console.log('✅ 1. App creada');
 
+  /* Seenode pone un proxy (Traefik) delante. Sin esto `req.ip` es la IP del
+     proxy y el ThrottlerGuard mete a TODOS los usuarios en el mismo contador:
+     los 5 intentos de login por minuto eran para todo el mundo junto. Con un
+     salto de confianza, req.ip pasa a ser la IP del cliente que el proxy anota
+     en X-Forwarded-For. */
+  app.set('trust proxy', 1);
+
   const configService = app.get(ConfigService);
   const portRaw = configService.get('PORT') as string;
   const port = Number(portRaw) || 3000;
