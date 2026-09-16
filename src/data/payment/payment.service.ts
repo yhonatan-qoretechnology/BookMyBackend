@@ -105,36 +105,43 @@ export class PaymentService {
     return this.processPartialPayment(payment);
   }
 
+  /**
+   * Simulador local del banco — reemplaza la llamada a api.fakebank.com,
+   * que nunca fue un banco real (era un dominio externo de placeholder,
+   * ahora parkeado/en venta, fallando cada vez más seguido). Esto no
+   * depende de internet ni de un tercero fuera de nuestro control: se
+   * comporta como respondería un banco fake, pero corriendo acá adentro.
+   * Cuando haya un gateway real (Stripe, Redsys, etc.), este método es el
+   * punto exacto a reemplazar.
+   */
+  private async simulateBankResponse(
+    prefix: string,
+    paymentId: number,
+    amount: number,
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return {
+      transactionId: `${prefix}-${paymentId}-${Date.now()}`,
+      amount,
+      currency: 'EUR',
+      status: 'approved',
+      simulated: true,
+    };
+  }
+
   // 💳 Pago completo con tarjeta
   private async processCardPayment(payment, payload: CardPaymentPayload) {
-    const fakeBankAPI = 'https://api.fakebank.com/pay';
-
-    const requestBody: Record<string, unknown> = {
-      amount: payload.amount ?? payment.totalAmount,
-      currency: 'EUR',
-      reference: `APT-${payment.id}`,
-      cardBrand: payload.cardBrand,
-      cardholderName: payload.cardholderName,
-      expiryMonth: payload.expiryMonth,
-      expiryYear: payload.expiryYear,
-    };
-
-    if (payload.cardToken) {
-      requestBody.cardToken = payload.cardToken;
-    } else {
-      requestBody.cardNumber = payload.cardNumber;
-      requestBody.cvv = payload.cvv;
-    }
-
     try {
-      const { data } = await firstValueFrom(
-        this.httpService.post(fakeBankAPI, requestBody),
+      const data = await this.simulateBankResponse(
+        'TXN',
+        payment.id,
+        payload.amount ?? payment.totalAmount,
       );
 
       return await this.prisma.payment.update({
         where: { id: payment.id },
         data: {
-          transactionId: data.transactionId ?? `TXN-${payment.id}`,
+          transactionId: data.transactionId,
           bankResponse: data,
           status: PaymentStatus.PAID,
           paidAmount: payment.totalAmount,
@@ -153,22 +160,13 @@ export class PaymentService {
   private async processPartialPayment(payment) {
     const reserved = payment.reservedAmount;
 
-    // Aquí simulas el cobro parcial del 20%
-    const fakeReserveAPI = 'https://api.fakebank.com/reserve';
-    const payload = {
-      amount: reserved,
-      reference: `RSV-${payment.id}`,
-    };
-
     try {
-      const { data } = await firstValueFrom(
-        this.httpService.post(fakeReserveAPI, payload),
-      );
+      const data = await this.simulateBankResponse('RSV', payment.id, reserved);
 
       return await this.prisma.payment.update({
         where: { id: payment.id },
         data: {
-          transactionId: data.transactionId ?? `RSV-${payment.id}`,
+          transactionId: data.transactionId,
           bankResponse: data,
           status: PaymentStatus.RESERVED,
           paidAmount: reserved,
