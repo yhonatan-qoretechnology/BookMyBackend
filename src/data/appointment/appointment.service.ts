@@ -1064,6 +1064,7 @@ export class AppointmentService {
         where: {
           profesionalId: data.profesionalId,
           fecha: fecha,
+          estado: { not: AppointmentStatus.CANCELLED },
           horaInicio: { lt: horaFin },
           horaFin: { gt: horaInicio },
         },
@@ -1098,17 +1099,37 @@ export class AppointmentService {
         expiryYear = 2000 + year; // Asumiendo formato YY
       }
 
-      await this.paymentService.createPayment({
-        userId: data.userId,
-        appointmentId: appointment.id,
-        method: data.paymentMethod,
-        amount: data.paymentAmount,
-        cardNumber: data.cardNumber,
-        expiryMonth,
-        expiryYear,
-        cvv: data.cvv,
-        saveCard: false, // Por defecto no guardar a menos que se extienda el DTO
-      });
+      try {
+        await this.paymentService.createPayment({
+          userId: data.userId,
+          appointmentId: appointment.id,
+          method: data.paymentMethod,
+          amount: data.paymentAmount,
+          cardNumber: data.cardNumber,
+          expiryMonth,
+          expiryYear,
+          cvv: data.cvv,
+          saveCard: false, // Por defecto no guardar a menos que se extienda el DTO
+        });
+      } catch (paymentError) {
+        // El pago depende de una pasarela externa poco confiable
+        // (fakebank.com): si falla, la cita ya está commiteada — antes
+        // quedaba huérfana (PENDING, sin pago válido). Ahora se cancela
+        // sola en vez de quedar como basura invisible en la agenda.
+        await this.prisma.appointment.update({
+          where: { id: appointment.id },
+          data: {
+            estado: AppointmentStatus.CANCELLED,
+            notas: 'Cancelada automáticamente: falló el procesamiento del pago',
+          },
+        });
+        this.logger.error(
+          `Pago fallido para la cita ${appointment.id}, se canceló automáticamente: ${
+            paymentError instanceof Error ? paymentError.message : paymentError
+          }`,
+        );
+        throw paymentError;
+      }
 
       // Avisar al administrador de la sede. Best-effort: si esto falla,
       // la reserva ya está creada y no debe verse afectada.
@@ -2093,6 +2114,7 @@ export class AppointmentService {
         id: { not: id },
         profesionalId: cita.profesionalId,
         fecha: fecha,
+        estado: { not: AppointmentStatus.CANCELLED },
         horaInicio: { lt: horaFin },
         horaFin: { gt: horaInicio },
       },
@@ -2265,6 +2287,13 @@ export class AppointmentService {
   async remove(id: number) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
-    return this.prisma.appointment.delete({ where: { id } });
+
+    // Payment.appointmentId no tiene onDelete: Cascade — borrar la cita
+    // directo tiraba un 500 crudo (FK violation) en cualquier cita que ya
+    // tuviera un pago asociado, que es prácticamente todas.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.payment.deleteMany({ where: { appointmentId: id } });
+      return tx.appointment.delete({ where: { id } });
+    });
   }
 }
