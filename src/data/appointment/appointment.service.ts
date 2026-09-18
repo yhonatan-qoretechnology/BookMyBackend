@@ -35,6 +35,14 @@ import { PaymentService } from '../payment/payment.service';
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Europe/Madrid';
 const SAME_DAY_SUGGESTION_STEP_MINUTES = 15;
 
+// Estados que NO ocupan la franja del profesional: una cita cancelada o en
+// la que el cliente no se presentó deja el hueco libre (el panel ya pinta
+// NO_SHOW como hueco libre). Se usa en todas las consultas de solape.
+const ESTADOS_SIN_FRANJA: AppointmentStatus[] = [
+  AppointmentStatus.CANCELLED,
+  AppointmentStatus.NO_SHOW,
+];
+
 type SedeConHorarios = Sede & {
   HorarioSede: HorarioSede[];
   DiaCerradoSede: DiaCerradoSede[];
@@ -494,7 +502,7 @@ export class AppointmentService {
       const ocupado = await this.prisma.appointment.findFirst({
         where: {
           profesionalId: profesional.id,
-          estado: { not: AppointmentStatus.CANCELLED },
+          estado: { notIn: ESTADOS_SIN_FRANJA },
           horaInicio: { lt: horaFin },
           horaFin: { gt: horaInicio },
         },
@@ -607,14 +615,25 @@ export class AppointmentService {
       };
     }
 
-    const existentes = await this.prisma.appointment.findMany({
+    // 'fecha' no tiene una hora fija (create() guarda lo que manda el
+    // cliente, reschedule() guarda 00:00Z), así que filtrar por igualdad
+    // exacta dejaba fuera citas reales de ese día y se sugerían huecos
+    // ocupados. Se traen las citas del profesional en una ventana amplia de
+    // instantes alrededor del día y se quedan las que empiezan en el mismo
+    // día de Madrid que 'fecha'.
+    const margenVentanaMs = 36 * 60 * 60 * 1000;
+    const citasCercanas = await this.prisma.appointment.findMany({
       where: {
         profesionalId,
-        fecha,
-        estado: { not: AppointmentStatus.CANCELLED },
+        estado: { notIn: ESTADOS_SIN_FRANJA },
+        horaInicio: { lt: new Date(fecha.getTime() + margenVentanaMs) },
+        horaFin: { gt: new Date(fecha.getTime() - margenVentanaMs) },
       },
       select: { horaInicio: true, horaFin: true },
     });
+    const existentes = citasCercanas.filter(
+      (a) => this.getDateInTimezone(a.horaInicio) === appointmentDay,
+    );
     const ocupados = existentes.map((a) => ({
       start: this.getMinutesFromDate(a.horaInicio),
       end: this.getMinutesFromDate(a.horaFin),
@@ -678,29 +697,41 @@ export class AppointmentService {
    * extender otra: reasignar a otro especialista libre, reprogramar (con
    * huecos sugeridos ese mismo día), o cancelar. No aplica nada solo —
    * un humano elige y llama al endpoint correspondiente.
+   *
+   * `finExtension` es donde terminaría el tramo extendido: los huecos
+   * sugeridos no pueden empezar antes, porque ese tramo aún no está
+   * guardado como cita y quedaría marcado como libre.
    */
-  private async buildConflictOptions(conflicto: {
-    id: number;
-    sedeId: number;
-    serviceId: number;
-    profesionalId: number;
-    fecha: Date;
-    horaInicio: Date;
-    horaFin: Date;
-    duracion: number;
-    estado: AppointmentStatus;
-    notas: string | null;
-    userId: number;
-    service?: {
-      translations: { language: string; name: string }[];
-    } | null;
-    sede: SedeConHorarios;
-    user?: {
+  private async buildConflictOptions(
+    conflicto: {
       id: number;
-      email: string;
-      UserData?: { name?: string | null; phone?: string | null } | null;
-    } | null;
-  }) {
+      sedeId: number;
+      serviceId: number;
+      profesionalId: number;
+      fecha: Date;
+      horaInicio: Date;
+      horaFin: Date;
+      duracion: number;
+      estado: AppointmentStatus;
+      notas: string | null;
+      userId: number;
+      service?: {
+        translations: { language: string; name: string }[];
+      } | null;
+      sede: SedeConHorarios;
+      user?: {
+        id: number;
+        email: string;
+        UserData?: { name?: string | null; phone?: string | null } | null;
+      } | null;
+    },
+    finExtension: Date,
+  ) {
+    // El hueco sugerido empieza, como pronto, cuando acaba lo último entre
+    // la cita en conflicto y el tramo extendido (que aún no es una cita).
+    const noAntesDe = new Date(
+      Math.max(conflicto.horaFin.getTime(), finExtension.getTime()),
+    );
     const [especialistasLibres, huecosMismoDia] = await Promise.all([
       this.findFreeProfesionalesForSlot(
         conflicto.sedeId,
@@ -714,7 +745,12 @@ export class AppointmentService {
         conflicto.sede,
         conflicto.fecha,
         conflicto.duracion,
-        this.getMinutesFromDate(conflicto.horaFin),
+        // Si la extensión pasa de medianoche ya no queda hueco ese día: los
+        // minutos de noAntesDe volverían a contar desde las 00:00.
+        this.getDateInTimezone(noAntesDe) !==
+          this.getDateInTimezone(conflicto.horaInicio)
+          ? 24 * 60
+          : this.getMinutesFromDate(noAntesDe),
       ),
     ]);
 
@@ -1060,11 +1096,13 @@ export class AppointmentService {
         }
       }
 
+      // Solape por instantes, sin mirar 'fecha': esa columna no tiene una
+      // hora fija (cada cliente manda la suya y reschedule() guarda 00:00Z),
+      // así que compararla por igualdad dejaba pasar choques reales.
       const overlapping = await this.prisma.appointment.findFirst({
         where: {
           profesionalId: data.profesionalId,
-          fecha: fecha,
-          estado: { not: AppointmentStatus.CANCELLED },
+          estado: { notIn: ESTADOS_SIN_FRANJA },
           horaInicio: { lt: horaFin },
           horaFin: { gt: horaInicio },
         },
@@ -1571,9 +1609,27 @@ export class AppointmentService {
     return appointment;
   }
 
-  async update(id: number, data: UpdateAppointmentDto) {
+  async update(
+    id: number,
+    data: UpdateAppointmentDto,
+    user?: AuthenticatedUser,
+  ) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
+
+    // Hay que poder gestionar la cita tal como está y también donde queda:
+    // si no, se podría traer una cita ajena al propio alcance cambiando la
+    // sede o el profesional.
+    await this.ensureCanManageAppointment(cita, user);
+    if (data.sedeId != null || data.profesionalId != null) {
+      await this.ensureCanManageAppointment(
+        {
+          sedeId: data.sedeId ?? cita.sedeId,
+          profesionalId: data.profesionalId ?? cita.profesionalId,
+        },
+        user,
+      );
+    }
 
     /* UpdateAppointmentDto hereda de CreateAppointmentDto, que incluye los
        campos del cobro (paymentMethod, paymentAmount, cardNumber...). Esos
@@ -1589,15 +1645,57 @@ export class AppointmentService {
       ...campos
     } = data as UpdateAppointmentDto & Record<string, unknown>;
 
+    const nuevaHoraInicio = data.horaInicio
+      ? new Date(data.horaInicio)
+      : cita.horaInicio;
+    const nuevaHoraFin = data.horaFin ? new Date(data.horaFin) : cita.horaFin;
+    const nuevoProfesionalId = data.profesionalId ?? cita.profesionalId;
+    const nuevoEstado = data.estado ?? cita.estado;
+
+    /* Este PATCH también sirve para reactivar una cita cancelada (o marcada
+       como no presentada) o para moverla de hora/profesional. En esos casos
+       la franja puede estar ya ocupada por otra cita: antes se reactivaba
+       igual y quedaban dos citas activas del mismo profesional a la vez. */
+    const reactiva =
+      ESTADOS_SIN_FRANJA.includes(cita.estado) &&
+      !ESTADOS_SIN_FRANJA.includes(nuevoEstado);
+    const cambiaFranja =
+      nuevaHoraInicio.getTime() !== cita.horaInicio.getTime() ||
+      nuevaHoraFin.getTime() !== cita.horaFin.getTime() ||
+      nuevoProfesionalId !== cita.profesionalId;
+
+    if (
+      !ESTADOS_SIN_FRANJA.includes(nuevoEstado) &&
+      (reactiva || cambiaFranja)
+    ) {
+      // Solape por instantes, igual que en create()/reschedule().
+      const ocupada = await this.prisma.appointment.findFirst({
+        where: {
+          id: { not: id },
+          profesionalId: nuevoProfesionalId,
+          estado: { notIn: ESTADOS_SIN_FRANJA },
+          horaInicio: { lt: nuevaHoraFin },
+          horaFin: { gt: nuevaHoraInicio },
+        },
+        select: { id: true },
+      });
+
+      if (ocupada) {
+        throw new BadRequestException(
+          reactiva
+            ? `No se puede reactivar la cita: el profesional ya tiene otra cita (#${ocupada.id}) en esa franja horaria`
+            : `El profesional ya tiene otra cita (#${ocupada.id}) en ese horario`,
+        );
+      }
+    }
+
     return this.prisma.appointment.update({
       where: { id },
       data: {
         ...campos,
         fecha: data.fecha ? new Date(data.fecha) : cita.fecha,
-        horaInicio: data.horaInicio
-          ? new Date(data.horaInicio)
-          : cita.horaInicio,
-        horaFin: data.horaFin ? new Date(data.horaFin) : cita.horaFin,
+        horaInicio: nuevaHoraInicio,
+        horaFin: nuevaHoraFin,
       },
     });
   }
@@ -1669,7 +1767,7 @@ export class AppointmentService {
       where: {
         id: { notIn: idsCadena },
         profesionalId: cita.profesionalId,
-        estado: { not: AppointmentStatus.CANCELLED },
+        estado: { notIn: ESTADOS_SIN_FRANJA },
         horaInicio: { lt: finExtension },
         horaFin: { gt: inicioExtension },
       },
@@ -1764,7 +1862,9 @@ export class AppointmentService {
     }
 
     const citasEnConflicto = await Promise.all(
-      conflictos.map((conflicto) => this.buildConflictOptions(conflicto)),
+      conflictos.map((conflicto) =>
+        this.buildConflictOptions(conflicto, finExtension),
+      ),
     );
 
     await this.logAppointmentHistory(
@@ -1837,7 +1937,7 @@ export class AppointmentService {
         where: {
           id: { not: id },
           profesionalId: dto.nuevoProfesionalId,
-          estado: { not: AppointmentStatus.CANCELLED },
+          estado: { notIn: ESTADOS_SIN_FRANJA },
           horaInicio: { lt: cita.horaFin },
           horaFin: { gt: cita.horaInicio },
         },
@@ -2109,12 +2209,13 @@ export class AppointmentService {
       }
     }
 
+    // Solape por instantes, sin mirar 'fecha' (ver create()): la columna no
+    // tiene una hora fija y la igualdad dejaba pasar choques reales.
     const overlapping = await this.prisma.appointment.findFirst({
       where: {
         id: { not: id },
         profesionalId: cita.profesionalId,
-        fecha: fecha,
-        estado: { not: AppointmentStatus.CANCELLED },
+        estado: { notIn: ESTADOS_SIN_FRANJA },
         horaInicio: { lt: horaFin },
         horaFin: { gt: horaInicio },
       },
@@ -2284,9 +2385,13 @@ export class AppointmentService {
     };
   }
 
-  async remove(id: number) {
+  async remove(id: number, user?: AuthenticatedUser) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
+
+    // Borrar es irreversible: además del rol (RolesGuard en el controller),
+    // el admin de empresa/sede solo puede borrar citas de sus sedes.
+    await this.ensureCanManageAppointment(cita, user);
 
     // Payment.appointmentId no tiene onDelete: Cascade — borrar la cita
     // directo tiraba un 500 crudo (FK violation) en cualquier cita que ya

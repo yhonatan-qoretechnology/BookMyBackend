@@ -8,9 +8,19 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
+import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -249,13 +259,20 @@ export class AppointmentController {
     return this.appointmentService.findOne(id);
   }
 
+  /* Solo quien gestiona la agenda (el panel lo usa para cambiar el estado).
+     Sin esto cualquier usuario autenticado podía editar cualquier cita, e
+     incluso moverla a su propia sede para después borrarla. */
   @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN, Role.EMPLOYEE)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar una cita existente' })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateAppointmentDto: UpdateAppointmentDto,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
-    return this.appointmentService.update(id, updateAppointmentDto);
+    return this.appointmentService.update(id, updateAppointmentDto, user);
   }
 
   @Patch(':id/cancel')
@@ -331,9 +348,18 @@ export class AppointmentController {
     return this.appointmentService.setObservacionEspera(id, dto);
   }
 
+  /* El JWT ya lo exige el guard global (APP_GUARD en app.module.ts); aquí
+     solo falta restringir el rol. Antes cualquier usuario autenticado,
+     incluido un CLIENT, podía borrar cualquier cita (y su pago). */
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Eliminar una cita (solo admin)' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.appointmentService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.appointmentService.remove(id, user);
   }
 }
