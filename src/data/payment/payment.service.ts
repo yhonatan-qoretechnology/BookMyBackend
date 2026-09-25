@@ -331,6 +331,9 @@ export class PaymentService {
           id: true,
           email: true,
           role: true,
+          /* Sin el nombre, el panel pintaba el correo del cliente en la
+             lista de facturas y en el PDF. */
+          UserData: { select: { name: true, phone: true } },
         },
       },
       service: {
