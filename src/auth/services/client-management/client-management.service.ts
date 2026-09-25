@@ -124,15 +124,19 @@ export class ClientManagementService {
       };
     }
 
-    // Según el rol, filtrar por empresa/sede si es necesario
+    /* Alcance por rol. Estas dos ramas estaban vacias, asi que CUALQUIER
+       administrador listaba los clientes de TODA la plataforma, con su
+       correo y su telefono. Un cliente pertenece al negocio en el que ha
+       reservado: no hay otra relacion en el modelo, y es justo la que el
+       panel ya usa para contar sus visitas.
+       SUPER_ADMIN sigue viendo todos. */
     if (user.role === Role.COMPANY_ADMIN && user.empresaId) {
-      // COMPANY_ADMIN puede ver todos los clientes de su empresa
-      // Aquí podrías agregar lógica adicional si los clientes están asociados a empresas
+      whereClause.Appointment = {
+        some: { sede: { empresaId: user.empresaId } },
+      };
     } else if (user.role === Role.BRANCH_ADMIN && user.sedeId) {
-      // BRANCH_ADMIN puede ver clientes de su sede
-      // Aquí podrías agregar lógica adicional si los clientes están asociados a sedes
+      whereClause.Appointment = { some: { sedeId: user.sedeId } };
     }
-    // SUPER_ADMIN puede ver todos los clientes
 
     const [clients, total] = await Promise.all([
       this.prisma.users.findMany({
@@ -160,8 +164,9 @@ export class ClientManagementService {
     };
   }
 
-  async getClientById(id: number) {
+  async getClientById(id: number, user?: AuthenticatedUser) {
     const client = await this.findClientOr404(id);
+    if (user) await this.validateClientAccess(user, client);
 
     /* El historial acompaña a la ficha para que el panel pueda
        avisar de qué se conservará antes de dar de baja la cuenta. */
@@ -173,7 +178,7 @@ export class ClientManagementService {
 
   async updateClient(id: number, updateClientDto: UpdateClientDto, user: AuthenticatedUser) {
     const existingClient = await this.findClientOr404(id);
-    this.validateClientAccess(user, existingClient);
+    await this.validateClientAccess(user, existingClient);
 
     if (!existingClient.UserData) {
       throw new BadRequestException(
@@ -243,7 +248,7 @@ export class ClientManagementService {
    */
   async changeClientPassword(id: number, password: string, user: AuthenticatedUser) {
     const client = await this.findClientOr404(id);
-    this.validateClientAccess(user, client);
+    await this.validateClientAccess(user, client);
 
     const hashed = await this.hashService.hash(password);
 
@@ -271,7 +276,7 @@ export class ClientManagementService {
    */
   async deleteClient(id: number, user: AuthenticatedUser) {
     const client = await this.findClientOr404(id);
-    this.validateClientAccess(user, client);
+    await this.validateClientAccess(user, client);
 
     const historial = await this.countHistory(id);
     const conservaHistorial = Object.values(historial).some((n) => n > 0);
@@ -413,19 +418,45 @@ export class ClientManagementService {
     return new BadRequestException(`Error al ${accion}.`);
   }
 
-  private validateClientAccess(user: AuthenticatedUser, client: any): void {
-    // SUPER_ADMIN puede acceder a todos los clientes
+  /**
+   * Un administrador solo gestiona a los clientes que han reservado en su
+   * negocio.
+   *
+   * Antes esto no comprobaba nada para COMPANY_ADMIN y BRANCH_ADMIN: con el
+   * id de cualquier cliente de la plataforma se le podian cambiar los datos
+   * o, peor, la contrasena (PATCH :id/password), que es quedarse con su
+   * cuenta. La pertenencia se mide por las citas, igual que en listClients.
+   */
+  private async validateClientAccess(
+    user: AuthenticatedUser,
+    client: { id: number },
+  ): Promise<void> {
     if (user.role === Role.SUPER_ADMIN) {
       return;
     }
 
-    // COMPANY_ADMIN y BRANCH_ADMIN pueden acceder a clientes
-    // Aquí podrías agregar validaciones adicionales según tu lógica de negocio
-    // Por ahora, permitimos acceso a todos los clientes para estos roles
-    if (user.role === Role.COMPANY_ADMIN || user.role === Role.BRANCH_ADMIN) {
-      return;
+    const alcance =
+      user.role === Role.COMPANY_ADMIN && user.empresaId
+        ? { sede: { empresaId: user.empresaId } }
+        : user.role === Role.BRANCH_ADMIN && user.sedeId
+          ? { sedeId: user.sedeId }
+          : null;
+
+    if (!alcance) {
+      throw new ForbiddenException(
+        'No tienes permisos para acceder a este cliente',
+      );
     }
 
-    throw new ForbiddenException('No tienes permisos para acceder a este cliente');
+    const reserva = await this.prisma.appointment.findFirst({
+      where: { userId: client.id, ...alcance },
+      select: { id: true },
+    });
+
+    if (!reserva) {
+      throw new ForbiddenException(
+        'Ese cliente no ha reservado en tu negocio.',
+      );
+    }
   }
 }

@@ -71,8 +71,11 @@ export class ClientManagementController {
     summary: 'Obtener cliente por ID',
     description: 'Devuelve todos los datos de un cliente específico.'
   })
-  async getClientById(@Param('id', ParseIntPipe) id: number) {
-    return this.clientManagementService.getClientById(id);
+  async getClientById(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.clientManagementService.getClientById(id, user);
   }
 
   @Patch(':id')

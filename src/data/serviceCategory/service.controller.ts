@@ -190,8 +190,15 @@ export class ServiceController {
     description: 'Lista de servicios',
     type: [ServiceListItemResponseDto],
   })
-  findAll(@Query('language') language: string = 'es') {
-    return this.serviceService.findAll(language);
+  findAll(
+    @Query('language') language: string = 'es',
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    /* El catalogo se acota a quien pregunta: un administrador de empresa
+       veia TODOS los servicios de la plataforma, tambien los de otros
+       negocios. La app movil no usa esta ruta (va por /by-sede y
+       /category), asi que el catalogo publico no cambia. */
+    return this.serviceService.findAll(language, user);
   }
 
   // 🟠 Obtener un servicio específico

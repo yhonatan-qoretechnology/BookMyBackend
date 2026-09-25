@@ -39,9 +39,14 @@ export class CreateUserLocationDto {
   @IsString()
   @MaxLength(255)
   address?: string;
-  @ApiProperty({ example: 1, description: 'ID del usuario' })
+  /* El usuario sale de la ruta (`POST /users/:userId/location`), no del
+     cuerpo. Exigirlo aqui hacia que TODA llamada de la app movil, que no lo
+     manda, muriera con un 400 "userId must be a number": la ubicacion nunca
+     se guardaba y el ranking de ciudades se quedaba vacio. */
+  @ApiPropertyOptional({ example: 1, description: 'ID del usuario (redundante: se toma de la ruta)' })
+  @IsOptional()
   @IsNumber()
-  userId: number;
+  userId?: number;
 
   @ApiProperty({ example: 40.7128, description: 'Latitud actual del usuario' })
   @IsNumber()

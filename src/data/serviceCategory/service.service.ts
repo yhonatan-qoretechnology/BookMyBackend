@@ -188,9 +188,26 @@ export class ServiceService {
           'El administrador de empresa no tiene empresa asociada.',
         );
       }
+      const propias = await this.prisma.sede.findMany({
+        where: { empresaId: user.empresaId },
+        select: { id: true },
+      });
+      const idsPropias = new Set(propias.map((sede) => sede.id));
       if (sedeIds.length === 0) {
+        /* El panel no manda sedes al dar de alta un servicio, asi que el
+           dueno del negocio recibia siempre un 403 al pulsar "Nuevo
+           servicio". Se aplica el mismo criterio que con BRANCH_ADMIN:
+           sin eleccion explicita, el servicio se ofrece en todas sus
+           sedes, que es lo unico que puede querer decir. */
+        if (idsPropias.size === 0) {
+          throw new BadRequestException(
+            'Cree una sede antes de dar de alta servicios.',
+          );
+        }
+        sedeIds.push(...idsPropias);
+      } else if (sedeIds.some((id) => !idsPropias.has(id))) {
         throw new ForbiddenException(
-          'Debe asociar el servicio al menos a una sede de su empresa.',
+          'Solo puede asociar el servicio a sedes de su empresa.',
         );
       }
     }
@@ -527,9 +544,34 @@ export class ServiceService {
     return service;
   }
 
+  /**
+   * Alcance del catalogo segun quien pregunta.
+   *
+   * Sin esto, `GET /services` devolvia la plataforma entera: el panel de un
+   * negocio listaba los servicios de todos los demas. SUPER_ADMIN y los
+   * clientes de la app siguen viendo el catalogo completo (la app ademas no
+   * usa esta ruta: va por /by-sede y /category).
+   */
+  private alcanceDeServicios(
+    user?: AuthenticatedUser,
+  ): Prisma.ServiceWhereInput | undefined {
+    if (!user) return undefined;
+    if (user.role === Role.COMPANY_ADMIN && user.empresaId) {
+      return { sedes: { some: { empresaId: user.empresaId } } };
+    }
+    if (
+      (user.role === Role.BRANCH_ADMIN || user.role === Role.EMPLOYEE) &&
+      user.sedeId
+    ) {
+      return { sedes: { some: { id: user.sedeId } } };
+    }
+    return undefined;
+  }
+
   // 🔵 Listar todos los servicios (con traducción según idioma)
-  async findAll(language: string = 'es') {
+  async findAll(language: string = 'es', user?: AuthenticatedUser) {
     const services = await this.prisma.service.findMany({
+      where: this.alcanceDeServicios(user),
       include: {
         translations: {
           where: { language },

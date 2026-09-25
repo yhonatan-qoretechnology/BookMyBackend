@@ -129,7 +129,15 @@ export class AppointmentService {
     const dateInTimezone = new Date(
       date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
     );
-    return dateInTimezone.toISOString().slice(0, 10);
+    /* `toISOString()` devuelve la fecha en UTC, no en APP_TIMEZONE: con el
+       servidor en cualquier huso al oeste de Madrid, una cita de las 19:00
+       se fechaba al dia siguiente y create() la rechazaba ("La fecha de la
+       cita debe coincidir..."). Se leen los componentes locales, igual que
+       hacen getMinutesFromDate y getDayOfWeekInTimezone. */
+    const anio = dateInTimezone.getFullYear();
+    const mes = String(dateInTimezone.getMonth() + 1).padStart(2, '0');
+    const dia = String(dateInTimezone.getDate()).padStart(2, '0');
+    return `${anio}-${mes}-${dia}`;
   }
 
   private getMinutesFromHourString(hour: string) {
@@ -1323,7 +1331,9 @@ export class AppointmentService {
           sede: true,
           service: true,
           profesional: true,
-          user: true,
+          /* Sin UserData el panel no tiene el nombre del cliente y pintaba
+             su correo en Reservas, en el calendario y en el dashboard. */
+          user: { include: { UserData: { select: { name: true, phone: true } } } },
           // Para marcar en el panel las citas que se extendieron
           extensiones: { select: { id: true, duracion: true, estado: true } },
         },
@@ -1414,7 +1424,9 @@ export class AppointmentService {
             sede: true,
             service: true,
             profesional: true,
-            user: true,
+            /* Sin UserData el panel no tiene el nombre del cliente y pintaba
+               su correo en Reservas, en el calendario y en el dashboard. */
+            user: { include: { UserData: { select: { name: true, phone: true } } } },
           },
           orderBy: [{ fecha: 'desc' }, { horaInicio: 'desc' }],
           skip,
@@ -1502,7 +1514,9 @@ export class AppointmentService {
         sede: true,
         service: true,
         profesional: true,
-        user: true,
+        /* Sin UserData el panel no tiene el nombre del cliente y pintaba
+           su correo en Reservas, en el calendario y en el dashboard. */
+        user: { include: { UserData: { select: { name: true, phone: true } } } },
       },
       orderBy: [{ fecha: 'desc' }, { horaInicio: 'desc' }],
       take: limit,
@@ -1601,7 +1615,9 @@ export class AppointmentService {
         sede: true,
         service: true,
         profesional: true,
-        user: true,
+        /* Sin UserData el panel no tiene el nombre del cliente y pintaba
+           su correo en Reservas, en el calendario y en el dashboard. */
+        user: { include: { UserData: { select: { name: true, phone: true } } } },
         extensiones: { select: { id: true, duracion: true, estado: true } },
       },
     });
