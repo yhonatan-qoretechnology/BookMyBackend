@@ -6,9 +6,10 @@ import { CategoriaGastoController } from './categoria-gasto.controller';
 import { CategoriaGastoService } from './categoria-gasto.service';
 import { GastoController } from './gasto.controller';
 import { GastoService } from './gasto.service';
+import { EmpresaModule } from '../empresa/empresa.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, EmpresaModule],
   controllers: [GastoController, CategoriaGastoController],
   providers: [GastoService, CategoriaGastoService, AccessControlService],
 })

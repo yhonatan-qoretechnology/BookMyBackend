@@ -54,5 +54,10 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     EmpresaService,
     SedeService,
   ],
+  /* El alta de negocios (EmpresaModule) crea la cuenta y devuelve la
+     sesión ya iniciada, así que necesita AuthService y el hasheo; y los
+     módulos que protegen rutas por rol, el guard con su servicio de
+     alcance. */
+  exports: [AuthService, HashService, RolesGuard, AccessControlService],
 })
 export class AuthModule {}

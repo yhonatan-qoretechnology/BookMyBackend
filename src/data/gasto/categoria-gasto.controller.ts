@@ -18,10 +18,12 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { AuthenticatedUser } from 'src/auth/types/authenticated-user.interface';
 import { CategoriaGastoService } from './categoria-gasto.service';
 import { CreateCategoriaGastoDto } from './dto/create-categoria-gasto.dto';
+import { ModuloPro, PlanProGuard } from '../empresa/plan-pro.guard';
 
 @ApiTags('Categorías de Gasto')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@ModuloPro('El control de gastos')
+@UseGuards(JwtAuthGuard, RolesGuard, PlanProGuard)
 @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
 @Controller('categorias-gasto')
 export class CategoriaGastoController {

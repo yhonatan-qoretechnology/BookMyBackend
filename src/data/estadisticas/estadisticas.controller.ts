@@ -1,12 +1,17 @@
-import { Controller, Get, Param, ParseEnumPipe, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseEnumPipe, Query, UseGuards } from '@nestjs/common';
 import { Role, ViewEntityType } from '@prisma/client';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { QueryEstadisticasDto } from './dto/query-estadisticas.dto';
+import { ModuloPro, PlanProGuard } from '../empresa/plan-pro.guard';
 import { EstadisticasService } from './estadisticas.service';
 
 @ApiTags('Estadisticas')
+/* Las estadísticas son de Bookmy CRM Pro: el panel ya no las enseña en el
+   plan gratuito y aquí se cierra la puerta de atrás. */
+@ModuloPro('Las estadísticas')
+@UseGuards(PlanProGuard)
 @Controller('estadisticas')
 export class EstadisticasController {
   constructor(private readonly estadisticas: EstadisticasService) {}

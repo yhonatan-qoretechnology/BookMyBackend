@@ -3,9 +3,10 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { EntityViewModule } from '../entity-view/entity-view.module';
 import { EstadisticasController } from './estadisticas.controller';
 import { EstadisticasService } from './estadisticas.service';
+import { EmpresaModule } from '../empresa/empresa.module';
 
 @Module({
-  imports: [PrismaModule, EntityViewModule],
+  imports: [PrismaModule, EmpresaModule, EntityViewModule],
   controllers: [EstadisticasController],
   providers: [EstadisticasService],
 })

@@ -198,7 +198,23 @@ model UserLocation {
   @@map("user_locations")
 }
 
+/* Plan contratado por el negocio. El plan EFECTIVO se calcula: es PRO si
+   tiene el plan contratado o si su prueba de 30 dias sigue viva. */
+enum PlanEmpresa {
+  FREE
+  PRO
+}
+
 model Empresa {
+  /* ── Plan y prueba gratuita ──────────────────────────────
+     Al darse de alta, el negocio elige Free o probar Pro 30 dias. La
+     prueba se regala una sola vez (`trialUsed`), y cuando caduca la
+     empresa vuelve sola a Free: no hace falta ningun proceso que la
+     degrade, basta con comparar `trialEndsAt` con la fecha de hoy. */
+  plan        PlanEmpresa @default(FREE)
+  trialEndsAt DateTime?   @map("trial_ends_at")
+  trialUsed   Boolean     @default(false) @map("trial_used")
+
   id               Int            @id @default(autoincrement())
   nombre           String         @unique
   telefono         String?        @map("telefono")

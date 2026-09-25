@@ -10,8 +10,10 @@ import {
   Patch,
   Post,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
@@ -22,15 +24,81 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { PlanEmpresa, Role } from '@prisma/client';
+import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { Public } from '../../auth/common/decorators/public.decorator';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateEmpresaWithFileDto } from '../empresa/dto/create-empresa-with-file.dto';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
+import { RegistroNegocioDto } from './dto/registro-negocio.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
 import { EmpresaService } from './empresa.service';
+import { PlanService } from './plan.service';
+import { RegistroNegocioService } from './registro-negocio.service';
 
 @ApiTags('Empresas')
 @Controller('empresas')
 export class EmpresaController {
-  constructor(private readonly empresaService: EmpresaService) {}
+  constructor(
+    private readonly empresaService: EmpresaService,
+    private readonly planService: PlanService,
+    private readonly registroNegocio: RegistroNegocioService,
+  ) {}
+
+  /* ── Alta de un negocio desde la web ──────────────────────
+     Pública a propósito: es el formulario de "crear cuenta" de
+     bookmy.es. Limitada por IP para que no sirva de fábrica de
+     empresas falsas. */
+  @Post('registro')
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @ApiOperation({
+    summary: 'Registrar un negocio nuevo (empresa + primera sede + administrador)',
+    description:
+      'Crea la cuenta y devuelve la sesión iniciada. Con plan "pro" arranca con 30 días de prueba de Bookmy CRM Pro.',
+  })
+  @ApiResponse({ status: 201, description: 'Negocio creado; devuelve { user, token }.' })
+  @ApiBadRequestResponse({ description: 'Datos inválidos o correo/teléfono/nombre ya en uso.' })
+  async registro(@Body() dto: RegistroNegocioDto) {
+    return this.registroNegocio.registrar(dto);
+  }
+
+  /* ── Plan y prueba ───────────────────────────────────── */
+  @Get(':id/plan')
+  @ApiOperation({ summary: 'Plan de la empresa y estado de su prueba' })
+  async plan(@Param('id', ParseIntPipe) id: number) {
+    return this.planService.estadoDe(id);
+  }
+
+  @Post(':id/prueba')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiOperation({
+    summary: 'Activar los 30 días de prueba de Bookmy CRM Pro',
+    description: 'Solo se puede una vez por empresa.',
+  })
+  async activarPrueba(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.planService.activarPrueba(id, user);
+  }
+
+  @Patch(':id/plan')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Cambiar el plan contratado de una empresa (solo SUPER_ADMIN)',
+    description: 'Se usa cuando el negocio paga Bookmy CRM Pro o lo deja.',
+  })
+  async cambiarPlan(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('plan') plan: PlanEmpresa,
+  ) {
+    return this.planService.cambiarPlan(id, plan);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Crear una nueva empresa con logo' })

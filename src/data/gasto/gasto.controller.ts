@@ -37,10 +37,12 @@ import {
 } from './gasto-file.constants';
 import { gastoFileFilter } from './gasto-file.filter';
 import { GastoService } from './gasto.service';
+import { ModuloPro, PlanProGuard } from '../empresa/plan-pro.guard';
 
 @ApiTags('Gastos')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@ModuloPro('El control de gastos')
+@UseGuards(JwtAuthGuard, RolesGuard, PlanProGuard)
 @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
 @Controller('gastos')
 export class GastoController {
