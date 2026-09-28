@@ -489,8 +489,31 @@ export class ProfesionalService {
     };
   }
 
-  async findAll() {
+  /**
+   * Hasta donde llega la sesion: el dueno ve el equipo de su negocio y el
+   * admin o empleado de sede solo el de la suya. Para el resto
+   * (SUPER_ADMIN y la app movil, que ensena los profesionales publicos de
+   * cualquier negocio) no se acota nada.
+   */
+  private alcanceDeProfesionales(
+    user?: AuthenticatedUser,
+  ): Prisma.ProfesionalWhereInput | undefined {
+    if (!user) return undefined;
+    if (user.role === Role.COMPANY_ADMIN && user.empresaId) {
+      return { sede: { empresaId: user.empresaId } };
+    }
+    if (
+      (user.role === Role.BRANCH_ADMIN || user.role === Role.EMPLOYEE) &&
+      user.sedeId
+    ) {
+      return { sedeId: user.sedeId };
+    }
+    return undefined;
+  }
+
+  async findAll(user?: AuthenticatedUser) {
     const profesionales = await this.prisma.profesional.findMany({
+      where: this.alcanceDeProfesionales(user),
       include: { users: { select: { email: true } } },
     });
     return profesionales.map((profesional) =>

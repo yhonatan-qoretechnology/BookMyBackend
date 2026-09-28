@@ -64,13 +64,18 @@ export class ProfesionalController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Obtener todos los profesionales' })
+  @ApiOperation({
+    summary: 'Obtener los profesionales que puede ver la sesión',
+    description:
+      'El dueño ve el equipo de su negocio y el admin o empleado de sede ' +
+      'solo el de la suya. Antes devolvía el de todas las empresas.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Lista de todos los profesionales.',
   })
-  async findAll() {
-    return this.profesionalService.findAll();
+  async findAll(@AuthUser() user?: AuthenticatedUser) {
+    return this.profesionalService.findAll(user);
   }
 
   @Get(':id')
