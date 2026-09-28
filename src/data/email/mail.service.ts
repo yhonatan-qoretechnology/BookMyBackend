@@ -4,7 +4,12 @@ import { readFile } from 'fs/promises';
 import Handlebars from 'handlebars';
 import type { Transporter } from 'nodemailer';
 import { join } from 'path';
-import * as puppeteer from 'puppeteer';
+
+// Puppeteer 25 is ESM-only, while this Nest app is compiled to CommonJS.
+// Keep the native import() out of TypeScript's CommonJS transform.
+const loadPuppeteer = new Function(
+  'return import("puppeteer")',
+) as () => Promise<typeof import('puppeteer')>;
 
 import { SendInvoiceDto } from './dto/send-invoice.dto';
 import { MAIL_TRANSPORTER } from './mail.constants';
@@ -189,6 +194,7 @@ export class MailService {
 
     const finalHtml = template(data);
 
+    const puppeteer = await loadPuppeteer();
     const browser = await puppeteer.launch({
       headless: true,
     });
