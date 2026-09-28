@@ -27,6 +27,8 @@ import {
 import { ApproveResenaDto } from './dto/approve-resena.dto';
 import { CreateResenaDto } from './dto/create-resena.dto';
 import { UpdateResenaDto } from './dto/update-resena.dto';
+import { AuthUser } from 'src/auth/common/decorators/auth-user.decorator';
+import { AuthenticatedUser } from 'src/auth/types/authenticated-user.interface';
 import { ResenaService } from './resena.service';
 
 @ApiTags('Reseñas')
@@ -47,10 +49,16 @@ export class ResenaController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Obtener todas las reseñas' })
-  @ApiResponse({ status: 200, description: 'Lista de todas las reseñas.' })
-  findAll() {
-    return this.resenaService.findAll();
+  @ApiOperation({
+    summary: 'Obtener las reseñas que puede ver la sesión',
+    description:
+      'El dueño ve las de su negocio y el admin o empleado de sede solo las ' +
+      'de la suya. Sin esto el panel de un negocio listaba las reseñas de ' +
+      'todos los demás.',
+  })
+  @ApiResponse({ status: 200, description: 'Lista de reseñas visibles.' })
+  findAll(@AuthUser() user?: AuthenticatedUser) {
+    return this.resenaService.findAll(user);
   }
 
   @Get(':id')

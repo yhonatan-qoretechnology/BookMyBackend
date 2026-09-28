@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ResenaState, ResenaType } from '@prisma/client';
+import { Prisma, ResenaState, ResenaType, Role } from '@prisma/client';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateResenaDto } from './dto/create-resena.dto';
 import { UpdateResenaDto } from './dto/update-resena.dto';
@@ -63,8 +64,31 @@ export class ResenaService {
     return resenaSinRelaciones;
   }
 
-  async findAll() {
+  /**
+   * Hasta donde llega la sesion: el dueno ve las de su negocio y el admin
+   * o empleado de sede solo las de la suya. Para el resto (SUPER_ADMIN y
+   * la app movil, que consulta las valoraciones publicas de cualquier
+   * negocio) no se acota nada.
+   */
+  private alcanceDeResenas(
+    user?: AuthenticatedUser,
+  ): Prisma.ResenaWhereInput | undefined {
+    if (!user) return undefined;
+    if (user.role === Role.COMPANY_ADMIN && user.empresaId) {
+      return { sede: { empresaId: user.empresaId } };
+    }
+    if (
+      (user.role === Role.BRANCH_ADMIN || user.role === Role.EMPLOYEE) &&
+      user.sedeId
+    ) {
+      return { sedeId: user.sedeId };
+    }
+    return undefined;
+  }
+
+  async findAll(user?: AuthenticatedUser) {
     return this.prisma.resena.findMany({
+      where: this.alcanceDeResenas(user),
       include: {
         sede: true,
         usuario: {

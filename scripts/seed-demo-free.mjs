@@ -8,9 +8,18 @@
    los modulos que ensena Bookmy Free: reservas, clientes, empleados,
    servicios, calendario, resenas y sedes.
 
-   Uso:
+   Uso con un SUPER_ADMIN a mano:
      API_URL=http://localhost:5000 \
      SEED_ADMIN_EMAIL=superadmin@bookmy.com SEED_ADMIN_PASS='...' \
+     node scripts/seed-demo-free.mjs
+
+   Uso sin credenciales de superadministrador (produccion): si no se pasa
+   SEED_ADMIN_PASS, el negocio se da de alta por la web como lo haria un
+   cliente, con POST /empresas/registro, y SEED_PLAN elige si arranca la
+   prueba de 30 dias ('pro', por defecto) o entra directo al plan gratuito
+   ('free'):
+     API_URL=https://mi-api \
+     SEED_EMPRESA='Bookmy Free Demo' SEED_DEMO_EMAIL=demo@bookmy.es \
      node scripts/seed-demo-free.mjs
 
    Es idempotente: lo que ya existe no se duplica. Para que el historico
@@ -29,6 +38,14 @@ const DOMINIO_CLIENTES = process.env.SEED_CLIENTES_DOMINIO || 'bookmydemo.es';
 /* Los telefonos son unicos en toda la plataforma: para sembrar una segunda
    cuenta demo (o repetir sobre datos existentes) hay que cambiar el prefijo. */
 const TEL = process.env.SEED_TEL_PREFIJO || '+346001';
+/* Sin contrasena de SUPER_ADMIN se arranca por el alta publica de la web
+   (POST /empresas/registro), que crea empresa, primera sede y dueno de una
+   vez. Es la unica via posible contra un entorno donde no tenemos -ni
+   queremos tener- las credenciales del superadministrador. */
+const POR_ALTA_PUBLICA = !process.env.SEED_ADMIN_PASS;
+/* 'pro' arranca los 30 dias de prueba: la demo ensena tambien Estadisticas
+   y Facturacion, que son de pago. */
+const PLAN_ALTA = process.env.SEED_PLAN || 'pro';
 
 let token = null;
 const fallos = [];
@@ -122,32 +139,69 @@ const COMENTARIOS = [
   'Atencion excelente desde que entras.',
 ];
 
+/** Alta publica: crea empresa, primera sede y dueno, y deja la sesion hecha. */
+async function altaPublica() {
+  log('alta del negocio por la web (plan ' + PLAN_ALTA + ')…');
+  const r = await api('POST', '/empresas/registro', {
+    empresaNombre: EMPRESA, telefono: `${TEL}00200`, rubro: 'Estetica y bienestar',
+    sedeNombre: SEDES[0].nombre, direccion: SEDES[0].direccion,
+    pais: SEDES[0].pais, provincia: SEDES[0].provincia,
+    municipio: SEDES[0].municipio, localidad: SEDES[0].localidad,
+    latitud: SEDES[0].latitud, longitud: SEDES[0].longitud,
+    firstName: 'Demo', lastName: 'Bookmy',
+    email: DEMO_LOGIN, password: DEMO_PASS,
+    countryId: 1, idioma: 'es', plan: PLAN_ALTA, acepta: true,
+  });
+  if (r.ok) return r.datos;
+  /* Si la cuenta ya existe se entra con ella y se sigue completando. */
+  if (r.status === 409) {
+    log('la cuenta ya existia: se entra con ella');
+    const s = await api('POST', '/auth/login', { email: DEMO_LOGIN, password: DEMO_PASS });
+    if (s.ok) return s.datos;
+  }
+  throw new Error('no se pudo dar de alta el negocio: ' + JSON.stringify(r.datos).slice(0, 200));
+}
+
 async function main() {
-  log('login como administrador…');
-  const acceso = await api('POST', '/auth/login', { email: ADMIN_EMAIL, password: ADMIN_PASS });
-  token = acceso.datos?.token || acceso.datos?.access_token;
-  if (!token) throw new Error('no se pudo iniciar sesion: ' + JSON.stringify(acceso.datos).slice(0, 200));
+  let empresa;
 
-  /* ── empresa ── */
-  const empresas = lista((await api('GET', '/empresas')).datos);
-  let empresa = empresas.find((e) => e.nombre === EMPRESA);
-  if (!empresa) {
-    empresa = apuntar('crear empresa', await api('POST', '/empresas', {
-      nombre: EMPRESA, telefono: `${TEL}00200`, email: `hola@${DOMINIO_CLIENTES}`, nit: 'B00000000',
-      descripcion: 'Cuenta de demostracion de Bookmy Free',
-      descripcionLarga: 'Centro de belleza y bienestar para ensenar Bookmy Free: reservas, clientes, empleados, servicios, calendario, resenas y sedes.',
-    })).datos;
+  if (POR_ALTA_PUBLICA) {
+    const sesion = await altaPublica();
+    token = sesion?.token || sesion?.access_token;
+    const empresaId =
+      sesion?.user?.AdminProfile?.empresaId ??
+      sesion?.user?.empresaId ??
+      sesion?.empresaId;
+    if (!token || !empresaId) throw new Error('el alta no devolvio sesion: ' + JSON.stringify(sesion).slice(0, 200));
+    empresa = (await api('GET', `/empresas/${empresaId}`)).datos || { id: empresaId, nombre: EMPRESA };
+  } else {
+    log('login como administrador…');
+    const acceso = await api('POST', '/auth/login', { email: ADMIN_EMAIL, password: ADMIN_PASS });
+    token = acceso.datos?.token || acceso.datos?.access_token;
+    if (!token) throw new Error('no se pudo iniciar sesion: ' + JSON.stringify(acceso.datos).slice(0, 200));
+
+    /* ── empresa ── */
+    const empresas = lista((await api('GET', '/empresas')).datos);
+    empresa = empresas.find((e) => e.nombre === EMPRESA);
+    if (!empresa) {
+      empresa = apuntar('crear empresa', await api('POST', '/empresas', {
+        nombre: EMPRESA, telefono: `${TEL}00200`, email: `hola@${DOMINIO_CLIENTES}`, nit: 'B00000000',
+        descripcion: 'Cuenta de demostracion de Bookmy Free',
+        descripcionLarga: 'Centro de belleza y bienestar para ensenar Bookmy Free: reservas, clientes, empleados, servicios, calendario, resenas y sedes.',
+      })).datos;
+    }
+
+    /* ── usuario de prueba (dueno del negocio) ── */
+    const admins = lista((await api('GET', '/admin/admins')).datos);
+    if (!admins.some((a) => (a.email || a.user?.email) === DEMO_LOGIN)) {
+      apuntar('crear usuario de prueba', await api('POST', `/admin/companies/${empresa.id}/admins`, {
+        email: DEMO_LOGIN, password: DEMO_PASS, phone: `${TEL}00201`,
+        firstName: 'Demo', lastName: 'Bookmy', name: 'Demo Bookmy', countryId: 1,
+      }));
+    }
   }
+
   log('empresa', empresa.id, empresa.nombre);
-
-  /* ── usuario de prueba (dueno del negocio) ── */
-  const admins = lista((await api('GET', '/admin/admins')).datos);
-  if (!admins.some((a) => (a.email || a.user?.email) === DEMO_LOGIN)) {
-    apuntar('crear usuario de prueba', await api('POST', `/admin/companies/${empresa.id}/admins`, {
-      email: DEMO_LOGIN, password: DEMO_PASS, phone: `${TEL}00201`,
-      firstName: 'Demo', lastName: 'Bookmy', name: 'Demo Bookmy', countryId: 1,
-    }));
-  }
   log('usuario de prueba', DEMO_LOGIN);
 
   /* ── sedes y horarios ── */
