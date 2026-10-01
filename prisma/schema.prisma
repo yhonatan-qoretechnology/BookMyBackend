@@ -215,6 +215,12 @@ model Empresa {
   trialEndsAt DateTime?   @map("trial_ends_at")
   trialUsed   Boolean     @default(false) @map("trial_used")
 
+  // Bloqueo administrativo (solo SUPER_ADMIN): no borra nada, solo impide
+  // login de sus admins/profesionales y que se reserve en sus sedes.
+  bloqueada       Boolean   @default(false) @map("bloqueada")
+  bloqueadaEn     DateTime? @map("bloqueada_en")
+  bloqueadaMotivo String?   @map("bloqueada_motivo")
+
   id               Int            @id @default(autoincrement())
   nombre           String         @unique
   telefono         String?        @map("telefono")
@@ -242,6 +248,12 @@ model Sede {
   pais         String? @map("pais")
   municipio    String? @map("municipio")
   localidad    String? @map("localidad")
+  // Código de comunidad autónoma (ISO 3166-2:ES, ej "AN", "MD", "CT") para
+  // resolver los festivos AUTONOMICO correctos de FestivoService. Opcional:
+  // si no se carga, se infiere de `municipio`/`provincia` (ver
+  // festivo.service.ts) — antes SIEMPRE se asumía 'AN' (Andalucía) sin
+  // importar dónde estuviera la sede.
+  ccaa         String? @map("ccaa") @db.VarChar(2)
   id                     Int                      @id @default(autoincrement())
   nombre                 String
   direccion              String
@@ -373,6 +385,16 @@ model ServiceSedeProfesional {
   sedeId        Int
   serviceId     Int
   profesionalId Int?
+  // Minutos que se bloquean automáticamente después de cada cita de este
+  // servicio en esta sede (limpieza, preparación, etc.) — se suman al
+  // validar solapes y horario de cierre en AppointmentService.
+  tiempoAdicionalMinutos Int @default(0) @map("tiempo_adicional_minutos")
+  // "Regla configurada" que pide 1.6: si al reservar este servicio en esta
+  // sede no alcanza el tiempo antes del cierre, permite partirlo en dos
+  // citas enlazadas (hoy hasta el cierre + el resto el próximo día
+  // disponible del mismo profesional) en vez de rechazar la reserva.
+  // Off por defecto — no todos los servicios deberían poder partirse.
+  permiteContinuarOtroDia Boolean @default(false) @map("permite_continuar_otro_dia")
   profesional   Profesional? @relation(fields: [profesionalId], references: [id])
   sede          Sede         @relation(fields: [sedeId], references: [id])
   service       Service      @relation(fields: [serviceId], references: [id])
@@ -447,6 +469,7 @@ enum AppointmentHistoryAction {
   REASSIGNED
   RESCHEDULED
   CANCELLED
+  CONTINUACION_OTRO_DIA
 }
 
 model HorarioSede {
