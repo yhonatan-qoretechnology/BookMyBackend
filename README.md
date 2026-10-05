@@ -240,3 +240,72 @@ npx prisma studio - muetra la db ene le navegador
 
 ALTER TYPE "Role"
 ADD VALUE 'EMPLOYEE';
+
+---
+
+## 🇪🇸 Festivos por comunidad autónoma (API externa)
+
+España no tiene un único calendario de festivos: además de los nacionales
+(iguales en todo el país), cada una de las 17 comunidades autónomas + Ceuta
+y Melilla fija sus propios festivos (hasta 2 por año, de una bolsa
+nacional), y algunos municipios suman los suyos propios encima. Por eso una
+sede en Madrid, otra en Barcelona y otra en Bilbao pueden tener festivos
+distintos el mismo año.
+
+### Qué API se usa
+
+**[calendariosnacionales.com](https://calendariosnacionales.com/es/api/)**
+— API pública, gratuita, sin API key ni registro, licencia CC BY 4.0. Cubre
+festivos nacionales, autonómicos, provinciales y locales de España, tomados
+de fuentes oficiales (BOE + boletines autonómicos). Se actualiza cuando
+sale un boletín oficial nuevo (normalmente octubre-noviembre del año
+anterior).
+
+> ⚠️ Sus términos de uso exigen **atribución con enlace visible** en la
+> aplicación (algo como "Datos de festivos: Calendarios Nacionales" con
+> link a su sitio) y piden no abusar de sincronizaciones — por eso acá los
+> datos se traen una vez y se guardan localmente, no se consulta la API en
+> cada reserva.
+
+### Cómo funciona en este backend
+
+1. **Modelo `Festivo`** (`prisma/schema.prisma`) — guarda cada festivo con
+   `fecha`, `nombre`, `ambito` (`NACIONAL` / `AUTONOMICO` / `LOCAL`), `ccaa`
+   y `municipio`. Es la única fuente que lee la app; nunca se llama a la
+   API externa al servir `GET /festivos`.
+2. **`Sede.ccaa`** — código de comunidad autónoma (ISO 3166-2:ES, ej.
+   `MD`, `CT`, `PV`) de cada sede. Si no está cargado, se infiere
+   automáticamente del `municipio`/`provincia` guardado
+   (`src/data/festivo/ccaa-lookup.ts`) — así ninguna sede existente quedó
+   sin festivos por no tener el campo nuevo cargado a mano.
+3. **`GET /festivos?sedeId=X&anio=2026`** (público) — devuelve los
+   festivos NACIONAL + los AUTONOMICO de la CCAA de esa sede + los LOCAL de
+   su municipio. Son informativos: el calendario los pinta en rojo, pero
+   **no bloquean** el agendado (eso lo hace `dias_cerrados_sede`, que es
+   otro mecanismo aparte).
+4. **`POST /festivos/sincronizar`** (solo `SUPER_ADMIN`, body
+   `{ "anio": 2028 }`) — trae de la API externa los festivos NACIONAL +
+   AUTONOMICO de las 19 comunidades/ciudades autónomas de España para ese
+   año y los guarda (o actualiza) en la tabla `Festivo`. Hay que correrlo
+   una vez por año, cuando salga el calendario oficial siguiente — no hay
+   ningún cron corriendo solo. Los festivos **LOCAL** (ferias, patronos de
+   cada municipio) no los trae este sync — son demasiados municipios para
+   mapear uno por uno contra la API — esos se siguen cargando a mano en
+   `SeedService.seedFestivos()`.
+
+### Endpoints de la API externa que consume el sync
+
+```
+GET https://calendariosnacionales.com/es/v1/{año}/nacionales.json
+GET https://calendariosnacionales.com/es/v1/{año}/regiones/{slug}.json
+```
+
+`{slug}` es el código de 3 letras que usa esa API (`and`, `mad`, `cat`,
+`val`, `eus`, ...) — distinto del código ISO de 2 letras que usa este
+proyecto (`AN`, `MD`, `CT`, `VC`, `PV`, ...). La conversión entre ambos
+está en `CCAA_ISO_A_SLUG_EXTERNO`, dentro de
+`src/data/festivo/festivo.service.ts`.
+
+> Nota técnica: las llamadas a esa API fuerzan IPv4 (`family: 4`) porque en
+> algunos entornos de desarrollo Windows la resolución DNS por IPv6 falla
+> con `ENOTFOUND` aunque el dominio responda bien por IPv4.
