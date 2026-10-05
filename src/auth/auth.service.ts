@@ -764,6 +764,9 @@ export class AuthService {
                 photoUrl: true,
                 empresaId: true,
                 sedeId: true,
+                empresa: {
+                  select: { bloqueada: true, bloqueadaMotivo: true },
+                },
               },
             },
             profesionales: {
@@ -774,7 +777,14 @@ export class AuthService {
                 imagen: true,
                 sedeId: true,
                 sede: {
-                  select: { id: true, nombre: true, empresaId: true },
+                  select: {
+                    id: true,
+                    nombre: true,
+                    empresaId: true,
+                    empresa: {
+                      select: { bloqueada: true, bloqueadaMotivo: true },
+                    },
+                  },
                 },
               },
             },
@@ -839,6 +849,25 @@ export class AuthService {
     // Generar token con los datos del usuario
     const adminProfile = userAuth.user.AdminProfile;
     const profesional = userAuth.user.profesionales;
+
+    // Empresa bloqueada (solo SUPER_ADMIN puede bloquear/desbloquear, ver
+    // EmpresaService.bloquear()): no borra nada, pero sus admins y
+    // profesionales no pueden entrar mientras dure. Los CLIENT no están
+    // atados a una sola empresa, así que esto no los afecta a ellos.
+    const empresaBloqueada =
+      adminProfile?.empresa?.bloqueada || profesional?.sede?.empresa?.bloqueada;
+    if (empresaBloqueada) {
+      const motivo =
+        adminProfile?.empresa?.bloqueadaMotivo ??
+        profesional?.sede?.empresa?.bloqueadaMotivo;
+      console.log(`[LOGIN] BLOCK: Empresa bloqueada for email: ${email}`);
+      return {
+        error: motivo
+          ? `Esta empresa está bloqueada: ${motivo}`
+          : 'Esta empresa está bloqueada. Contactá al administrador.',
+        code: 'EMPRESA_BLOQUEADA',
+      };
+    }
 
     const token = await this.generateToken({
       id: userAuth.user.id,

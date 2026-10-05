@@ -195,6 +195,41 @@ export class EmpresaService {
     return { message: `Empresa con ID ${id} eliminada correctamente.` };
   }
 
+  // 🔒 Bloquear una empresa (solo SUPER_ADMIN, ver guard en el controller):
+  // no borra nada, solo impide login de sus admins/profesionales y que se
+  // reserve en sus sedes (ver AuthService.login() y AppointmentService.create()).
+  async bloquear(id: number, motivo?: string) {
+    const empresa = await this.prisma.empresa.findUnique({ where: { id } });
+    if (!empresa) {
+      throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
+    }
+
+    return this.prisma.empresa.update({
+      where: { id },
+      data: {
+        bloqueada: true,
+        bloqueadaEn: new Date(),
+        bloqueadaMotivo: motivo?.trim() || null,
+      },
+    });
+  }
+
+  async desbloquear(id: number) {
+    const empresa = await this.prisma.empresa.findUnique({ where: { id } });
+    if (!empresa) {
+      throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
+    }
+
+    return this.prisma.empresa.update({
+      where: { id },
+      data: {
+        bloqueada: false,
+        bloqueadaEn: null,
+        bloqueadaMotivo: null,
+      },
+    });
+  }
+
   async updateLogo(id: number, file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('Debes adjuntar un archivo de logo.');

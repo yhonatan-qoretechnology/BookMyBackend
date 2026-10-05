@@ -164,12 +164,49 @@ export class EmpresaController {
   }
 
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Eliminar una empresa por su ID' })
+  @ApiOperation({ summary: 'Eliminar una empresa por su ID (solo SUPER_ADMIN)' })
   @ApiResponse({ status: 204, description: 'Empresa eliminada exitosamente.' })
   @ApiNotFoundResponse({ description: 'Empresa no encontrada.' })
   async remove(@Param('id', ParseIntPipe) id: number) {
     return this.empresaService.remove(id);
+  }
+
+  @Patch(':id/bloquear')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Bloquear una empresa (solo SUPER_ADMIN)',
+    description:
+      'No borra ningún dato: impide el login de sus admins/profesionales ' +
+      'y que se reserve en sus sedes hasta que se desbloquee.',
+  })
+  @ApiBody({
+    required: false,
+    schema: {
+      type: 'object',
+      properties: { motivo: { type: 'string', example: 'Falta de pago' } },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Empresa bloqueada.' })
+  @ApiNotFoundResponse({ description: 'Empresa no encontrada.' })
+  async bloquear(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('motivo') motivo?: string,
+  ) {
+    return this.empresaService.bloquear(id, motivo);
+  }
+
+  @Patch(':id/desbloquear')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Desbloquear una empresa (solo SUPER_ADMIN)' })
+  @ApiResponse({ status: 200, description: 'Empresa desbloqueada.' })
+  @ApiNotFoundResponse({ description: 'Empresa no encontrada.' })
+  async desbloquear(@Param('id', ParseIntPipe) id: number) {
+    return this.empresaService.desbloquear(id);
   }
 
   @Patch(':id/logo')
