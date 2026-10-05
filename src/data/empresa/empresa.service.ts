@@ -138,12 +138,18 @@ export class EmpresaService {
   }
 
   async findAll() {
-    return this.prisma.empresa.findMany();
+    /* Con el pais incluido: la lista de empresas del SUPER_ADMIN ensena de
+       que mercado es cada negocio, que es lo que hace que un solo panel
+       siga siendo mejor que dos. */
+    return this.prisma.empresa.findMany({ include: { country: true } });
   }
 
   async findOne(id: number) {
     const empresa = await this.prisma.empresa.findUnique({
       where: { id },
+      /* El pais viaja siempre con la empresa: el panel se configura con el
+         -moneda, huso, formatos y etiquetas- y sin el se quedaria en euros. */
+      include: { country: true },
     });
     if (!empresa) {
       throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
