@@ -15,6 +15,7 @@ import { DisponibilidadProfesionalModule } from './data/disponibilidadProfesiona
 import { MailModule } from './data/email/mail.module';
 import { EmpresaModule } from './data/empresa/empresa.module';
 import { FestivoModule } from './data/festivo/festivo.module';
+import { PaisModule } from './data/pais/pais.module';
 import { EntityViewModule } from './data/entity-view/entity-view.module';
 import { EstadisticasModule } from './data/estadisticas/estadisticas.module';
 import { GastoModule } from './data/gasto/gasto.module';
@@ -87,6 +88,7 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     AssistantModule,
     SearchModule,
     FestivoModule,
+    PaisModule,
     EntityViewModule,
     EstadisticasModule,
     NotificationModule,

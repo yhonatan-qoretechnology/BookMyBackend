@@ -11,6 +11,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AccessControlService } from '../../auth/services/access-control/access-control.service';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { SftpStorageService } from '../../storage/sftp-storage.service';
+import { PaisService } from '../pais/pais.service';
 import { CreateServiceDto } from '../serviceCategory/dto/create-service.dto';
 import { UpdateServiceDto } from '../serviceCategory/dto/update-service.dto';
 
@@ -20,7 +21,28 @@ export class ServiceService {
     private readonly prisma: PrismaService,
     private readonly accessControlService: AccessControlService,
     private readonly sftpStorage: SftpStorageService,
+    private readonly paisService: PaisService,
   ) {}
+
+  /**
+   * Comprueba los precios contra los limites del pais del negocio y
+   * devuelve la moneda con la que hay que guardarlos. Antes el tope era un
+   * `@Max(1000)` con mensaje en euros, asi que un corte de pelo colombiano
+   * -unos 45.000 COP- se rechazaba siempre, y el panel guardaba "EUR" en
+   * cualquier caso: 45.000 pesos quedaban registrados como 45.000 euros.
+   */
+  private async monedaDelNegocio(
+    user: AuthenticatedUser | undefined,
+    precios: Array<{ amount?: number }> | undefined,
+  ): Promise<string> {
+    const pais = await this.paisService.porSesion(user);
+    for (const p of precios ?? []) {
+      if (typeof p.amount === 'number') {
+        this.paisService.validarPrecio(pais, p.amount);
+      }
+    }
+    return pais.moneda;
+  }
 
   // 🖼️ Almacenamiento de imágenes — mismo patrón que SedeService
   // (SFTP si está habilitado, si no disco local en ./uploads/services/:id)
@@ -164,6 +186,7 @@ export class ServiceService {
     files?: Express.Multer.File[],
   ) {
     const sedeIds = dto.sedeIds ? [...dto.sedeIds] : [];
+    const moneda = await this.monedaDelNegocio(user, dto.prices);
 
     if (user?.role === Role.BRANCH_ADMIN) {
       if (!user.sedeId) {
@@ -289,13 +312,13 @@ export class ServiceService {
         })),
       });
 
-      // Crear precios
+      // Crear precios, en la moneda del pais del negocio
       await tx.price.createMany({
         data: dto.prices.map((p) => ({
           serviceId: service.id,
           amount: p.amount!,
           duration: p.duration!,
-          currency: p.currency || 'EUR',
+          currency: p.currency || moneda,
         })),
       });
 
@@ -350,6 +373,7 @@ export class ServiceService {
     if (!existing) {
       throw new NotFoundException('El servicio no existe');
     }
+    const moneda = await this.monedaDelNegocio(user, dto.prices);
 
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
@@ -432,7 +456,7 @@ export class ServiceService {
             serviceId: id,
             amount: p.amount!,
             duration: p.duration!,
-            currency: p.currency || 'EUR',
+            currency: p.currency || moneda,
           })),
         });
       }
