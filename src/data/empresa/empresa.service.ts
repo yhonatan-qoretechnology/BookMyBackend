@@ -92,13 +92,33 @@ export class EmpresaService {
     this.safeDeleteIfExists(filePath);
   }
 
+  /**
+   * El país del negocio se resuelve por su código ISO. Es obligatorio en la
+   * base, así que sin él se asume España: es lo que eran todas las empresas
+   * antes de que Bookmy operase en más de un país.
+   */
+  private async resolverPais(isoCode?: string): Promise<number> {
+    const iso = (isoCode?.trim() || 'ES').toUpperCase();
+    const pais = await this.prisma.country.findUnique({
+      where: { isoCode: iso },
+      select: { id: true },
+    });
+    if (!pais) {
+      throw new BadRequestException(`Todavía no operamos en el país ${iso}.`);
+    }
+    return pais.id;
+  }
+
   async create(createEmpresaDto: CreateEmpresaDto, file?: Express.Multer.File) {
     const logoUrl = file ? await this.storeLogo(file) : null;
+    const { paisIso, ...datos } = createEmpresaDto;
+    const countryId = await this.resolverPais(paisIso);
 
     try {
       return await this.prisma.empresa.create({
         data: {
-          ...createEmpresaDto,
+          ...datos,
+          countryId,
           logo: logoUrl,
         },
       });
