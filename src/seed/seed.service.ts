@@ -42,14 +42,19 @@ export class SeedService {
    * notaba porque la tabla venia de un `db push` antiguo y ya tenia datos.
    */
   /**
-   * Festivos de Espana (nacionales + Andalucia + locales de Malaga) 2026-2027.
+   * Festivos de Espana 2026-2027: nacionales + autonomicos de las 6
+   * comunidades donde ya hay sedes reales (Andalucia, Madrid, Cataluna,
+   * Comunitat Valenciana, Illes Balears, Pais Vasco) + locales de Malaga y
+   * Madrid capital.
    *
    * Son informativos: el calendario los pinta en rojo pero NO bloquean el
    * agendado. Si una sede no trabaja ese dia, se cierra con dias_cerrados_sede.
    *
-   * OJO: los festivos LOCALES los fija cada ayuntamiento y cambian de un ano a
-   * otro; los de aqui son los habituales de Malaga capital y conviene
-   * confirmarlos en el BOJA antes de darlos por buenos.
+   * OJO: los festivos AUTONOMICO y LOCAL los fija cada comunidad/ayuntamiento
+   * y pueden cambiar de un ano a otro (cada comunidad elige hasta 2 festivos
+   * de una bolsa nacional cada ano) — conviene reconfirmarlos en el
+   * DOGC/BOCM/BOJA/BOPV correspondiente antes de darlos por buenos,
+   * especialmente para anos lejanos.
    */
   async seedFestivos() {
     type F = { fecha: string; nombre: string; ambito: AmbitoFestivo; ccaa?: string; municipio?: string };
@@ -83,14 +88,81 @@ export class SeedService {
       { fecha: '2027-02-28', nombre: 'Día de Andalucía', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
       { fecha: '2027-03-25', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
     ];
+
+    // El resto de comunidades donde ya hay sedes reales (Madrid, Cataluña,
+    // Comunitat Valenciana, Illes Balears, País Vasco). Antes FestivoService
+    // les devolvía SIEMPRE los festivos de Andalucía sin importar dónde
+    // estuviera la sede — ver ccaa-lookup.ts + el fix en festivo.service.ts.
+    // OJO: cada comunidad elige anualmente hasta 2 festivos "de libre
+    // designación" de una bolsa nacional, así que estos pueden variar de un
+    // año a otro — conviene reconfirmar en el DOGC/BOCM/BOPV correspondiente
+    // antes de dar por buena una fecha lejana en el tiempo.
+    const madrid: F[] = [
+      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'MD' },
+      { fecha: '2026-05-02', nombre: 'Fiesta de la Comunidad de Madrid', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'MD' },
+      { fecha: '2027-03-19', nombre: 'San José', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'MD' },
+      { fecha: '2027-03-25', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'MD' },
+      { fecha: '2027-08-16', nombre: 'Asunción de la Virgen (trasladado)', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'MD' },
+    ];
+    const madridLocales: F[] = [
+      { fecha: '2027-05-15', nombre: 'San Isidro', ambito: AmbitoFestivo.LOCAL, municipio: 'Madrid' },
+      { fecha: '2027-11-09', nombre: 'Almudena', ambito: AmbitoFestivo.LOCAL, municipio: 'Madrid' },
+    ];
+    const cataluna: F[] = [
+      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
+      { fecha: '2026-06-24', nombre: 'Sant Joan', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
+      { fecha: '2026-09-11', nombre: 'Diada Nacional de Catalunya', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
+      { fecha: '2026-12-26', nombre: 'Sant Esteve', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
+      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
+      { fecha: '2027-06-24', nombre: 'Sant Joan', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
+      { fecha: '2027-09-11', nombre: 'Diada Nacional de Catalunya', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
+      { fecha: '2027-12-26', nombre: 'Sant Esteve', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
+    ];
+    const valenciana: F[] = [
+      { fecha: '2026-03-19', nombre: 'San José', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
+      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
+      { fecha: '2026-06-24', nombre: 'San Juan', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
+      { fecha: '2026-10-09', nombre: 'Día de la Comunitat Valenciana', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
+      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
+      { fecha: '2027-06-24', nombre: 'San Juan', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
+      { fecha: '2027-10-09', nombre: 'Día de la Comunitat Valenciana', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
+    ];
+    const baleares: F[] = [
+      { fecha: '2026-03-02', nombre: 'Día de las Illes Balears', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
+      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
+      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
+      { fecha: '2026-12-26', nombre: 'Sant Esteve', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
+      { fecha: '2027-03-01', nombre: 'Día de las Illes Balears', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
+      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
+    ];
+    const paisVasco: F[] = [
+      { fecha: '2026-03-19', nombre: 'San José', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
+      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
+      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
+      { fecha: '2026-07-25', nombre: 'Santiago Apóstol', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
+      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
+      { fecha: '2027-07-25', nombre: 'Santiago Apóstol', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
+    ];
+
     const locales: F[] = [
       { fecha: '2026-08-19', nombre: 'Feria de Málaga', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
       { fecha: '2026-09-08', nombre: 'Virgen de la Victoria', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
       { fecha: '2027-08-19', nombre: 'Feria de Málaga', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
       { fecha: '2027-09-08', nombre: 'Virgen de la Victoria', ambito: AmbitoFestivo.LOCAL, municipio: 'Malaga' },
+      ...madridLocales,
     ];
 
-    const todos = [...nacionales2026, ...nacionales2027, ...andaluces, ...locales];
+    const todos = [
+      ...nacionales2026,
+      ...nacionales2027,
+      ...andaluces,
+      ...madrid,
+      ...cataluna,
+      ...valenciana,
+      ...baleares,
+      ...paisVasco,
+      ...locales,
+    ];
 
     for (const f of todos) {
       const fecha = new Date(`${f.fecha}T00:00:00.000Z`);
