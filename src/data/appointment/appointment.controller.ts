@@ -67,8 +67,36 @@ export class AppointmentController {
   @Post()
   @ApiOperation({ summary: 'Crear una nueva cita' })
   @ApiResponse({ status: 201, description: 'Cita creada correctamente' })
-  create(@Body() createAppointmentDto: CreateAppointmentDto) {
-    return this.appointmentService.create(createAppointmentDto);
+  @ApiResponse({
+    status: 400,
+    description:
+      'Si el servicio tiene habilitado partirse en dos días y no entra completo hoy, el error trae code=REQUIERE_CONTINUACION con la sugerencia — confirmar con POST /appointments/con-continuacion.',
+  })
+  create(
+    @Body() createAppointmentDto: CreateAppointmentDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.appointmentService.create(createAppointmentDto, user);
+  }
+
+  @Post('con-continuacion')
+  @ApiOperation({
+    summary: 'Confirma una reserva dividida en dos días (1.6)',
+    description:
+      'Se llama con el mismo payload que se intentó por POST /appointments y ' +
+      'devolvió REQUIERE_CONTINUACION. Crea dos citas enlazadas: hoy hasta ' +
+      'donde alcanza + el resto en el próximo día disponible del mismo ' +
+      'profesional, con el cobro repartido proporcionalmente.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: '{ parte1, parte2 } — o solo la cita si ya entraba completa',
+  })
+  crearConContinuacion(
+    @Body() createAppointmentDto: CreateAppointmentDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.appointmentService.crearConContinuacion(createAppointmentDto, user);
   }
 
   @Get()

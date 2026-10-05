@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, Min } from 'class-validator';
 
 export class CreateServiceSedeProfesionalDto {
   @ApiProperty({
@@ -29,4 +29,26 @@ export class CreateServiceSedeProfesionalDto {
   @IsInt()
   @Type(() => Number)
   profesionalId: number;
+
+  @ApiProperty({
+    example: 10,
+    required: false,
+    description:
+      'Minutos de bloqueo automático tras cada cita de este servicio en esta sede (limpieza, preparación). Por defecto 0.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  tiempoAdicionalMinutos?: number;
+
+  @ApiProperty({
+    example: false,
+    required: false,
+    description:
+      'Si no alcanza el tiempo antes del cierre, permite partir el servicio en dos citas enlazadas (hoy + el resto el próximo día disponible del mismo profesional) en vez de rechazar la reserva. Por defecto false.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  permiteContinuarOtroDia?: boolean;
 }

@@ -471,6 +471,93 @@ export class AppointmentService {
   }
 
   /**
+   * Busca una cita que se solape con [horaInicio, horaFin] para ese
+   * profesional, sumando el tiempo adicional (buffer) configurado tanto
+   * para la cita nueva (bufferMinutos) como para cada cita existente con
+   * la que se compara (vía su propio ServiceSedeProfesional — puede ser
+   * otro servicio con otro buffer). Con buffer=0 en todos lados se
+   * comporta exactamente igual que un solape simple de instantes.
+   */
+  private async findOverlappingConBuffer(
+    profesionalId: number,
+    horaInicio: Date,
+    horaFin: Date,
+    bufferMinutos: number,
+    excludeId?: number,
+  ) {
+    const MAX_BUFFER_MINUTOS = 120; // tope razonable para acotar la búsqueda
+    const horaFinConBuffer = new Date(
+      horaFin.getTime() + bufferMinutos * 60_000,
+    );
+
+    const candidatos = await this.prisma.appointment.findMany({
+      where: {
+        profesionalId,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+        estado: { notIn: ESTADOS_SIN_FRANJA },
+        horaInicio: {
+          lt: new Date(
+            horaFinConBuffer.getTime() + MAX_BUFFER_MINUTOS * 60_000,
+          ),
+        },
+        horaFin: {
+          gt: new Date(
+            horaInicio.getTime() - MAX_BUFFER_MINUTOS * 60_000,
+          ),
+        },
+      },
+      select: {
+        id: true,
+        horaInicio: true,
+        horaFin: true,
+        sedeId: true,
+        serviceId: true,
+        profesionalId: true,
+      },
+    });
+
+    if (!candidatos.length) return null;
+
+    const buffers = await this.prisma.serviceSedeProfesional.findMany({
+      where: {
+        OR: candidatos.map((c) => ({
+          sedeId: c.sedeId,
+          serviceId: c.serviceId,
+          profesionalId: c.profesionalId,
+        })),
+      },
+      select: {
+        sedeId: true,
+        serviceId: true,
+        profesionalId: true,
+        tiempoAdicionalMinutos: true,
+      },
+    });
+    const bufferMap = new Map(
+      buffers.map((b) => [
+        `${b.sedeId}-${b.serviceId}-${b.profesionalId}`,
+        b.tiempoAdicionalMinutos,
+      ]),
+    );
+
+    return (
+      candidatos.find((c) => {
+        const bufferCandidato =
+          bufferMap.get(`${c.sedeId}-${c.serviceId}-${c.profesionalId}`) ?? 0;
+        const candidatoFinConBuffer = new Date(
+          c.horaFin.getTime() + bufferCandidato * 60_000,
+        );
+        return this.rangesOverlap(
+          horaInicio.getTime(),
+          horaFinConBuffer.getTime(),
+          c.horaInicio.getTime(),
+          candidatoFinConBuffer.getTime(),
+        );
+      }) ?? null
+    );
+  }
+
+  /**
    * Especialistas que ofrecen el mismo servicio en la misma sede (excepto
    * el actual) y que están libres en el rango exacto solicitado — para la
    * opción "reasignar" cuando extender una cita choca con la siguiente.
@@ -527,6 +614,48 @@ export class AppointmentService {
     }
 
     return libres;
+  }
+
+  /**
+   * 1.6: busca el próximo día (mismo profesional) donde entre el resto del
+   * servicio, empezando desde la apertura. Solo sugiere — no crea nada;
+   * la creación real de las dos citas la hace crearConContinuacion().
+   * Reusa findSameDayFreeSlots() día por día hasta encontrar un hueco o
+   * agotar el tope de días.
+   */
+  private async sugerirContinuacionOtroDia(params: {
+    profesionalId: number;
+    sede: SedeConHorarios;
+    fecha: Date;
+    duracionRestante: number;
+  }): Promise<{ fecha: string; horaInicio: string; horaFin: string } | null> {
+    const MAX_DIAS_ADELANTE = 30;
+    const baseYear = params.fecha.getUTCFullYear();
+    const baseMonth = params.fecha.getUTCMonth();
+    const baseDay = params.fecha.getUTCDate();
+
+    for (let offset = 1; offset <= MAX_DIAS_ADELANTE; offset++) {
+      const candidateDate = new Date(
+        Date.UTC(baseYear, baseMonth, baseDay + offset),
+      );
+      const slots = await this.findSameDayFreeSlots(
+        params.profesionalId,
+        params.sede,
+        candidateDate,
+        params.duracionRestante,
+        0,
+        1,
+      );
+      if (slots.length > 0) {
+        return {
+          fecha: this.getDateInTimezone(candidateDate),
+          horaInicio: slots[0].horaInicio,
+          horaFin: slots[0].horaFin,
+        };
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -793,7 +922,7 @@ export class AppointmentService {
     };
   }
 
-  async create(data: CreateAppointmentDto) {
+  async create(data: CreateAppointmentDto, _user?: AuthenticatedUser) {
     const fecha = this.parseDate(data.fecha);
     const horaInicio = this.parseDate(data.horaInicio);
     const horaFin = this.parseDate(data.horaFin);
@@ -864,7 +993,11 @@ export class AppointmentService {
           }),
           this.prisma.sede.findUnique({
             where: { id: data.sedeId },
-            include: { HorarioSede: true, DiaCerradoSede: true },
+            include: {
+              HorarioSede: true,
+              DiaCerradoSede: true,
+              empresa: { select: { bloqueada: true, bloqueadaMotivo: true } },
+            },
           }),
         ]);
 
@@ -914,6 +1047,14 @@ export class AppointmentService {
 
       if (!sede) {
         throw new BadRequestException('La sede seleccionada no existe');
+      }
+
+      if (sede.empresa?.bloqueada) {
+        throw new BadRequestException(
+          sede.empresa.bloqueadaMotivo
+            ? `Esta empresa está bloqueada: ${sede.empresa.bloqueadaMotivo}`
+            : 'Esta empresa está bloqueada temporalmente y no acepta reservas.',
+        );
       }
 
       const matchingPrice = service.prices.find(
@@ -998,34 +1139,86 @@ export class AppointmentService {
         );
       }
 
+      // Tiempo adicional (limpieza/preparación) configurado para este
+      // servicio en esta sede — se suma a la duración real a la hora de
+      // validar que entra antes del cierre y de bloquear el horario.
+      const bufferMinutos = relation.tiempoAdicionalMinutos ?? 0;
+
       const inicio = this.getMinutesFromDate(horaInicio);
       const fin = this.getMinutesFromDate(horaFin);
+      const finConBuffer = fin + bufferMinutos;
 
       const fitsWithinSchedule = scheduleRanges.some((range) => {
         const rangeLength = range.end - range.start;
-        if (durationMinutes > rangeLength) {
+        if (durationMinutes + bufferMinutos > rangeLength) {
           this.logger.warn(
-            `Duración ${durationMinutes} min excede rango disponible (${rangeLength} min) para sedeId=${sede.id}, rango=${JSON.stringify(
+            `Duración ${durationMinutes} min (+${bufferMinutos} min de tiempo adicional) excede rango disponible (${rangeLength} min) para sedeId=${sede.id}, rango=${JSON.stringify(
               range,
             )}`,
           );
           return false;
         }
 
-        const adjustedEnd = range.end + durationMinutes;
+        // Antes esto usaba `range.end + durationMinutes` como límite, lo
+        // que dejaba pasar citas que terminaban hasta `durationMinutes`
+        // después del cierre real de la sede. El límite real es el cierre.
         return (
-          inicio >= range.start && inicio <= range.end && fin <= adjustedEnd
+          inicio >= range.start &&
+          inicio <= range.end &&
+          finConBuffer <= range.end
         );
       });
 
       if (!fitsWithinSchedule) {
         this.logger.warn(
-          `Horario fuera de rango para cita: inicio=${horaInicio.toISOString()} (${inicio} min), fin=${horaFin.toISOString()} (${fin} min), rangos=${JSON.stringify(
+          `Horario fuera de rango para cita: inicio=${horaInicio.toISOString()} (${inicio} min), fin=${horaFin.toISOString()} (${fin} min, +${bufferMinutos} min de buffer), rangos=${JSON.stringify(
             scheduleRanges,
           )}, sedeId=${sede.id}`,
         );
+
+        // 1.6: si el servicio en esta sede tiene habilitado partirse en dos
+        // días (relation.permiteContinuarOtroDia) y el servicio en sí (sin
+        // contar el buffer) no entra antes del cierre, se sugiere partirlo
+        // en vez de solo rechazar. No crea nada acá — el cliente confirma
+        // con POST /appointments/con-continuacion.
+        const rangoDeInicio = scheduleRanges.find(
+          (range) => inicio >= range.start && inicio <= range.end,
+        );
+        if (
+          relation.permiteContinuarOtroDia &&
+          rangoDeInicio &&
+          fin > rangoDeInicio.end
+        ) {
+          const minutosDisponiblesHoy = rangoDeInicio.end - inicio;
+          if (minutosDisponiblesHoy > 0) {
+            const duracionRestante = data.duracion - minutosDisponiblesHoy;
+            const sugerencia = await this.sugerirContinuacionOtroDia({
+              profesionalId: data.profesionalId,
+              sede: sede as SedeConHorarios,
+              fecha,
+              duracionRestante,
+            });
+
+            throw new BadRequestException({
+              message:
+                'El servicio no entra completo antes del cierre. Se puede partir en dos citas.',
+              code: 'REQUIERE_CONTINUACION',
+              continuacion: {
+                minutosDisponiblesHoy,
+                duracionRestante,
+                horaFinHoySugerida: new Date(
+                  horaInicio.getTime() + minutosDisponiblesHoy * 60_000,
+                ).toISOString(),
+                proximoDiaDisponible: sugerencia,
+              },
+            });
+          }
+        }
+
         throw new BadRequestException(
-          'La cita se encuentra fuera del horario operativo de la sede',
+          bufferMinutos > 0
+            ? `La cita (incluyendo ${bufferMinutos} min de tiempo adicional tras el servicio) se encuentra fuera del horario operativo de la sede`
+            : 'La cita se encuentra fuera del horario operativo de la sede',
         );
       }
 
@@ -1107,14 +1300,15 @@ export class AppointmentService {
       // Solape por instantes, sin mirar 'fecha': esa columna no tiene una
       // hora fija (cada cliente manda la suya y reschedule() guarda 00:00Z),
       // así que compararla por igualdad dejaba pasar choques reales.
-      const overlapping = await this.prisma.appointment.findFirst({
-        where: {
-          profesionalId: data.profesionalId,
-          estado: { notIn: ESTADOS_SIN_FRANJA },
-          horaInicio: { lt: horaFin },
-          horaFin: { gt: horaInicio },
-        },
-      });
+      // Tiene en cuenta el tiempo adicional propio (bufferMinutos) y el de
+      // cada cita existente con la que se compara (puede ser otro servicio
+      // con otro buffer configurado).
+      const overlapping = await this.findOverlappingConBuffer(
+        data.profesionalId,
+        horaInicio,
+        horaFin,
+        bufferMinutos,
+      );
 
       if (overlapping) {
         throw new BadRequestException(
@@ -1999,6 +2193,277 @@ export class AppointmentService {
     return actualizada;
   }
 
+  /**
+   * 1.6: confirma la partición que create() sugirió con `REQUIERE_CONTINUACION`
+   * — recibe el mismo payload que se intentó por create() y, si sigue sin
+   * entrar en un solo día, crea DOS citas enlazadas: hoy hasta donde
+   * alcance + el resto en el próximo día disponible del mismo profesional.
+   * El pago se cobra proporcional a la duración de cada tramo. Si para
+   * cuando el cliente confirma ya entra completo en un solo día (por
+   * ejemplo, se liberó un hueco), se crea como una cita normal — no falla
+   * ni obliga a partir algo que ya no hace falta partir.
+   */
+  async crearConContinuacion(data: CreateAppointmentDto, user?: AuthenticatedUser) {
+    const fecha = this.parseDate(data.fecha);
+    const horaInicio = this.parseDate(data.horaInicio);
+    const horaFin = this.parseDate(data.horaFin);
+    const durationMinutes = Math.round(
+      (horaFin.getTime() - horaInicio.getTime()) / (1000 * 60),
+    );
+
+    const [user_, profesional, service, relation, sedeRaw] = await Promise.all([
+      this.prisma.users.findUnique({ where: { id: data.userId } }),
+      this.prisma.profesional.findUnique({ where: { id: data.profesionalId } }),
+      this.prisma.service.findUnique({
+        where: { id: data.serviceId },
+        include: { prices: true },
+      }),
+      this.prisma.serviceSedeProfesional.findFirst({
+        where: {
+          sedeId: data.sedeId,
+          serviceId: data.serviceId,
+          profesionalId: data.profesionalId,
+        },
+      }),
+      this.prisma.sede.findUnique({
+        where: { id: data.sedeId },
+        include: {
+          HorarioSede: true,
+          DiaCerradoSede: true,
+          empresa: { select: { bloqueada: true, bloqueadaMotivo: true } },
+        },
+      }),
+    ]);
+
+    if (!user_) throw new BadRequestException('El usuario no existe');
+    if (!profesional) throw new BadRequestException('El profesional no existe');
+    if (!service) throw new BadRequestException('El servicio seleccionado no existe');
+    if (!relation) {
+      throw new BadRequestException(
+        'El profesional no está asociado a ese servicio en la sede seleccionada',
+      );
+    }
+    if (!relation.permiteContinuarOtroDia) {
+      throw new BadRequestException(
+        'Este servicio no tiene habilitado partirse en dos días.',
+      );
+    }
+    if (!sedeRaw) throw new BadRequestException('La sede seleccionada no existe');
+    if (sedeRaw.empresa?.bloqueada) {
+      throw new BadRequestException(
+        sedeRaw.empresa.bloqueadaMotivo
+          ? `Esta empresa está bloqueada: ${sedeRaw.empresa.bloqueadaMotivo}`
+          : 'Esta empresa está bloqueada temporalmente y no acepta reservas.',
+      );
+    }
+    const sede = sedeRaw as SedeConHorarios;
+
+    const matchingPrice = service.prices.find(
+      (price) => price.duration === data.duracion,
+    );
+    if (!matchingPrice) {
+      throw new BadRequestException(
+        'La duración no coincide con ninguna tarifa registrada para el servicio',
+      );
+    }
+
+    const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio);
+    const dayNames = [
+      'domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado',
+    ];
+    const horarioRegistro = sede.HorarioSede.find(
+      (r) => r.diaSemana === dayOfWeek && r.activo,
+    );
+    let scheduleRanges: { start: number; end: number }[] = [];
+    if (horarioRegistro) {
+      scheduleRanges = [{
+        start: this.getMinutesFromHourString(horarioRegistro.horaApertura),
+        end: this.getMinutesFromHourString(horarioRegistro.horaCierre),
+      }];
+    } else if (sede.horario && typeof sede.horario === 'object') {
+      const normalizedTarget = this.normalizeKey(dayNames[dayOfWeek]);
+      const entry = Object.entries(
+        sede.horario as Record<string, string | null>,
+      ).find(([key]) => this.normalizeKey(key) === normalizedTarget)?.[1];
+      scheduleRanges = this.parseScheduleRanges(entry ?? undefined);
+    }
+
+    const inicio = this.getMinutesFromDate(horaInicio);
+    const fin = this.getMinutesFromDate(horaFin);
+    const bufferMinutos = relation.tiempoAdicionalMinutos ?? 0;
+    const rangoDeInicio = scheduleRanges.find(
+      (range) => inicio >= range.start && inicio <= range.end,
+    );
+
+    // Ya entra completo en un solo día (por ejemplo, se liberó tiempo desde
+    // que se sugirió partirlo) — se crea normal, sin partir nada.
+    if (rangoDeInicio && fin + bufferMinutos <= rangoDeInicio.end) {
+      return this.create(data, user);
+    }
+
+    if (!rangoDeInicio) {
+      throw new BadRequestException(
+        'La cita se encuentra fuera del horario operativo de la sede',
+      );
+    }
+
+    const minutosDisponiblesHoy = rangoDeInicio.end - inicio;
+    if (minutosDisponiblesHoy <= 0) {
+      throw new BadRequestException(
+        'No queda tiempo disponible hoy para empezar este servicio.',
+      );
+    }
+
+    const duracionRestante = data.duracion - minutosDisponiblesHoy;
+    const horaFinParte1 = new Date(
+      horaInicio.getTime() + minutosDisponiblesHoy * 60_000,
+    );
+
+    const ocupadoHoy = await this.findOverlappingConBuffer(
+      data.profesionalId,
+      horaInicio,
+      horaFinParte1,
+      0,
+    );
+    if (ocupadoHoy) {
+      throw new BadRequestException(
+        'El profesional ya tiene una cita en ese horario',
+      );
+    }
+
+    const sugerencia = await this.sugerirContinuacionOtroDia({
+      profesionalId: data.profesionalId,
+      sede,
+      fecha,
+      duracionRestante,
+    });
+    if (!sugerencia) {
+      throw new BadRequestException(
+        'No se encontró un día disponible para completar el resto del servicio en los próximos 30 días.',
+      );
+    }
+
+    const horaInicio2 = new Date(sugerencia.horaInicio);
+    const horaFin2 = new Date(sugerencia.horaFin);
+    const fecha2 = new Date(`${sugerencia.fecha}T00:00:00Z`);
+
+    const montoTotal = data.paymentAmount ?? matchingPrice.amount;
+    const montoParte1 =
+      Math.round(((montoTotal * minutosDisponiblesHoy) / data.duracion) * 100) / 100;
+    const montoParte2 = Math.round((montoTotal - montoParte1) * 100) / 100;
+
+    let expiryMonth: number | undefined;
+    let expiryYear: number | undefined;
+    if (data.expiryDate) {
+      const [month, year] = data.expiryDate.split('/').map(Number);
+      expiryMonth = month;
+      expiryYear = 2000 + year;
+    }
+
+    // Parte 1: hoy, hasta donde alcanza.
+    const parte1 = await this.prisma.appointment.create({
+      data: {
+        fecha,
+        horaInicio,
+        horaFin: horaFinParte1,
+        duracion: minutosDisponiblesHoy,
+        sedeId: data.sedeId,
+        serviceId: data.serviceId,
+        profesionalId: data.profesionalId,
+        userId: data.userId,
+        notas: 'Primera parte de un servicio dividido en dos días',
+      },
+    });
+
+    try {
+      await this.paymentService.createPayment({
+        userId: data.userId,
+        appointmentId: parte1.id,
+        method: data.paymentMethod,
+        amount: montoParte1,
+        cardNumber: data.cardNumber,
+        expiryMonth,
+        expiryYear,
+        cvv: data.cvv,
+        saveCard: false,
+      });
+    } catch (paymentError) {
+      await this.prisma.appointment.update({
+        where: { id: parte1.id },
+        data: {
+          estado: AppointmentStatus.CANCELLED,
+          notas: 'Cancelada automáticamente: falló el procesamiento del pago',
+        },
+      });
+      throw paymentError;
+    }
+
+    // Parte 2: el resto, en el próximo día disponible del mismo profesional.
+    const parte2 = await this.prisma.appointment.create({
+      data: {
+        fecha: fecha2,
+        horaInicio: horaInicio2,
+        horaFin: horaFin2,
+        duracion: duracionRestante,
+        sedeId: data.sedeId,
+        serviceId: data.serviceId,
+        profesionalId: data.profesionalId,
+        userId: data.userId,
+        extensionDeId: parte1.id,
+        notas: `Continuación de la cita #${parte1.id}`,
+      },
+    });
+
+    if (montoParte2 > 0) {
+      try {
+        await this.paymentService.createPayment({
+          userId: data.userId,
+          appointmentId: parte2.id,
+          method: data.paymentMethod,
+          amount: montoParte2,
+          cardNumber: data.cardNumber,
+          expiryMonth,
+          expiryYear,
+          cvv: data.cvv,
+          saveCard: false,
+        });
+      } catch (paymentError) {
+        await this.prisma.appointment.update({
+          where: { id: parte2.id },
+          data: {
+            estado: AppointmentStatus.CANCELLED,
+            notas: 'Cancelada automáticamente: falló el procesamiento del pago',
+          },
+        });
+        throw paymentError;
+      }
+    }
+
+    await this.logAppointmentHistory(
+      parte1.id,
+      AppointmentHistoryAction.CONTINUACION_OTRO_DIA,
+      { duracionSolicitada: data.duracion },
+      {
+        parte1Id: parte1.id,
+        parte2Id: parte2.id,
+        fecha2: fecha2.toISOString(),
+        horaInicio2: horaInicio2.toISOString(),
+        horaFin2: horaFin2.toISOString(),
+        duracionRestante,
+      },
+      user?.userId,
+    );
+
+    this.notifyReservationAdmins(parte1, sede, service, profesional, user_).catch(
+      (notifyError) =>
+        this.logger.error(
+          `No se pudo notificar la reserva ${parte1.id}: ${notifyError?.message ?? notifyError}`,
+        ),
+    );
+
+    return { parte1, parte2 };
+  }
+
   /** Nota sobre el cliente que espera a ser atendido. */
   async setObservacionEspera(id: number, dto: ObservacionEsperaDto) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
@@ -2090,11 +2555,18 @@ export class AppointmentService {
       );
     }
 
-    const [profesional, sede] = await Promise.all([
+    const [profesional, sede, relacion] = await Promise.all([
       this.prisma.profesional.findUnique({ where: { id: cita.profesionalId } }),
       this.prisma.sede.findUnique({
         where: { id: cita.sedeId },
         include: { HorarioSede: true, DiaCerradoSede: true },
+      }),
+      this.prisma.serviceSedeProfesional.findFirst({
+        where: {
+          sedeId: cita.sedeId,
+          serviceId: cita.serviceId,
+          profesionalId: cita.profesionalId,
+        },
       }),
     ]);
 
@@ -2103,6 +2575,8 @@ export class AppointmentService {
       throw new BadRequestException('El profesional no está disponible');
 
     if (!sede) throw new BadRequestException('La sede no existe');
+
+    const bufferMinutos = relacion?.tiempoAdicionalMinutos ?? 0;
 
     const fecha = new Date(Date.UTC(año, mes, dia));
     const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio);
@@ -2145,17 +2619,23 @@ export class AppointmentService {
 
     const inicio = this.getMinutesFromDate(horaInicio);
     const fin = this.getMinutesFromDate(horaFin);
+    const finConBuffer = fin + bufferMinutos;
 
     const fitsWithinSchedule = scheduleRanges.some((range) => {
       const rangeLength = range.end - range.start;
-      if (durationMinutes > rangeLength) return false;
-      const adjustedEnd = range.end + durationMinutes;
-      return inicio >= range.start && inicio <= range.end && fin <= adjustedEnd;
+      if (durationMinutes + bufferMinutos > rangeLength) return false;
+      // Antes usaba `range.end + durationMinutes` como límite (ver create()):
+      // dejaba pasar citas que terminaban después del cierre real.
+      return (
+        inicio >= range.start && inicio <= range.end && finConBuffer <= range.end
+      );
     });
 
     if (!fitsWithinSchedule) {
       throw new BadRequestException(
-        'La cita se encuentra fuera del horario operativo de la sede',
+        bufferMinutos > 0
+          ? `La cita (incluyendo ${bufferMinutos} min de tiempo adicional tras el servicio) se encuentra fuera del horario operativo de la sede`
+          : 'La cita se encuentra fuera del horario operativo de la sede',
       );
     }
 
@@ -2226,16 +2706,16 @@ export class AppointmentService {
     }
 
     // Solape por instantes, sin mirar 'fecha' (ver create()): la columna no
-    // tiene una hora fija y la igualdad dejaba pasar choques reales.
-    const overlapping = await this.prisma.appointment.findFirst({
-      where: {
-        id: { not: id },
-        profesionalId: cita.profesionalId,
-        estado: { notIn: ESTADOS_SIN_FRANJA },
-        horaInicio: { lt: horaFin },
-        horaFin: { gt: horaInicio },
-      },
-    });
+    // tiene una hora fija y la igualdad dejaba pasar choques reales. Tiene
+    // en cuenta el tiempo adicional configurado (propio y de cada cita con
+    // la que se compara).
+    const overlapping = await this.findOverlappingConBuffer(
+      cita.profesionalId,
+      horaInicio,
+      horaFin,
+      bufferMinutos,
+      id,
+    );
 
     if (overlapping) {
       throw new BadRequestException(

@@ -200,6 +200,8 @@ export class ServiceSedeProfesionalService {
             sedeId,
             serviceId,
             profesionalId,
+            tiempoAdicionalMinutos: createDto.tiempoAdicionalMinutos ?? 0,
+            permiteContinuarOtroDia: createDto.permiteContinuarOtroDia ?? false,
           },
         });
 
