@@ -56,14 +56,22 @@ export class ServiceSedeProfesionalService {
         sedeId,
         profesionalId,
       },
-      select: { id: true, serviceId: true },
+      select: {
+        id: true,
+        serviceId: true,
+        /* Los ajustes de la asignación viajan con el listado: el panel los
+           edita ahí mismo y, sin ellos, los pintaría en blanco y al guardar
+           machacaría lo que ya hubiera configurado. */
+        tiempoAdicionalMinutos: true,
+        permiteContinuarOtroDia: true,
+      },
     });
 
     /* Se devuelve también el id de la relación: sin él, para quitar una
        asignación habría que traerse la tabla entera, porque GET /
        no admite filtros. */
     const asignadosPorServicio = new Map(
-      asignados.map((a) => [a.serviceId, a.id]),
+      asignados.map((a) => [a.serviceId, a]),
     );
 
     const services = await this.prisma.service.findMany({
@@ -105,7 +113,13 @@ export class ServiceSedeProfesionalService {
       precios: service.prices,
       asignado: asignadosPorServicio.has(service.id),
       /** id de service_sede_profesional; null si no está asignado */
-      asignacionId: asignadosPorServicio.get(service.id) ?? null,
+      asignacionId: asignadosPorServicio.get(service.id)?.id ?? null,
+      /** Minutos que se bloquean tras cada cita de este servicio aquí */
+      tiempoAdicionalMinutos:
+        asignadosPorServicio.get(service.id)?.tiempoAdicionalMinutos ?? 0,
+      /** Si puede partirse en dos días cuando no entra antes del cierre */
+      permiteContinuarOtroDia:
+        asignadosPorServicio.get(service.id)?.permiteContinuarOtroDia ?? false,
     }));
   }
 
