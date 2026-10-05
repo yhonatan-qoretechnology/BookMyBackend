@@ -11,6 +11,15 @@ export class QueryFestivosDto {
   @IsOptional() @Type(() => Number) @IsInt()
   sedeId?: number;
 
+  @ApiPropertyOptional({
+    example: 7,
+    description:
+      'Empresa: devuelve los festivos de TODAS sus sedes juntos. Para el ' +
+      'calendario del dueño, que no trabaja sobre una sede concreta.',
+  })
+  @IsOptional() @Type(() => Number) @IsInt()
+  empresaId?: number;
+
   @ApiPropertyOptional({ example: 'AN', description: 'Comunidad autónoma, si no se pasa sedeId.' })
   @IsOptional() @IsString()
   ccaa?: string;

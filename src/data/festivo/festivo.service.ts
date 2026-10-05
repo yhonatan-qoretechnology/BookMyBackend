@@ -46,20 +46,32 @@ export class FestivoService {
    */
   async findAll(query: QueryFestivosDto) {
     const anio = query.anio ?? new Date().getFullYear();
-    let { ccaa, municipio } = query;
 
-    if (query.sedeId) {
-      const sede = await this.prisma.sede.findUnique({
-        where: { id: query.sedeId },
+    /* Una sede marca una comunidad; una empresa, tantas como sedes tenga
+       repartidas por España — el dueño ve un solo calendario y le tienen
+       que salir todas. */
+    const ccaas = new Set<string>();
+    const municipios = new Set<string>();
+    if (query.ccaa) ccaas.add(query.ccaa);
+    if (query.municipio) municipios.add(query.municipio);
+
+    if (query.sedeId || query.empresaId) {
+      const sedes = await this.prisma.sede.findMany({
+        where: query.sedeId ? { id: query.sedeId } : { empresaId: query.empresaId },
         select: { ccaa: true, municipio: true, provincia: true },
       });
-      /* `provincia` es el campo antiguo y hoy guarda municipios
-         ("Benalmadena"), asi que sirve de respaldo si `municipio` esta vacio. */
-      municipio = municipio ?? sede?.municipio ?? sede?.provincia ?? undefined;
-      // Antes esto asumía 'AN' (Andalucía) para CUALQUIER sede sin importar
-      // dónde estuviera. Ahora usa el código cargado en la sede si existe,
-      // y si no, lo infiere de su municipio/provincia (ver ccaa-lookup.ts).
-      ccaa = ccaa ?? sede?.ccaa ?? inferirCcaa(sede?.municipio, sede?.provincia);
+
+      for (const sede of sedes) {
+        /* `provincia` es el campo antiguo y hoy guarda municipios
+           ("Benalmadena"), asi que sirve de respaldo si `municipio` esta vacio. */
+        const municipio = sede.municipio ?? sede.provincia ?? undefined;
+        if (municipio) municipios.add(municipio);
+        // Antes esto asumía 'AN' (Andalucía) para CUALQUIER sede sin importar
+        // dónde estuviera. Ahora usa el código cargado en la sede si existe,
+        // y si no, lo infiere de su municipio/provincia (ver ccaa-lookup.ts).
+        const ccaa = sede.ccaa ?? inferirCcaa(sede.municipio, sede.provincia);
+        if (ccaa) ccaas.add(ccaa);
+      }
     }
 
     const desde = new Date(Date.UTC(anio, 0, 1));
@@ -70,8 +82,12 @@ export class FestivoService {
         fecha: { gte: desde, lt: hasta },
         OR: [
           { ambito: AmbitoFestivo.NACIONAL },
-          ...(ccaa ? [{ ambito: AmbitoFestivo.AUTONOMICO, ccaa }] : []),
-          ...(municipio ? [{ ambito: AmbitoFestivo.LOCAL, municipio }] : []),
+          ...(ccaas.size
+            ? [{ ambito: AmbitoFestivo.AUTONOMICO, ccaa: { in: [...ccaas] } }]
+            : []),
+          ...(municipios.size
+            ? [{ ambito: AmbitoFestivo.LOCAL, municipio: { in: [...municipios] } }]
+            : []),
         ],
       },
       orderBy: { fecha: 'asc' },

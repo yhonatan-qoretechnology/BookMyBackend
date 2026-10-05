@@ -47,6 +47,17 @@ export class CreateSedeDto {
   @IsString()
   municipio?: string;
 
+  @ApiProperty({
+    example: 'CT',
+    required: false,
+    description:
+      'Comunidad autónoma en ISO 3166-2:ES (AN, CT, MD…). Decide qué festivos ' +
+      'autonómicos ve la sede. Si no se manda, se infiere del municipio/provincia.',
+  })
+  @IsOptional()
+  @IsString()
+  ccaa?: string;
+
   @ApiProperty({ example: 'Arroyo de la Miel', description: 'Localidad o barriada', required: false })
   @IsOptional()
   @IsString()
