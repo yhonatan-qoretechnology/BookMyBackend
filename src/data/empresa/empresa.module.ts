@@ -4,6 +4,7 @@ import { AuthModule } from '../../auth/auth.module';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { EmpresaController } from './empresa.controller';
 import { EmpresaService } from './empresa.service';
+import { KycService } from './kyc.service';
 import { PlanProGuard } from './plan-pro.guard';
 import { PlanService } from './plan.service';
 import { RegistroNegocioService } from './registro-negocio.service';
@@ -14,7 +15,13 @@ import { RegistroNegocioService } from './registro-negocio.service';
      plan de la empresa al iniciar sesión. */
   imports: [PrismaModule, forwardRef(() => AuthModule)],
   controllers: [EmpresaController],
-  providers: [EmpresaService, PlanService, RegistroNegocioService, PlanProGuard],
+  providers: [
+    EmpresaService,
+    KycService,
+    PlanService,
+    RegistroNegocioService,
+    PlanProGuard,
+  ],
   exports: [PlanService, PlanProGuard],
 })
 export class EmpresaModule {}

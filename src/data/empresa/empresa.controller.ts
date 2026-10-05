@@ -10,11 +10,12 @@ import {
   Patch,
   Post,
   UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiBody,
@@ -32,6 +33,8 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateEmpresaWithFileDto } from '../empresa/dto/create-empresa-with-file.dto';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
+import { EnviarKycDto } from './dto/enviar-kyc.dto';
+import { ArchivosKyc, KycService } from './kyc.service';
 import { RegistroNegocioDto } from './dto/registro-negocio.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
 import { EmpresaService } from './empresa.service';
@@ -45,6 +48,7 @@ export class EmpresaController {
     private readonly empresaService: EmpresaService,
     private readonly planService: PlanService,
     private readonly registroNegocio: RegistroNegocioService,
+    private readonly kyc: KycService,
   ) {}
 
   /* ── Alta de un negocio desde la web ──────────────────────
@@ -98,6 +102,113 @@ export class EmpresaController {
     @Body('plan') plan: PlanEmpresa,
   ) {
     return this.planService.cambiarPlan(id, plan);
+  }
+
+  /* ── Verificación de identidad del negocio (KYC) ──────────
+     Revisión manual del SUPER_ADMIN. No bloquea nada: la empresa sigue
+     trabajando mientras espera. Ojo con el orden de las rutas: esta va
+     ANTES de @Get(':id') o "kyc" se tomaría por un id. */
+  @Get('kyc/pendientes')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Cola de verificaciones por revisar (solo SUPER_ADMIN)',
+    description: 'Las que están EN_REVISION, de la más antigua a la más nueva.',
+  })
+  async kycPendientes() {
+    return this.kyc.pendientes();
+  }
+
+  @Get(':id/kyc')
+  @ApiOperation({
+    summary: 'Estado de la verificación de una empresa',
+    description:
+      'Accesible para el dueño de esa empresa y para el SUPER_ADMIN. Si nunca ' +
+      'envió documentación, devuelve estado PENDIENTE.',
+  })
+  async kycEstado(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.kyc.estadoDe(id, user);
+  }
+
+  @Post(':id/kyc')
+  @ApiOperation({
+    summary: 'Enviar (o reenviar) la documentación de verificación',
+    description:
+      'Deja la verificación EN_REVISION. Los archivos que no se manden ' +
+      'conservan el valor anterior, para poder corregir solo lo que pidió ' +
+      'el superadmin.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        nifCif: { type: 'string', example: 'B12345678' },
+        documentoTipo: { type: 'string', example: 'DNI' },
+        documentoFrente: { type: 'string', format: 'binary' },
+        documentoDorso: { type: 'string', format: 'binary' },
+        selfie: { type: 'string', format: 'binary' },
+        justificante: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Falta el documento del responsable.' })
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'documentoFrente', maxCount: 1 },
+        { name: 'documentoDorso', maxCount: 1 },
+        { name: 'selfie', maxCount: 1 },
+        { name: 'justificante', maxCount: 1 },
+      ],
+      { dest: './uploads/kyc/temp' },
+    ),
+  )
+  async kycEnviar(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: EnviarKycDto,
+    @UploadedFiles() archivos: ArchivosKyc,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.kyc.enviar(id, dto, archivos ?? {}, user);
+  }
+
+  @Patch(':id/kyc/aprobar')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Aprobar la verificación (solo SUPER_ADMIN)' })
+  @ApiNotFoundResponse({ description: 'La empresa no ha enviado documentación.' })
+  async kycAprobar(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.kyc.aprobar(id, user);
+  }
+
+  @Patch(':id/kyc/rechazar')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Rechazar la verificación con un motivo (solo SUPER_ADMIN)',
+    description: 'El negocio ve el motivo en su panel y puede volver a enviarla.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { motivo: { type: 'string', example: 'La foto del DNI está ilegible' } },
+      required: ['motivo'],
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Falta el motivo del rechazo.' })
+  async kycRechazar(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('motivo') motivo: string,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.kyc.rechazar(id, motivo, user);
   }
 
   @Post()

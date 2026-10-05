@@ -40,6 +40,7 @@ model Users {
   assistantConversations                           AssistantConversation[]
   notifications                                     Notification[]
   appointmentHistories                              AppointmentHistory[]
+  kycRevisados                                      EmpresaKyc[]
 
   @@index([email])
   @@map("users")
@@ -238,8 +239,46 @@ model Empresa {
   adminProfiles    AdminProfile[]
   sedes            Sede[]
   categoriasGasto  CategoriaGasto[]
+  kyc              EmpresaKyc?
 
   @@map("empresas")
+}
+
+// Verificación de identidad del negocio (KYC), revisada a mano por el
+// SUPER_ADMIN. No bloquea nada: el negocio trabaja igual mientras tanto;
+// solo se le avisa en el panel y queda en la cola de revisión.
+enum KycEstado {
+  PENDIENTE   // nunca envió documentación
+  EN_REVISION // la envió y espera al superadmin
+  APROBADA
+  RECHAZADA   // con motivo; puede volver a enviar
+}
+
+model EmpresaKyc {
+  id              Int       @id @default(autoincrement())
+  empresaId       Int       @unique @map("empresa_id")
+  estado          KycEstado @default(PENDIENTE)
+  /// NIF/CIF del negocio, para cruzarlo con los datos de facturación
+  nifCif          String?   @map("nif_cif")
+  /// Tipo de documento del responsable (DNI/NIE/Pasaporte), de DocumentType
+  documentoTipo   String?   @map("documento_tipo")
+  /// Rutas relativas ("uploads/kyc/…"), igual que el resto de archivos
+  documentoFrente String?   @map("documento_frente")
+  documentoDorso  String?   @map("documento_dorso")
+  selfie          String?   @map("selfie")
+  justificante    String?   @map("justificante")
+  enviadoEn       DateTime? @map("enviado_en")
+  revisadoEn      DateTime? @map("revisado_en")
+  revisadoPorId   Int?      @map("revisado_por_id")
+  motivoRechazo   String?   @map("motivo_rechazo")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  empresa     Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  revisadoPor Users?  @relation(fields: [revisadoPorId], references: [id], onDelete: SetNull)
+
+  @@index([estado])
+  @@map("empresa_kyc")
 }
 
 model Sede {

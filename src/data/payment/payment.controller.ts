@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
@@ -15,6 +16,7 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import { ModuloPro, PlanProGuard } from '../empresa/plan-pro.guard';
 import { CreatePaymentCardDto } from './dto/create-payment-card.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentItemDto } from './dto/create-payment-item.dto';
@@ -27,7 +29,14 @@ import { PaymentService } from './payment.service';
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
+  /* ── Pantallas de Facturación del panel: son de Bookmy CRM Pro ──
+     El guard va ruta a ruta, NO en el controlador: crear un pago, las
+     tarjetas y confirmar/cancelar los usa también la app del cliente,
+     que no pertenece a ninguna empresa y exigirPro la rechazaría. */
+
   @Get(':id/items')
+  @ModuloPro('La facturación')
+  @UseGuards(PlanProGuard)
   @ApiOperation({ summary: 'Adicionales de una factura' })
   @ApiOkResponse({ description: 'Lista de conceptos adicionales.' })
   async listItems(@Param('id') id: string) {
@@ -35,6 +44,8 @@ export class PaymentController {
   }
 
   @Post(':id/items')
+  @ModuloPro('La facturación')
+  @UseGuards(PlanProGuard)
   @ApiOperation({
     summary: 'Anadir un adicional a la factura',
     description:
@@ -46,6 +57,8 @@ export class PaymentController {
   }
 
   @Delete('items/:itemId')
+  @ModuloPro('La facturación')
+  @UseGuards(PlanProGuard)
   @ApiOperation({ summary: 'Quitar un adicional de la factura' })
   @ApiOkResponse({ description: 'Factura con el total actualizado.' })
   async removeItem(@Param('itemId') itemId: string) {
@@ -71,6 +84,8 @@ export class PaymentController {
   }
 
   @Get()
+  @ModuloPro('La facturación')
+  @UseGuards(PlanProGuard)
   @ApiOperation({ summary: 'Listar todos los pagos' })
   @ApiQuery({
     name: 'userId',
@@ -84,6 +99,8 @@ export class PaymentController {
   }
 
   @Get('filter')
+  @ModuloPro('La facturación')
+  @UseGuards(PlanProGuard)
   @ApiOperation({ summary: 'Filtrar pagos por usuario y/o sede' })
   @ApiQuery({
     name: 'userId',
