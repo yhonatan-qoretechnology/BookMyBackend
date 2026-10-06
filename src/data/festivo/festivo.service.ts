@@ -3,7 +3,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { AmbitoFestivo } from '@prisma/client';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { inferirRegion } from './region-lookup';
+import { inferirRegion, normalizar } from './region-lookup';
 import { QueryFestivosDto } from './dto/query-festivos.dto';
 
 /**
@@ -113,7 +113,7 @@ export class FestivoService {
     const desde = new Date(Date.UTC(anio, 0, 1));
     const hasta = new Date(Date.UTC(anio + 1, 0, 1));
 
-    return this.prisma.festivo.findMany({
+    const festivos = await this.prisma.festivo.findMany({
       where: {
         pais: pais ?? PAIS_POR_DEFECTO,
         fecha: { gte: desde, lt: hasta },
@@ -122,13 +122,89 @@ export class FestivoService {
           ...(regiones.size
             ? [{ ambito: AmbitoFestivo.REGIONAL, region: { in: [...regiones] } }]
             : []),
-          ...(municipios.size
-            ? [{ ambito: AmbitoFestivo.LOCAL, municipio: { in: [...municipios] } }]
-            : []),
+          /* Los locales se filtran despues, a mano: ver abajo. */
+          ...(municipios.size ? [{ ambito: AmbitoFestivo.LOCAL }] : []),
         ],
       },
       orderBy: { fecha: 'asc' },
     });
+
+    /* El municipio no se puede comparar con un `in` de Prisma: la tabla
+       guarda "Malaga" y las sedes "Málaga" o "Benalmádena", y un igual
+       exacto no casa por una tilde. Se comparan normalizados (sin tildes
+       y en minúsculas), que es como ya se resuelve la región. */
+    const buscados = new Set([...municipios].map(normalizar));
+    return festivos.filter(
+      (f) =>
+        f.ambito !== AmbitoFestivo.LOCAL ||
+        (!!f.municipio && buscados.has(normalizar(f.municipio))),
+    );
+  }
+
+  /**
+   * Alta manual de un festivo LOCAL (el de un municipio). La API externa
+   * solo publica los nacionales y los autonómicos: los patronos de cada
+   * pueblo los carga el superadmin, y son justo los que cambian de
+   * Benalmádena a Marbella aunque estén a veinte minutos.
+   */
+  async crearLocal(datos: {
+    fecha: string;
+    nombre: string;
+    municipio: string;
+    pais?: string;
+  }) {
+    const fecha = new Date(`${datos.fecha}T00:00:00.000Z`);
+    if (Number.isNaN(fecha.getTime())) {
+      throw new BadRequestException('La fecha debe tener formato YYYY-MM-DD.');
+    }
+    const municipio = datos.municipio.trim();
+    if (!municipio) throw new BadRequestException('Indica el municipio.');
+
+    return this.prisma.festivo.upsert({
+      where: {
+        pais_fecha_ambito_region_municipio: {
+          pais: (datos.pais ?? PAIS_POR_DEFECTO).toUpperCase(),
+          fecha,
+          ambito: AmbitoFestivo.LOCAL,
+          region: '',
+          municipio,
+        },
+      },
+      update: { nombre: datos.nombre.trim() },
+      create: {
+        pais: (datos.pais ?? PAIS_POR_DEFECTO).toUpperCase(),
+        fecha,
+        nombre: datos.nombre.trim(),
+        ambito: AmbitoFestivo.LOCAL,
+        region: '',
+        municipio,
+      },
+    });
+  }
+
+  /** Los festivos locales ya cargados, para la pantalla que los gestiona. */
+  async locales(anio?: number, pais = PAIS_POR_DEFECTO) {
+    const anioFinal = anio ?? new Date().getFullYear();
+    return this.prisma.festivo.findMany({
+      where: {
+        pais: pais.toUpperCase(),
+        ambito: AmbitoFestivo.LOCAL,
+        fecha: {
+          gte: new Date(Date.UTC(anioFinal, 0, 1)),
+          lt: new Date(Date.UTC(anioFinal + 1, 0, 1)),
+        },
+      },
+      orderBy: [{ municipio: 'asc' }, { fecha: 'asc' }],
+    });
+  }
+
+  /** Quita un festivo local cargado a mano. */
+  async borrarLocal(id: number) {
+    const festivo = await this.prisma.festivo.findUnique({ where: { id } });
+    if (!festivo || festivo.ambito !== AmbitoFestivo.LOCAL) {
+      throw new BadRequestException('Solo se pueden borrar festivos locales.');
+    }
+    await this.prisma.festivo.delete({ where: { id } });
   }
 
   /**

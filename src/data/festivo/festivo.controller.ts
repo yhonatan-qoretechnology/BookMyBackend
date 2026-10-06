@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
   ParseIntPipe,
   Post,
   Query,
@@ -57,5 +59,40 @@ export class FestivoController {
     @Body('pais') pais?: string,
   ) {
     return this.festivoService.sincronizarAnio(anio, pais);
+  }
+
+  /* ── Festivos locales (los del municipio) ─────────────────
+     La API externa solo publica nacionales y regionales. Los patronos de
+     cada pueblo —los que hacen que Benalmádena y Marbella no cierren los
+     mismos días— se cargan aquí a mano. */
+  @Get('locales')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Festivos locales cargados de un año (solo SUPER_ADMIN)' })
+  locales(@Query('anio') anio?: string, @Query('pais') pais?: string) {
+    return this.festivoService.locales(anio ? Number(anio) : undefined, pais);
+  }
+
+  @Post('local')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Añadir un festivo local (solo SUPER_ADMIN)',
+    description:
+      'El municipio se compara sin tildes y sin mayúsculas, así que da igual ' +
+      'escribir "Benalmádena" o "Benalmadena".',
+  })
+  crearLocal(
+    @Body() body: { fecha: string; nombre: string; municipio: string; pais?: string },
+  ) {
+    return this.festivoService.crearLocal(body);
+  }
+
+  @Delete('local/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Quitar un festivo local (solo SUPER_ADMIN)' })
+  borrarLocal(@Param('id', ParseIntPipe) id: number) {
+    return this.festivoService.borrarLocal(id);
   }
 }

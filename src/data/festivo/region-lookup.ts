@@ -91,7 +91,8 @@ const ESPANA: Record<string, string> = {
   melilla: 'ML',
 };
 
-function normalizar(valor: string): string {
+/** Sin tildes y en minúsculas: "Málaga" y "Malaga" tienen que casar. */
+export function normalizar(valor: string): string {
   return valor
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
