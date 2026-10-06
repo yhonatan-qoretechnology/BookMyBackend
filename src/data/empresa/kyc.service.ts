@@ -68,12 +68,26 @@ export class KycService {
    * Quien puede ver o enviar el KYC de una empresa: el superadmin y el
    * dueño de ESA empresa. Un admin de otra empresa no pinta nada aquí.
    */
+  /**
+   * Quien puede gestionar la verificacion de una empresa.
+   *
+   * Lo envia cualquier ADMINISTRADOR de esa empresa, sea el dueno o el
+   * administrador de una sede. Al principio solo podia el dueno, y eso
+   * dejaba fuera a nueve de las trece empresas de produccion: no tienen
+   * cuenta de dueno, asi que su verificacion no la podia enviar nadie.
+   *
+   * Quien no entra: los profesionales (EMPLOYEE), los clientes, y cualquier
+   * administrador de OTRA empresa.
+   */
   private exigirAcceso(empresaId: number, user?: AuthenticatedUser) {
     if (!user) throw new ForbiddenException('Sesión requerida.');
     if (user.role === Role.SUPER_ADMIN) return;
-    if (user.role === Role.COMPANY_ADMIN && user.empresaId === empresaId) return;
+    const esAdminDeLaEmpresa =
+      (user.role === Role.COMPANY_ADMIN || user.role === Role.BRANCH_ADMIN) &&
+      user.empresaId === empresaId;
+    if (esAdminDeLaEmpresa) return;
     throw new ForbiddenException(
-      'Solo el dueño de la empresa o un superadmin pueden gestionar su verificación.',
+      'Solo un administrador de la empresa o un superadmin pueden gestionar su verificación.',
     );
   }
 
