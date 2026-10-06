@@ -128,3 +128,91 @@ export function inferirRegion(
   }
   return undefined;
 }
+
+/* Lo que aparece en las direcciones y NO es un municipio: el país, la
+   comunidad, la provincia escrita al final. Si el trozo que sigue al código
+   postal es uno de estos, no sirve como municipio. */
+const NO_ES_MUNICIPIO = new Set([
+  'espana', 'spain', 'colombia', 'andalucia', 'cataluna', 'galicia',
+  'madrid capital', 'comunidad de madrid', 'islas baleares', 'illes balears',
+  'canarias', 'pais vasco', 'euskadi', 'comunitat valenciana', 's/n', 'sn',
+]);
+
+/** "torremolinos" / "BENALMADENA" -> "Torremolinos" / "Benalmadena". */
+export function enTitulo(valor: string): string {
+  return valor
+    .toLowerCase()
+    .replace(/(^|[\s-])(\p{L})/gu, (_, sep, letra) => sep + letra.toUpperCase());
+}
+
+/**
+ * El MUNICIPIO de una sede, que es lo único que decide sus fiestas locales.
+ *
+ * Esto existe porque `Sede.municipio` viene casi siempre vacío y el campo
+ * antiguo `provincia` guarda cualquier cosa: en unas sedes el pueblo
+ * ("Benalmádena") y en otras la provincia ("Málaga"). Usar `provincia` tal
+ * cual hacía que Glow Marbella recibiera las fiestas de Málaga CAPITAL —la
+ * Feria y la Virgen de la Victoria— que no son las suyas.
+ *
+ * La dirección sí es fiable, porque viene del autocompletado de Google y
+ * trae el municipio justo detrás del código postal:
+ *   "C. Pablo Casals, 3, 29602 Marbella, Málaga, España" -> Marbella
+ *
+ * Orden: lo que esté cargado a mano manda; luego la dirección; y solo al
+ * final el campo antiguo, que es el que miente.
+ */
+export type OrigenMunicipio = 'municipio' | 'localidad' | 'direccion' | 'provincia';
+
+export function inferirMunicipio(
+  pais: string,
+  sede: {
+    municipio?: string | null;
+    localidad?: string | null;
+    direccion?: string | null;
+    provincia?: string | null;
+  },
+): { nombre: string; origen: OrigenMunicipio } | undefined {
+  const limpio = (valor?: string | null) => {
+    const texto = valor?.trim();
+    return texto ? texto : undefined;
+  };
+
+  const cargado = limpio(sede.municipio);
+  if (cargado) return { nombre: cargado, origen: 'municipio' };
+  const barrio = limpio(sede.localidad);
+  if (barrio) return { nombre: barrio, origen: 'localidad' };
+
+  const direccion = limpio(sede.direccion);
+  if (direccion) {
+    /* Lo que sigue al código postal. Se corta en la primera coma o cifra,
+       así que "29640 Fuengirola, Málaga" da "Fuengirola" y no la provincia. */
+    const trasElCp = /\b\d{5}\b[\s,]*([^,\d]+)/.exec(direccion);
+    const candidato = limpio(trasElCp?.[1]);
+    if (candidato && !NO_ES_MUNICIPIO.has(normalizar(candidato))) {
+      return { nombre: candidato, origen: 'direccion' };
+    }
+
+    /* Direcciones sin código postal ("...264 Torremolinos, Málaga España"):
+       se busca el primer municipio conocido que aparezca. Gana el que esté
+       antes porque la provincia se escribe al final, y así una calle con
+       nombre de pueblo ("C. Marbella, Fuengirola") no se cuela: esas
+       direcciones llevan código postal y no llegan hasta aquí. */
+    const tabla = POR_PAIS[pais?.toUpperCase()];
+    if (tabla) {
+      const texto = normalizar(direccion);
+      let mejor: { pos: number; nombre: string } | undefined;
+      for (const nombre of Object.keys(tabla)) {
+        const pos = texto.indexOf(nombre);
+        if (pos < 0) continue;
+        if (!mejor || pos < mejor.pos) mejor = { pos, nombre };
+      }
+      if (mejor) return { nombre: enTitulo(mejor.nombre), origen: 'direccion' };
+    }
+  }
+
+  /* Ultimo recurso: el campo antiguo. Se devuelve marcado como tal para que
+     el panel pueda pedir que lo confirmen — es el que guarda "Malaga" en
+     sedes que estan en Marbella. */
+  const antiguo = limpio(sede.provincia);
+  return antiguo ? { nombre: antiguo, origen: 'provincia' } : undefined;
+}

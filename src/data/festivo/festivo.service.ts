@@ -3,7 +3,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { AmbitoFestivo } from '@prisma/client';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { inferirRegion, normalizar } from './region-lookup';
+import { enTitulo, inferirMunicipio, inferirRegion, normalizar } from './region-lookup';
 import { QueryFestivosDto } from './dto/query-festivos.dto';
 
 /**
@@ -57,6 +57,20 @@ interface FestivoExterno {
 export class FestivoService {
   private readonly logger = new Logger(FestivoService.name);
   private readonly EXTERNAL_API_BASE = 'https://calendariosnacionales.com';
+  /**
+   * Fiestas locales oficiales, en CSV: PROVINCIA, LOCALIDAD, FECHA, TIPO,
+   * DESCRIPCION. Es la fuente que publica la Seguridad Social y de la que
+   * beben los demas calendarios; la API de calendariosnacionales.com, que ya
+   * usamos para nacionales y autonomicos, NO expone los municipios.
+   *
+   * Dos limites que conviene tener claros:
+   *  - Solo sirve el ano en curso: el servlet ignora cualquier parametro de
+   *    ano y siempre devuelve el actual.
+   *  - Trae 457 municipios, no los 8.131 de Espana (los que tienen oficina).
+   *    Torremolinos, por ejemplo, no esta: esos se siguen cargando a mano.
+   */
+  private readonly CSV_FIESTAS_LOCALES =
+    'https://www.seg-social.es/wps/PA_POINCALAB/CalendarioServlet?exportacion=CSV&tipo=0';
 
   constructor(
     private prisma: PrismaService,
@@ -70,45 +84,7 @@ export class FestivoService {
    */
   async findAll(query: QueryFestivosDto) {
     const anio = query.anio ?? new Date().getFullYear();
-
-    /* Una sede marca una región; una empresa, tantas como sedes tenga
-       repartidas — el dueño ve un solo calendario y le tienen que salir
-       todas las de sus sedes, no solo las nacionales. */
-    const regiones = new Set<string>();
-    const municipios = new Set<string>();
-    if (query.region) regiones.add(query.region);
-    if (query.municipio) municipios.add(query.municipio);
-    let pais = query.pais?.toUpperCase();
-
-    if (query.sedeId || query.empresaId) {
-      const sedes = await this.prisma.sede.findMany({
-        where: query.sedeId ? { id: query.sedeId } : { empresaId: query.empresaId },
-        select: {
-          region: true,
-          municipio: true,
-          provincia: true,
-          country: { select: { isoCode: true, tieneRegiones: true } },
-          empresa: { select: { country: { select: { isoCode: true } } } },
-        },
-      });
-
-      for (const sede of sedes) {
-        /* El país de la sede manda; si es una sede antigua sin país, se cae
-           al de su empresa, que sí es obligatorio. */
-        pais = pais ?? sede.country?.isoCode ?? sede.empresa?.country?.isoCode;
-        /* `provincia` es el campo antiguo y hoy guarda municipios
-           ("Benalmadena"), asi que sirve de respaldo si `municipio` esta vacio. */
-        const municipio = sede.municipio ?? sede.provincia ?? undefined;
-        if (municipio) municipios.add(municipio);
-        /* En un país sin festivos regionales no se infiere nada: preguntar
-           por la región de una sede de Bogotá no tiene sentido. */
-        if (sede.country?.tieneRegiones === false) continue;
-        const region =
-          sede.region ??
-          inferirRegion(pais ?? PAIS_POR_DEFECTO, sede.municipio, sede.provincia);
-        if (region) regiones.add(region);
-      }
-    }
+    const { pais, regiones, municipios } = await this.resolverAmbito(query);
 
     const desde = new Date(Date.UTC(anio, 0, 1));
     const hasta = new Date(Date.UTC(anio + 1, 0, 1));
@@ -139,6 +115,101 @@ export class FestivoService {
         f.ambito !== AmbitoFestivo.LOCAL ||
         (!!f.municipio && buscados.has(normalizar(f.municipio))),
     );
+  }
+
+  /**
+   * De QUIEN son los festivos que se van a devolver: pais, regiones y
+   * municipios. Se resuelve igual para el listado y para el contexto que
+   * muestra el panel, que es como el usuario comprueba que al cambiar de
+   * sede cambia de verdad el calendario.
+   *
+   * Una sede marca una region; una empresa, tantas como sedes tenga
+   * repartidas — el dueno ve un solo calendario y le tienen que salir todas
+   * las de sus sedes, no solo las nacionales.
+   */
+  private async resolverAmbito(query: QueryFestivosDto) {
+    const regiones = new Set<string>();
+    const municipios = new Set<string>();
+    if (query.region) regiones.add(query.region);
+    if (query.municipio) municipios.add(query.municipio);
+    let pais = query.pais?.toUpperCase();
+
+    const sedes =
+      query.sedeId || query.empresaId
+        ? await this.prisma.sede.findMany({
+            where: query.sedeId ? { id: query.sedeId } : { empresaId: query.empresaId },
+            select: {
+              id: true,
+              nombre: true,
+              region: true,
+              municipio: true,
+              localidad: true,
+              direccion: true,
+              provincia: true,
+              country: { select: { isoCode: true, tieneRegiones: true } },
+              empresa: { select: { country: { select: { isoCode: true } } } },
+            },
+          })
+        : [];
+
+    const porSede: {
+      sedeId: number;
+      nombre: string;
+      municipio?: string;
+      /* De donde salio el municipio: 'provincia' significa "del campo
+         antiguo", el que guarda la provincia en sedes que no estan en la
+         capital, y el panel pide que lo confirmen. */
+      origenMunicipio?: string;
+      region?: string;
+    }[] = [];
+
+    for (const sede of sedes) {
+      /* El pais de la sede manda; si es una sede antigua sin pais, se cae
+         al de su empresa, que si es obligatorio. */
+      pais = pais ?? sede.country?.isoCode ?? sede.empresa?.country?.isoCode;
+      const paisSede = pais ?? PAIS_POR_DEFECTO;
+
+      /* El municipio sale de la direccion, no del campo `provincia`: ese
+         guarda "Malaga" en sedes que estan en Marbella y les colaba las
+         fiestas de la capital. Ver inferirMunicipio(). */
+      const resuelto = inferirMunicipio(paisSede, sede);
+      const municipio = resuelto?.nombre;
+      if (municipio) municipios.add(municipio);
+
+      /* En un pais sin festivos regionales no se infiere nada: preguntar
+         por la region de una sede de Bogota no tiene sentido. */
+      const region =
+        sede.country?.tieneRegiones === false
+          ? undefined
+          : sede.region ?? inferirRegion(paisSede, municipio, sede.provincia);
+      if (region) regiones.add(region);
+
+      porSede.push({
+        sedeId: sede.id,
+        nombre: sede.nombre,
+        municipio,
+        origenMunicipio: resuelto?.origen,
+        region: region ?? undefined,
+      });
+    }
+
+    return { pais, regiones, municipios, porSede };
+  }
+
+  /**
+   * Que se le esta aplicando a esta sede (o empresa): pais, region y
+   * municipio. El panel lo escribe encima del calendario; sin esto, dos
+   * sedes del mismo pueblo parecen "no refrescar" cuando en realidad les
+   * toca lo mismo, y una sede con el municipio mal cargado no se nota.
+   */
+  async contexto(query: QueryFestivosDto) {
+    const { pais, regiones, municipios, porSede } = await this.resolverAmbito(query);
+    return {
+      pais: pais ?? PAIS_POR_DEFECTO,
+      regiones: [...regiones],
+      municipios: [...municipios],
+      sedes: porSede,
+    };
   }
 
   /**
@@ -319,9 +390,14 @@ export class FestivoService {
       }
     }
 
+    /* Las del municipio, que son justo las que cambian de Benalmadena a
+       Marbella y antes habia que teclear una por una. */
+    const locales = pais === 'ES' ? await this.sincronizarLocalesEspana(anio) : null;
+
     this.logger.log(
       `Festivos de ${pais} sincronizados para ${anio}: ${nacionalesCount} nacionales, ` +
-        `${regionalesCount} regionales (${fallos.length} regiones fallaron)`,
+        `${regionalesCount} regionales, ${locales?.localesCount ?? 0} locales ` +
+        `(${fallos.length} regiones fallaron)`,
     );
 
     return {
@@ -329,8 +405,124 @@ export class FestivoService {
       anio,
       nacionalesCount,
       regionalesCount,
+      localesCount: locales?.localesCount ?? 0,
+      municipiosCount: locales?.municipiosCount ?? 0,
+      /* Si se pide otro ano, el CSV no lo tiene: se dice en claro en vez de
+         devolver 0 locales sin explicacion. */
+      localesOmitidas: locales?.omitidas ?? null,
       regionesFallidas: fallos,
       fuente: 'https://calendariosnacionales.com',
+      fuenteLocales: 'https://www.seg-social.es',
     };
+  }
+
+  /**
+   * Fiestas locales de Espana del ano en curso, desde el CSV de la
+   * Seguridad Social.
+   *
+   * El municipio se guarda en Titulo ("Benalmadena", no "BENALMADENA") y, si
+   * ya habia una fila cargada a mano para ese dia y ese pueblo, se actualiza
+   * esa en vez de crear otra: el `upsert` de Prisma distingue "Benalmadena"
+   * de "Benalmádena" y se veria el festivo duplicado en el calendario.
+   */
+  private async sincronizarLocalesEspana(anio: number) {
+    let csv: string;
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.get<ArrayBuffer>(this.CSV_FIESTAS_LOCALES, {
+          responseType: 'arraybuffer',
+          /* El servlet responde ISO-8859-1: sin esto "Malaga" llega partida. */
+          headers: { 'User-Agent': 'Bookmy/1.0' },
+          family: 4,
+        } as any),
+      );
+      csv = Buffer.from(data as any).toString('latin1');
+    } catch (error) {
+      this.logger.warn(
+        `No se pudieron sincronizar fiestas locales: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+      return { localesCount: 0, municipiosCount: 0, omitidas: 'No se pudo contactar la fuente' };
+    }
+
+    const filas: { fecha: Date; municipio: string; nombre: string }[] = [];
+    const anios = new Set<number>();
+    for (const linea of csv.split(/\r?\n/).slice(1)) {
+      const m = /^([^,]*),([^,]*),(\d{2})-(\d{2})-(\d{4}),([^,]*),(.*)$/.exec(linea);
+      if (!m) continue;
+      const [, , localidad, dia, mes, anioFila, tipo, descripcion] = m;
+      if (!localidad.trim() || !normalizar(tipo).includes('local')) continue;
+      anios.add(Number(anioFila));
+      filas.push({
+        fecha: new Date(Date.UTC(Number(anioFila), Number(mes) - 1, Number(dia))),
+        municipio: enTitulo(localidad.trim()),
+        nombre: descripcion.replace(/^"|"$/g, '').trim() || 'Fiesta local',
+      });
+    }
+
+    /* El CSV solo publica el ano en curso. Si se esta sincronizando otro, no
+       se toca nada: mas vale decirlo que dejar el calendario a medias. */
+    if (!anios.has(anio)) {
+      return {
+        localesCount: 0,
+        municipiosCount: 0,
+        omitidas: `La fuente oficial solo publica ${[...anios].join(', ')}: las fiestas locales de ${anio} se cargan a mano`,
+      };
+    }
+
+    const delAnio = filas.filter((f) => f.fecha.getUTCFullYear() === anio);
+
+    /* Lo que ya hay cargado, indexado sin tildes: asi una fila manual
+       "Benalmádena" se reconoce como la misma que "Benalmadena". */
+    const existentes = await this.prisma.festivo.findMany({
+      where: {
+        pais: 'ES',
+        ambito: AmbitoFestivo.LOCAL,
+        fecha: {
+          gte: new Date(Date.UTC(anio, 0, 1)),
+          lt: new Date(Date.UTC(anio + 1, 0, 1)),
+        },
+      },
+      select: { id: true, fecha: true, municipio: true },
+    });
+    const yaEsta = new Map(
+      existentes.map((f) => [
+        `${f.fecha.toISOString().slice(0, 10)}|${normalizar(f.municipio ?? '')}`,
+        f.id,
+      ]),
+    );
+
+    const municipios = new Set<string>();
+    let localesCount = 0;
+    for (const fila of delAnio) {
+      const clave = `${fila.fecha.toISOString().slice(0, 10)}|${normalizar(fila.municipio)}`;
+      const id = yaEsta.get(clave);
+      if (id) {
+        /* Ya estaba: no se toca. El CSV oficial llama a todas "Fiesta
+           Local" y las cargadas a mano suelen tener el nombre de verdad
+           ("Feria de Málaga"), que es mas util en el calendario. */
+      } else {
+        /* Se guarda el id recien creado, no un centinela: el CSV repite
+           filas (un mismo dia y pueblo sale mas de una vez) y con un id
+           inventado el segundo paso intentaba actualizar una fila que no
+           existe. */
+        const creado = await this.prisma.festivo.create({
+          data: {
+            pais: 'ES',
+            fecha: fila.fecha,
+            nombre: fila.nombre,
+            ambito: AmbitoFestivo.LOCAL,
+            region: '',
+            municipio: fila.municipio,
+          },
+        });
+        yaEsta.set(clave, creado.id);
+      }
+      municipios.add(normalizar(fila.municipio));
+      localesCount++;
+    }
+
+    return { localesCount, municipiosCount: municipios.size, omitidas: null };
   }
 }

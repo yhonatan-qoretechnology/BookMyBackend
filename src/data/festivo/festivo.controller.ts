@@ -36,6 +36,21 @@ export class FestivoController {
     return this.festivoService.findAll(query);
   }
 
+  /* Tiene que ir ANTES de cualquier :param y es publico por lo mismo que
+     el listado: el panel lo pide a la vez. */
+  @Public()
+  @Get('contexto')
+  @ApiOperation({
+    summary: 'Que se le aplica a una sede: pais, region y municipio',
+    description:
+      'Lo que el panel escribe encima del calendario para que se vea de donde salen ' +
+      'los festivos y se note cuando una sede tiene el municipio mal cargado.',
+  })
+  @ApiOkResponse({ description: 'Pais, regiones y municipios resueltos, y el detalle por sede.' })
+  contexto(@Query() query: QueryFestivosDto) {
+    return this.festivoService.contexto(query);
+  }
+
   @Post('sincronizar')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN)
