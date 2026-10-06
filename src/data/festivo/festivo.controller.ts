@@ -38,17 +38,24 @@ export class FestivoController {
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Sincroniza festivos nacionales y autonómicos de un año (solo SUPER_ADMIN)',
+    summary: 'Sincroniza los festivos de un país y un año (solo SUPER_ADMIN)',
     description:
-      'Trae los festivos oficiales de las 19 comunidades/ciudades autónomas de España desde ' +
-      'calendariosnacionales.com y los guarda localmente. No trae festivos locales (municipio), ' +
-      'esos se siguen cargando a mano. Pensado para correrse una vez al año, cuando se publican ' +
-      'los calendarios oficiales del año siguiente (octubre-noviembre).',
+      'Trae los festivos oficiales desde calendariosnacionales.com y los guarda localmente. ' +
+      'En España son los nacionales más los de las 19 comunidades y ciudades autónomas; en ' +
+      'Colombia son los 18 nacionales de la Ley 51/1983, sin festivos regionales. No trae ' +
+      'festivos locales (municipio), esos se siguen cargando a mano. Pensado para correrse ' +
+      'una vez al año, cuando se publican los calendarios del año siguiente.',
   })
   @ApiOkResponse({
-    description: 'Resumen de lo sincronizado: cuántos nacionales, cuántos autonómicos, y qué comunidades fallaron (si alguna).',
+    description:
+      'Resumen de lo sincronizado: país, cuántos nacionales, cuántos regionales y qué regiones fallaron, si alguna.',
   })
-  sincronizar(@Body('anio', ParseIntPipe) anio: number) {
-    return this.festivoService.sincronizarAnio(anio);
+  sincronizar(
+    @Body('anio', ParseIntPipe) anio: number,
+    /* Sin país se sincroniza España, que es como se comportaba esto antes
+       de que hubiera más de un país. */
+    @Body('pais') pais?: string,
+  ) {
+    return this.festivoService.sincronizarAnio(anio, pais);
   }
 }

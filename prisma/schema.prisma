@@ -97,14 +97,53 @@ model UserData {
   @@map("user_data")
 }
 
+/// Un pais no es una bandera en un desplegable: es la configuracion de un
+/// mercado. Todo lo que cambia entre Espana y Colombia -moneda, huso,
+/// festivos, como se llama el documento fiscal, que tope tiene un precio-
+/// vive aqui como dato, para que el negocio no tenga que elegir nada y para
+/// que anadir un tercer pais no sea tocar codigo.
 model Country {
-  id            Int                     @id @default(autoincrement()) @map("id")
-  name          String                  @map("name")
-  isoCode       String                  @unique @map("iso_code") @db.Char(2)
-  flagUrl       String?                 @map("flag_url")
-  dialingCode   String                  @map("dialing_code") @db.VarChar(10)
+  id          Int     @id @default(autoincrement()) @map("id")
+  name        String  @map("name")
+  isoCode     String  @unique @map("iso_code") @db.Char(2)
+  flagUrl     String? @map("flag_url")
+  dialingCode String  @map("dialing_code") @db.VarChar(10)
+
+  /* ── Dinero ─────────────────────────────────────────────
+     El peso colombiano no usa decimales: son 45.000 COP, no 45.000,00.
+     Y un corte de pelo son 18 EUR o 45.000 COP, asi que el tope de precio
+     tampoco puede ser el mismo numero. */
+  moneda          String @default("EUR") @map("moneda") @db.VarChar(3)
+  decimalesMoneda Int    @default(2) @map("decimales_moneda")
+  locale          String @default("es-ES") @map("locale") @db.VarChar(10)
+  precioMinimo    Float  @default(0.5) @map("precio_minimo")
+  precioMaximo    Float  @default(1000) @map("precio_maximo")
+
+  /* ── Tiempo ─────────────────────────────────────────────
+     Colombia es UTC-5 todo el ano; Espana cambia la hora dos veces. */
+  zonaHoraria String @default("Europe/Madrid") @map("zona_horaria") @db.VarChar(64)
+
+  /* ── Como se llaman aqui las cosas ──────────────────────
+     Lo que a un espanol le suena normal a un colombiano le suena a
+     software extranjero, y al reves. Son cuatro palabras, pero salen en
+     casi todos los formularios. */
+  etiquetaFiscal    String @default("NIF/CIF") @map("etiqueta_fiscal") @db.VarChar(24)
+  etiquetaRegion    String @default("Provincia") @map("etiqueta_region") @db.VarChar(32)
+  etiquetaMunicipio String @default("Municipio") @map("etiqueta_municipio") @db.VarChar(32)
+  etiquetaImpuesto  String @default("IVA") @map("etiqueta_impuesto") @db.VarChar(24)
+
+  /* ── Reglas del mercado ─────────────────────────────────
+     Espana tiene festivos por comunidad autonoma; Colombia no tiene
+     festivos regionales: los 18 son nacionales (Ley 51/1983). */
+  tieneRegiones      Boolean @default(true) @map("tiene_regiones")
+  impuestoPorDefecto Float   @default(21) @map("impuesto_por_defecto")
+  /* Un pais se apaga sin borrarlo, para dejar de admitir altas nuevas. */
+  activo             Boolean @default(true) @map("activo")
+
   DocumentTypes DocumentTypeByCountry[]
   UserData      UserData[]
+  empresas      Empresa[]
+  sedes         Sede[]
 
   @@map("country")
 }
@@ -222,10 +261,21 @@ model Empresa {
   bloqueadaEn     DateTime? @map("bloqueada_en")
   bloqueadaMotivo String?   @map("bloqueada_motivo")
 
+  /* ── Pais del negocio ───────────────────────────────────
+     Se elige al crear la cuenta y no cambia: de el salen la moneda, el
+     huso, los festivos, el documento fiscal y los formatos. Es del
+     NEGOCIO y no de la sede porque la identidad fiscal (NIF/CIF o NIT)
+     es de la empresa, y porque mezclar euros y pesos en una misma
+     estadistica no significa nada. */
+  countryId Int     @map("country_id")
+  country   Country @relation(fields: [countryId], references: [id])
+
   id               Int            @id @default(autoincrement())
   nombre           String         @unique
   telefono         String?        @map("telefono")
   email            String?        @map("email")
+  /* Identificador fiscal: NIF/CIF en Espana, NIT en Colombia. Como se
+     llama en pantalla lo dice `country.etiquetaFiscal`. */
   nit              String?        @map("nit")
   logo             String?        @map("logo_url")
   descripcion      String?        @map("descripcion")
@@ -283,16 +333,34 @@ model EmpresaKyc {
 
 model Sede {
   /* Geografia de la sede. `provincia` ya existia (y hoy guarda municipios).
-     Los rellena el buscador de direcciones de Google Places en el alta. */
+     Los rellena el buscador de direcciones de Google Places en el alta.
+     `pais` es el nombre que devuelve Places, en el idioma del navegador
+     ("España", "Spain"): sirve para ensenarlo, no para decidir nada. Lo
+     que manda es `countryId`. */
   pais         String? @map("pais")
   municipio    String? @map("municipio")
   localidad    String? @map("localidad")
-  // Código de comunidad autónoma (ISO 3166-2:ES, ej "AN", "MD", "CT") para
-  // resolver los festivos AUTONOMICO correctos de FestivoService. Opcional:
-  // si no se carga, se infiere de `municipio`/`provincia` (ver
-  // festivo.service.ts) — antes SIEMPRE se asumía 'AN' (Andalucía) sin
-  // importar dónde estuviera la sede.
-  ccaa         String? @map("ccaa") @db.VarChar(2)
+
+  /* Pais de la sede. Normalmente es el de su empresa, pero se guarda aqui
+     porque de el cuelgan los festivos y el huso, que son de donde esta el
+     local y no de donde esta la razon social. */
+  countryId Int?     @map("country_id")
+  country   Country? @relation(fields: [countryId], references: [id])
+
+  /* Region administrativa a la que pertenece la sede, en ISO 3166-2 sin el
+     prefijo de pais: "AN", "MD", "CT" en Espana. Sirve para resolver los
+     festivos REGIONAL. Se llamaba `ccaa`, pero una comunidad autonoma es
+     una figura espanola y esto tiene que valer para cualquier pais.
+     Colombia no la usa: sus 18 festivos son nacionales. Opcional: si no se
+     carga, se infiere del municipio o la provincia (ver festivo.service.ts). */
+  region       String? @map("region") @db.VarChar(10)
+
+  /* Huso propio, solo para los casos en que no coincide con el del pais
+     (Canarias es Atlantic/Canary, una hora por detras de la Peninsula).
+     NO se ensena en la interfaz: si esta vacio se usa el del pais, que es
+     lo que pasa en el 99% de las sedes. */
+  zonaHoraria  String? @map("zona_horaria") @db.VarChar(64)
+
   id                     Int                      @id @default(autoincrement())
   nombre                 String
   direccion              String
@@ -814,25 +882,41 @@ model PaymentItem {
 
 enum AmbitoFestivo {
   NACIONAL
-  AUTONOMICO
+  /* Antes AUTONOMICO. Es la comunidad autonoma en Espana y seria el
+     departamento o el estado en otro pais; Colombia no tiene festivos de
+     este ambito. */
+  REGIONAL
   LOCAL
 }
 
 /* Festivos: se pintan en rojo en el calendario pero NO bloquean
    el agendado (decision del cliente). Si una sede cierra ese dia,
    se cierra con el mecanismo existente de dias cerrados. */
+/// Calendario laboral. Las fechas se guardan por pais porque Espana y
+/// Colombia comparten seis festivos nacionales el mismo dia (Ano Nuevo,
+/// Viernes Santo, 1 de mayo, 12 de octubre, 8 de diciembre y Navidad): sin
+/// el pais en la clave, sincronizar Colombia renombraba en silencio los
+/// festivos espanoles y la "Fiesta Nacional de Espana" pasaba a ser el
+/// "Dia de la Raza".
 model Festivo {
   id        Int           @id @default(autoincrement())
   fecha     DateTime      @map("fecha") @db.Date
   nombre    String        @map("nombre") @db.VarChar(160)
   ambito    AmbitoFestivo @map("ambito")
   pais      String        @default("ES") @map("pais") @db.VarChar(2)
-  ccaa      String?       @map("ccaa") @db.VarChar(60)
-  municipio String?       @map("municipio") @db.VarChar(120)
+  /* Antes `ccaa`: una comunidad autonoma es una figura espanola. Cadena
+     vacia en los nacionales y en todo Colombia -no NULL, ver la nota del
+     indice de abajo-. */
+  region    String        @default("") @map("region") @db.VarChar(60)
+  municipio String        @default("") @map("municipio") @db.VarChar(120)
   createdAt DateTime      @default(now()) @map("created_at")
 
-  @@unique([fecha, ambito, ccaa, municipio])
-  @@index([fecha])
+  /* En Postgres un UNIQUE no restringe filas con NULL, asi que un indice
+     sobre columnas opcionales no deduplica nada: dos "1 de enero"
+     nacionales entraban los dos. Por eso `region` y `municipio` se guardan
+     como cadena vacia en vez de NULL cuando no aplican. */
+  @@unique([pais, fecha, ambito, region, municipio])
+  @@index([pais, fecha])
   @@map("festivos")
 }
 

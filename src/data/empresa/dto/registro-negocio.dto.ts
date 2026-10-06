@@ -47,7 +47,23 @@ export class RegistroNegocioDto {
   @IsString() @IsNotEmpty() @MaxLength(255)
   direccion: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString() pais?: string;
+  /** Nombre del país tal y como lo devuelve Google Places, en el idioma del
+   *  navegador ("España", "Spain"). Se guarda para enseñarlo; el que decide
+   *  moneda, huso y festivos es `paisIso`. */
+  @ApiPropertyOptional({ example: 'España' })
+  @IsOptional() @IsString() pais?: string;
+
+  /** País del negocio en ISO 3166-1 alfa-2. Es LA decisión del alta: de aquí
+   *  salen la moneda, la zona horaria, los festivos, el documento fiscal y
+   *  los formatos. Sin él se asume España. */
+  @ApiPropertyOptional({ example: 'CO', description: '"ES" o "CO". Por defecto ES.' })
+  @IsOptional() @IsString() @MaxLength(2) paisIso?: string;
+
+  /** Región en ISO 3166-2 sin prefijo de país ("AN", "MD"). En España es la
+   *  comunidad autónoma y sirve para resolver sus festivos; Colombia no la usa. */
+  @ApiPropertyOptional({ example: 'AN' })
+  @IsOptional() @IsString() @MaxLength(10) region?: string;
+
   @ApiPropertyOptional() @IsOptional() @IsString() provincia?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() municipio?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() localidad?: string;

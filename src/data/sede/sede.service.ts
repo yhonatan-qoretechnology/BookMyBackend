@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { inferirCcaa } from '../festivo/ccaa-lookup';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -164,14 +163,6 @@ export class SedeService {
         data: {
           ...createSedeDto,
           nombre: nombreNormalizado,
-          /* La comunidad es la que decide qué festivos autonómicos ve esta
-             sede. Hoy el alta no la manda, así que se infiere del municipio
-             (o de `provincia`, que guarda municipios) y se GUARDA: si no,
-             habría que deducirla en cada consulta de festivos. */
-          ccaa:
-            createSedeDto.ccaa ??
-            inferirCcaa(createSedeDto.municipio, createSedeDto.provincia) ??
-            null,
         },
       });
 
@@ -309,19 +300,6 @@ export class SedeService {
         data: {
           ...updateSedeDto,
           ...(nombreNormalizado ? { nombre: nombreNormalizado } : {}),
-          /* Si la sede se muda y no mandan la comunidad, se recalcula: con
-             la vieja seguiría marcando los festivos de donde ya no está. */
-          ...(updateSedeDto.ccaa === undefined &&
-          (updateSedeDto.municipio !== undefined ||
-            updateSedeDto.provincia !== undefined)
-            ? {
-                ccaa:
-                  inferirCcaa(
-                    updateSedeDto.municipio ?? sede.municipio,
-                    updateSedeDto.provincia ?? sede.provincia,
-                  ) ?? null,
-              }
-            : {}),
         },
       });
     } catch (error) {

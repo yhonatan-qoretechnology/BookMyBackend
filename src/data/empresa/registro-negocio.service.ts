@@ -79,7 +79,7 @@ export class RegistroNegocioService {
       throw new ConflictException('Ya hay una cuenta con ese teléfono.');
     }
 
-    const countryId = dto.countryId ?? (await this.paisPorDefecto());
+    const countryId = dto.countryId ?? (await this.resolverPais(dto.paisIso));
     const hashedPassword = await this.hashService.hash(dto.password);
     const conPrueba = dto.plan === 'pro';
     const nombreCompleto = `${dto.firstName.trim()} ${dto.lastName.trim()}`.trim();
@@ -93,6 +93,10 @@ export class RegistroNegocioService {
               telefono: dto.telefono.trim(),
               email,
               descripcion: dto.rubro?.trim() || null,
+              /* El pais del negocio: de el salen la moneda, el huso, los
+                 festivos, el documento fiscal y los formatos. Se fija aqui,
+                 al crear la cuenta, y no se vuelve a preguntar. */
+              countryId,
               /* La prueba es de Pro, pero el plan contratado sigue siendo
                  FREE: cuando caduque, la cuenta baja sola. */
               plan: PlanEmpresa.FREE,
@@ -107,7 +111,13 @@ export class RegistroNegocioService {
               nombre: dto.sedeNombre.trim(),
               direccion: dto.direccion.trim(),
               telefono: dto.telefono.trim(),
+              /* `pais` es el nombre que devuelve Google Places, en el idioma
+                 del navegador ("España", "Spain"): sirve para ensenarlo. El
+                 que manda para festivos y huso es `countryId`, que hereda
+                 del negocio. */
               pais: dto.pais?.trim() || null,
+              countryId,
+              region: dto.region?.trim() || null,
               provincia: dto.provincia?.trim() || null,
               municipio: dto.municipio?.trim() || null,
               localidad: dto.localidad?.trim() || null,
@@ -174,8 +184,33 @@ export class RegistroNegocioService {
     }
   }
 
-  /** España si existe; si no, el primer país de la tabla. */
-  private async paisPorDefecto(): Promise<number> {
+  /**
+   * Resuelve el país del negocio. La web manda su código ISO ("ES", "CO"),
+   * que es lo que sabe; si no manda nada se cae a España, que es como se
+   * comportaba esto antes de que hubiera más de un país.
+   *
+   * Un país dado de baja (`activo: false`) no admite altas nuevas, pero los
+   * negocios que ya lo tienen siguen funcionando.
+   */
+  private async resolverPais(isoCode?: string): Promise<number> {
+    const iso = isoCode?.trim().toUpperCase();
+
+    if (iso) {
+      const pedido = await this.prisma.country.findUnique({
+        where: { isoCode: iso },
+        select: { id: true, activo: true, name: true },
+      });
+      if (!pedido) {
+        throw new BadRequestException(`Todavía no operamos en el país ${iso}.`);
+      }
+      if (!pedido.activo) {
+        throw new BadRequestException(
+          `Ahora mismo no admitimos altas nuevas en ${pedido.name}.`,
+        );
+      }
+      return pedido.id;
+    }
+
     const pais =
       (await this.prisma.country.findFirst({
         where: { isoCode: 'ES' },

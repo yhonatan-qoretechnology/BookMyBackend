@@ -1,10 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUrl,
+  MaxLength,
 } from 'class-validator';
 
 export class CreateEmpresaDto {
@@ -15,6 +16,19 @@ export class CreateEmpresaDto {
   @IsNotEmpty()
   @IsString()
   nombre: string;
+
+  /** País del negocio en ISO 3166-1 alfa-2. De él salen la moneda, la zona
+   *  horaria, los festivos, el documento fiscal y los formatos. Sin él se
+   *  asume España, que es como se comportaba esto antes de operar en varios
+   *  países. */
+  @ApiPropertyOptional({
+    example: 'CO',
+    description: '"ES" o "CO". Por defecto ES.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  paisIso?: string;
 
   @ApiProperty({
     example: '573123456789',

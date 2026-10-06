@@ -5,8 +5,79 @@
       "isoCode": "ES",
       "dialingCode": "+34",
       "documentTypes": [
-        { "name": "DNI", "acronym": "DNI", "type": "people" },
-        { "name": "Pasaporte", "acronym": "PAS", "type": "people" }
+        {
+          "name": "DNI",
+          "acronym": "DNI",
+          "type": "people"
+        },
+        {
+          "name": "NIE",
+          "acronym": "NIE",
+          "type": "people"
+        },
+        {
+          "name": "Pasaporte",
+          "acronym": "PAS",
+          "type": "people"
+        },
+        {
+          "name": "CIF",
+          "acronym": "CIF",
+          "type": "business"
+        }
+      ],
+      "moneda": "EUR",
+      "decimalesMoneda": 2,
+      "locale": "es-ES",
+      "precioMinimo": 0.5,
+      "precioMaximo": 1000,
+      "zonaHoraria": "Europe/Madrid",
+      "etiquetaFiscal": "NIF/CIF",
+      "etiquetaRegion": "Provincia",
+      "etiquetaMunicipio": "Municipio",
+      "etiquetaImpuesto": "IVA",
+      "tieneRegiones": true,
+      "impuestoPorDefecto": 21,
+      "activo": true
+    },
+    {
+      "name": "Colombia",
+      "isoCode": "CO",
+      "dialingCode": "+57",
+      "moneda": "COP",
+      "decimalesMoneda": 0,
+      "locale": "es-CO",
+      "precioMinimo": 1000,
+      "precioMaximo": 50000000,
+      "zonaHoraria": "America/Bogota",
+      "etiquetaFiscal": "NIT",
+      "etiquetaRegion": "Departamento",
+      "etiquetaMunicipio": "Ciudad",
+      "etiquetaImpuesto": "IVA",
+      "tieneRegiones": false,
+      "impuestoPorDefecto": 19,
+      "activo": true,
+      "documentTypes": [
+        {
+          "name": "Cédula de ciudadanía",
+          "acronym": "CC",
+          "type": "people"
+        },
+        {
+          "name": "Cédula de extranjería",
+          "acronym": "CE",
+          "type": "people"
+        },
+        {
+          "name": "Pasaporte",
+          "acronym": "PAS",
+          "type": "people"
+        },
+        {
+          "name": "NIT",
+          "acronym": "NIT",
+          "type": "business"
+        }
       ]
     }
   ]

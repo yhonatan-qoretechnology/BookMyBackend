@@ -57,7 +57,7 @@ export class SeedService {
    * especialmente para anos lejanos.
    */
   async seedFestivos() {
-    type F = { fecha: string; nombre: string; ambito: AmbitoFestivo; ccaa?: string; municipio?: string };
+    type F = { fecha: string; nombre: string; ambito: AmbitoFestivo; region?: string; municipio?: string };
 
     const nacionales2026: F[] = [
       { fecha: '2026-01-01', nombre: 'Año Nuevo', ambito: AmbitoFestivo.NACIONAL },
@@ -83,10 +83,10 @@ export class SeedService {
       { fecha: '2027-12-25', nombre: 'Natividad del Señor', ambito: AmbitoFestivo.NACIONAL },
     ];
     const andaluces: F[] = [
-      { fecha: '2026-02-28', nombre: 'Día de Andalucía', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
-      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
-      { fecha: '2027-02-28', nombre: 'Día de Andalucía', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
-      { fecha: '2027-03-25', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'AN' },
+      { fecha: '2026-02-28', nombre: 'Día de Andalucía', ambito: AmbitoFestivo.REGIONAL, region: 'AN' },
+      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.REGIONAL, region: 'AN' },
+      { fecha: '2027-02-28', nombre: 'Día de Andalucía', ambito: AmbitoFestivo.REGIONAL, region: 'AN' },
+      { fecha: '2027-03-25', nombre: 'Jueves Santo', ambito: AmbitoFestivo.REGIONAL, region: 'AN' },
     ];
 
     // El resto de comunidades donde ya hay sedes reales (Madrid, Cataluña,
@@ -98,50 +98,50 @@ export class SeedService {
     // año a otro — conviene reconfirmar en el DOGC/BOCM/BOPV correspondiente
     // antes de dar por buena una fecha lejana en el tiempo.
     const madrid: F[] = [
-      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'MD' },
-      { fecha: '2026-05-02', nombre: 'Fiesta de la Comunidad de Madrid', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'MD' },
-      { fecha: '2027-03-19', nombre: 'San José', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'MD' },
-      { fecha: '2027-03-25', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'MD' },
-      { fecha: '2027-08-16', nombre: 'Asunción de la Virgen (trasladado)', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'MD' },
+      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.REGIONAL, region: 'MD' },
+      { fecha: '2026-05-02', nombre: 'Fiesta de la Comunidad de Madrid', ambito: AmbitoFestivo.REGIONAL, region: 'MD' },
+      { fecha: '2027-03-19', nombre: 'San José', ambito: AmbitoFestivo.REGIONAL, region: 'MD' },
+      { fecha: '2027-03-25', nombre: 'Jueves Santo', ambito: AmbitoFestivo.REGIONAL, region: 'MD' },
+      { fecha: '2027-08-16', nombre: 'Asunción de la Virgen (trasladado)', ambito: AmbitoFestivo.REGIONAL, region: 'MD' },
     ];
     const madridLocales: F[] = [
       { fecha: '2027-05-15', nombre: 'San Isidro', ambito: AmbitoFestivo.LOCAL, municipio: 'Madrid' },
       { fecha: '2027-11-09', nombre: 'Almudena', ambito: AmbitoFestivo.LOCAL, municipio: 'Madrid' },
     ];
     const cataluna: F[] = [
-      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
-      { fecha: '2026-06-24', nombre: 'Sant Joan', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
-      { fecha: '2026-09-11', nombre: 'Diada Nacional de Catalunya', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
-      { fecha: '2026-12-26', nombre: 'Sant Esteve', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
-      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
-      { fecha: '2027-06-24', nombre: 'Sant Joan', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
-      { fecha: '2027-09-11', nombre: 'Diada Nacional de Catalunya', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
-      { fecha: '2027-12-26', nombre: 'Sant Esteve', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'CT' },
+      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.REGIONAL, region: 'CT' },
+      { fecha: '2026-06-24', nombre: 'Sant Joan', ambito: AmbitoFestivo.REGIONAL, region: 'CT' },
+      { fecha: '2026-09-11', nombre: 'Diada Nacional de Catalunya', ambito: AmbitoFestivo.REGIONAL, region: 'CT' },
+      { fecha: '2026-12-26', nombre: 'Sant Esteve', ambito: AmbitoFestivo.REGIONAL, region: 'CT' },
+      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.REGIONAL, region: 'CT' },
+      { fecha: '2027-06-24', nombre: 'Sant Joan', ambito: AmbitoFestivo.REGIONAL, region: 'CT' },
+      { fecha: '2027-09-11', nombre: 'Diada Nacional de Catalunya', ambito: AmbitoFestivo.REGIONAL, region: 'CT' },
+      { fecha: '2027-12-26', nombre: 'Sant Esteve', ambito: AmbitoFestivo.REGIONAL, region: 'CT' },
     ];
     const valenciana: F[] = [
-      { fecha: '2026-03-19', nombre: 'San José', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
-      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
-      { fecha: '2026-06-24', nombre: 'San Juan', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
-      { fecha: '2026-10-09', nombre: 'Día de la Comunitat Valenciana', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
-      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
-      { fecha: '2027-06-24', nombre: 'San Juan', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
-      { fecha: '2027-10-09', nombre: 'Día de la Comunitat Valenciana', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'VC' },
+      { fecha: '2026-03-19', nombre: 'San José', ambito: AmbitoFestivo.REGIONAL, region: 'VC' },
+      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.REGIONAL, region: 'VC' },
+      { fecha: '2026-06-24', nombre: 'San Juan', ambito: AmbitoFestivo.REGIONAL, region: 'VC' },
+      { fecha: '2026-10-09', nombre: 'Día de la Comunitat Valenciana', ambito: AmbitoFestivo.REGIONAL, region: 'VC' },
+      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.REGIONAL, region: 'VC' },
+      { fecha: '2027-06-24', nombre: 'San Juan', ambito: AmbitoFestivo.REGIONAL, region: 'VC' },
+      { fecha: '2027-10-09', nombre: 'Día de la Comunitat Valenciana', ambito: AmbitoFestivo.REGIONAL, region: 'VC' },
     ];
     const baleares: F[] = [
-      { fecha: '2026-03-02', nombre: 'Día de las Illes Balears', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
-      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
-      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
-      { fecha: '2026-12-26', nombre: 'Sant Esteve', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
-      { fecha: '2027-03-01', nombre: 'Día de las Illes Balears', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
-      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'IB' },
+      { fecha: '2026-03-02', nombre: 'Día de las Illes Balears', ambito: AmbitoFestivo.REGIONAL, region: 'IB' },
+      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.REGIONAL, region: 'IB' },
+      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.REGIONAL, region: 'IB' },
+      { fecha: '2026-12-26', nombre: 'Sant Esteve', ambito: AmbitoFestivo.REGIONAL, region: 'IB' },
+      { fecha: '2027-03-01', nombre: 'Día de las Illes Balears', ambito: AmbitoFestivo.REGIONAL, region: 'IB' },
+      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.REGIONAL, region: 'IB' },
     ];
     const paisVasco: F[] = [
-      { fecha: '2026-03-19', nombre: 'San José', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
-      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
-      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
-      { fecha: '2026-07-25', nombre: 'Santiago Apóstol', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
-      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
-      { fecha: '2027-07-25', nombre: 'Santiago Apóstol', ambito: AmbitoFestivo.AUTONOMICO, ccaa: 'PV' },
+      { fecha: '2026-03-19', nombre: 'San José', ambito: AmbitoFestivo.REGIONAL, region: 'PV' },
+      { fecha: '2026-04-02', nombre: 'Jueves Santo', ambito: AmbitoFestivo.REGIONAL, region: 'PV' },
+      { fecha: '2026-04-06', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.REGIONAL, region: 'PV' },
+      { fecha: '2026-07-25', nombre: 'Santiago Apóstol', ambito: AmbitoFestivo.REGIONAL, region: 'PV' },
+      { fecha: '2027-03-29', nombre: 'Lunes de Pascua', ambito: AmbitoFestivo.REGIONAL, region: 'PV' },
+      { fecha: '2027-07-25', nombre: 'Santiago Apóstol', ambito: AmbitoFestivo.REGIONAL, region: 'PV' },
     ];
 
     const locales: F[] = [
@@ -164,26 +164,30 @@ export class SeedService {
       ...locales,
     ];
 
+    /* `region` y `municipio` van como cadena vacia cuando no aplican, no
+       como NULL: en Postgres un UNIQUE no restringe filas con NULL, asi
+       que con NULL el indice no deduplicaba y habia que buscar a mano
+       antes de insertar. Con cadena vacia basta un upsert. */
     for (const f of todos) {
       const fecha = new Date(`${f.fecha}T00:00:00.000Z`);
-      const existe = await this.prisma.festivo.findFirst({
+      await this.prisma.festivo.upsert({
         where: {
-          fecha,
-          ambito: f.ambito,
-          ccaa: f.ccaa ?? null,
-          municipio: f.municipio ?? null,
+          pais_fecha_ambito_region_municipio: {
+            pais: 'ES',
+            fecha,
+            ambito: f.ambito,
+            region: f.region ?? '',
+            municipio: f.municipio ?? '',
+          },
         },
-        select: { id: true },
-      });
-      if (existe) continue;
-      await this.prisma.festivo.create({
-        data: {
+        update: {},
+        create: {
           fecha,
           nombre: f.nombre,
           ambito: f.ambito,
           pais: 'ES',
-          ccaa: f.ccaa ?? null,
-          municipio: f.municipio ?? null,
+          region: f.region ?? '',
+          municipio: f.municipio ?? '',
         },
       });
     }
@@ -478,15 +482,17 @@ export class SeedService {
     const data = JSON.parse(rawData);
 
     for (const country of data.countries) {
-      const createdCountry = await this.prisma.country.create({
-        data: {
-          name: country.name,
-          isoCode: country.isoCode,
-          dialingCode: country.dialingCode,
-        },
+      /* Antes era `create` y reventaba la segunda vez que se sembraba. Con
+         upsert se puede volver a correr para recoger cambios de
+         configuracion de un pais sin tocar lo que ya hay. */
+      const { documentTypes, isoCode, ...config } = country;
+      const createdCountry = await this.prisma.country.upsert({
+        where: { isoCode },
+        update: config,
+        create: { isoCode, ...config },
       });
 
-      for (const doc of country.documentTypes) {
+      for (const doc of documentTypes) {
         const document = await this.prisma.documentType.upsert({
           where: { name: doc.name },
           update: {},
@@ -497,8 +503,15 @@ export class SeedService {
           },
         });
 
-        await this.prisma.documentTypeByCountry.create({
-          data: {
+        await this.prisma.documentTypeByCountry.upsert({
+          where: {
+            countryId_documentTypeId: {
+              countryId: createdCountry.id,
+              documentTypeId: document.id,
+            },
+          },
+          update: {},
+          create: {
             countryId: createdCountry.id,
             documentTypeId: document.id,
           },
@@ -528,8 +541,18 @@ export class SeedService {
     ];
 
     try {
+      /* Las empresas de ejemplo son españolas; el país es obligatorio y no
+         se puede cablear el id porque depende del orden de la siembra. */
+      const espana = await this.prisma.country.findUnique({
+        where: { isoCode: 'ES' },
+        select: { id: true },
+      });
+      if (!espana) {
+        throw new Error('Falta sembrar los países antes que las empresas.');
+      }
+
       await this.prisma.empresa.createMany({
-        data: empresas,
+        data: empresas.map((e) => ({ ...e, countryId: espana.id })),
         skipDuplicates: true,
       });
 

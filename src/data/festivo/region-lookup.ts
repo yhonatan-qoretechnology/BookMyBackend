@@ -1,7 +1,13 @@
 /* ============================================================
-   Inferencia de comunidad autónoma (CCAA) a partir del municipio o
-   provincia guardados en `Sede` — usado como respaldo cuando la sede no
-   tiene `ccaa` cargado explícitamente (ver festivo.service.ts).
+   Inferencia de la REGIÓN de una sede a partir de su municipio o
+   provincia — usado como respaldo cuando la sede no tiene `region`
+   cargada explícitamente (ver festivo.service.ts).
+
+   La tabla está indexada por país porque "región" significa una cosa
+   distinta en cada sitio: en España es la comunidad autónoma, en otro
+   país sería el departamento o el estado. Colombia no aparece aquí a
+   propósito: sus 18 festivos son nacionales (Ley 51/1983), no hay nada
+   que inferir.
 
    `Sede.provincia` en este proyecto guarda casi siempre un nombre de
    MUNICIPIO (ver comentario en schema.prisma), no de provincia formal —
@@ -14,7 +20,7 @@
 ============================================================ */
 
 // Códigos ISO 3166-2:ES de las 17 comunidades autónomas + Ceuta y Melilla.
-const MUNICIPIO_O_PROVINCIA_A_CCAA: Record<string, string> = {
+const ESPANA: Record<string, string> = {
   // Andalucía (AN)
   almeria: 'AN', cadiz: 'AN', cordoba: 'AN', granada: 'AN', huelva: 'AN',
   jaen: 'AN', malaga: 'AN', sevilla: 'AN',
@@ -94,21 +100,30 @@ function normalizar(valor: string): string {
 }
 
 /**
- * Intenta resolver la CCAA a partir del municipio (o, si no hay, de la
- * provincia legacy) de una sede. Devuelve `undefined` si no lo reconoce —
- * en ese caso FestivoService solo va a devolver festivos NACIONAL, no
- * asume ninguna comunidad por defecto.
+ * Tablas de inferencia por país. Un país que no esté aquí simplemente no
+ * infiere región, que es lo correcto cuando no tiene festivos regionales.
  */
-export function inferirCcaa(
+const POR_PAIS: Record<string, Record<string, string>> = {
+  ES: ESPANA,
+};
+
+/**
+ * Intenta resolver la región a partir del municipio (o, si no hay, de la
+ * provincia legacy) de una sede. Devuelve `undefined` si no lo reconoce —
+ * en ese caso FestivoService solo devuelve festivos NACIONAL, no asume
+ * ninguna región por defecto.
+ */
+export function inferirRegion(
+  pais: string,
   municipio?: string | null,
   provincia?: string | null,
 ): string | undefined {
+  const tabla = POR_PAIS[pais?.toUpperCase()];
+  if (!tabla) return undefined;
   for (const valor of [municipio, provincia]) {
     if (!valor) continue;
     const normalizado = normalizar(valor);
-    if (MUNICIPIO_O_PROVINCIA_A_CCAA[normalizado]) {
-      return MUNICIPIO_O_PROVINCIA_A_CCAA[normalizado];
-    }
+    if (tabla[normalizado]) return tabla[normalizado];
   }
   return undefined;
 }

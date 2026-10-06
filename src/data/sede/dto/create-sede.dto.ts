@@ -51,12 +51,13 @@ export class CreateSedeDto {
     example: 'CT',
     required: false,
     description:
-      'Comunidad autónoma en ISO 3166-2:ES (AN, CT, MD…). Decide qué festivos ' +
-      'autonómicos ve la sede. Si no se manda, se infiere del municipio/provincia.',
+      'Región en ISO 3166-2 sin el prefijo de país (AN, CT, MD… en España). ' +
+      'Decide qué festivos regionales ve la sede. Si no se manda, se infiere ' +
+      'del municipio o la provincia al consultar los festivos.',
   })
   @IsOptional()
   @IsString()
-  ccaa?: string;
+  region?: string;
 
   @ApiProperty({ example: 'Arroyo de la Miel', description: 'Localidad o barriada', required: false })
   @IsOptional()

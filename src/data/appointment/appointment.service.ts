@@ -111,25 +111,38 @@ export class AppointmentService {
     return dateStr.endsWith('Z') || dateStr.includes('+');
   }
 
-  private getMinutesFromDate(date: Date) {
+  /*
+     Los tres ayudantes de abajo leen una fecha en "hora de pared" de una
+     zona concreta. Antes esa zona era una constante del modulo, lo que
+     equivalia a dar por hecho que todos los negocios estan en Madrid.
+     Ahora se les pasa la de la sede.
+
+     Importa de verdad: Bogota es UTC-5 y no cambia la hora en todo el ano,
+     asi que con Madrid cableado una cita de las 19:00 en Colombia se
+     fechaba al dia siguiente y se validaba contra el horario del dia que
+     no era. El valor por defecto conserva el comportamiento de siempre en
+     las rutas que todavia no saben de que sede hablan.
+  */
+
+  private getMinutesFromDate(date: Date, tz: string = APP_TIMEZONE) {
     const dateInTimezone = new Date(
-      date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+      date.toLocaleString('en-US', { timeZone: tz }),
     );
     return dateInTimezone.getHours() * 60 + dateInTimezone.getMinutes();
   }
 
-  private getDayOfWeekInTimezone(date: Date): number {
+  private getDayOfWeekInTimezone(date: Date, tz: string = APP_TIMEZONE): number {
     const dateInTimezone = new Date(
-      date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+      date.toLocaleString('en-US', { timeZone: tz }),
     );
     return dateInTimezone.getDay();
   }
 
-  private getDateInTimezone(date: Date): string {
+  private getDateInTimezone(date: Date, tz: string = APP_TIMEZONE): string {
     const dateInTimezone = new Date(
-      date.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+      date.toLocaleString('en-US', { timeZone: tz }),
     );
-    /* `toISOString()` devuelve la fecha en UTC, no en APP_TIMEZONE: con el
+    /* `toISOString()` devuelve la fecha en UTC, no en la zona pedida: con el
        servidor en cualquier huso al oeste de Madrid, una cita de las 19:00
        se fechaba al dia siguiente y create() la rechazaba ("La fecha de la
        cita debe coincidir..."). Se leen los componentes locales, igual que
@@ -138,6 +151,30 @@ export class AppointmentService {
     const mes = String(dateInTimezone.getMonth() + 1).padStart(2, '0');
     const dia = String(dateInTimezone.getDate()).padStart(2, '0');
     return `${anio}-${mes}-${dia}`;
+  }
+
+  /**
+   * La zona horaria con la que hay que leer las horas de una sede: la suya
+   * propia si la tiene (Canarias va una hora por detras de la Peninsula) y,
+   * si no, la de su pais. Se resuelve una vez por operacion y se va pasando,
+   * para no consultar la base en cada comprobacion de solape.
+   */
+  private async zonaDeSede(sedeId?: number | null): Promise<string> {
+    if (!sedeId) return APP_TIMEZONE;
+    const sede = await this.prisma.sede.findUnique({
+      where: { id: sedeId },
+      select: {
+        zonaHoraria: true,
+        country: { select: { zonaHoraria: true } },
+        empresa: { select: { country: { select: { zonaHoraria: true } } } },
+      },
+    });
+    return (
+      sede?.zonaHoraria ||
+      sede?.country?.zonaHoraria ||
+      sede?.empresa?.country?.zonaHoraria ||
+      APP_TIMEZONE
+    );
   }
 
   private getMinutesFromHourString(hour: string) {
@@ -628,6 +665,8 @@ export class AppointmentService {
     sede: SedeConHorarios;
     fecha: Date;
     duracionRestante: number;
+    /* Huso de la sede: sin el, se buscaban huecos en hora de Madrid. */
+    tz: string;
   }): Promise<{ fecha: string; horaInicio: string; horaFin: string } | null> {
     const MAX_DIAS_ADELANTE = 30;
     const baseYear = params.fecha.getUTCFullYear();
@@ -645,10 +684,11 @@ export class AppointmentService {
         params.duracionRestante,
         0,
         1,
+        params.tz,
       );
       if (slots.length > 0) {
         return {
-          fecha: this.getDateInTimezone(candidateDate),
+          fecha: this.getDateInTimezone(candidateDate, params.tz),
           horaInicio: slots[0].horaInicio,
           horaFin: slots[0].horaFin,
         };
@@ -672,8 +712,11 @@ export class AppointmentService {
     durationMinutes: number,
     notBeforeMinutes: number,
     maxSuggestions = 3,
+    /* Huso de la sede. Por defecto el de siempre, para las llamadas que
+       todavia no lo pasan. */
+    tz: string = APP_TIMEZONE,
   ): Promise<{ horaInicio: string; horaFin: string }[]> {
-    const dayOfWeek = this.getDayOfWeekInTimezone(fecha);
+    const dayOfWeek = this.getDayOfWeekInTimezone(fecha, tz);
     const dayNames = [
       'domingo',
       'lunes',
@@ -705,7 +748,7 @@ export class AppointmentService {
 
     if (!scheduleRanges.length) return [];
 
-    const appointmentDay = this.getDateInTimezone(fecha);
+    const appointmentDay = this.getDateInTimezone(fecha, tz);
     const diasCerradosRegistros = sede.DiaCerradoSede.length
       ? sede.DiaCerradoSede
       : Array.isArray(sede.diasCerrado)
@@ -722,7 +765,7 @@ export class AppointmentService {
       if (!cierre.fecha) continue;
       const cierreFecha = new Date(cierre.fecha);
       if (Number.isNaN(cierreFecha.getTime())) continue;
-      if (this.getDateInTimezone(cierreFecha) !== appointmentDay) continue;
+      if (this.getDateInTimezone(cierreFecha, tz) !== appointmentDay) continue;
       if (cierre.todoElDia ?? true) return [];
       if (cierre.horaInicio && cierre.horaFin) {
         cierresParciales.push({
@@ -769,11 +812,11 @@ export class AppointmentService {
       select: { horaInicio: true, horaFin: true },
     });
     const existentes = citasCercanas.filter(
-      (a) => this.getDateInTimezone(a.horaInicio) === appointmentDay,
+      (a) => this.getDateInTimezone(a.horaInicio, tz) === appointmentDay,
     );
     const ocupados = existentes.map((a) => ({
-      start: this.getMinutesFromDate(a.horaInicio),
-      end: this.getMinutesFromDate(a.horaFin),
+      start: this.getMinutesFromDate(a.horaInicio, tz),
+      end: this.getMinutesFromDate(a.horaFin, tz),
     }));
 
     const year = fecha.getUTCFullYear();
@@ -864,6 +907,9 @@ export class AppointmentService {
     },
     finExtension: Date,
   ) {
+    /* El huso de la sede en conflicto: los huecos sugeridos tienen que
+       estar en la hora de pared de donde esta el local. */
+    const tz = await this.zonaDeSede(conflicto.sedeId);
     // El hueco sugerido empieza, como pronto, cuando acaba lo último entre
     // la cita en conflicto y el tramo extendido (que aún no es una cita).
     const noAntesDe = new Date(
@@ -884,10 +930,12 @@ export class AppointmentService {
         conflicto.duracion,
         // Si la extensión pasa de medianoche ya no queda hueco ese día: los
         // minutos de noAntesDe volverían a contar desde las 00:00.
-        this.getDateInTimezone(noAntesDe) !==
-          this.getDateInTimezone(conflicto.horaInicio)
+        this.getDateInTimezone(noAntesDe, tz) !==
+          this.getDateInTimezone(conflicto.horaInicio, tz)
           ? 24 * 60
-          : this.getMinutesFromDate(noAntesDe),
+          : this.getMinutesFromDate(noAntesDe, tz),
+          undefined,
+          tz,
       ),
     ]);
 
@@ -947,10 +995,15 @@ export class AppointmentService {
       `Intento de crear cita con payload: ${JSON.stringify(debugPayload)}`,
     );
 
+    /* El huso de la sede, resuelto una sola vez: todas las comprobaciones
+       de horario, dia de la semana y solape de abajo leen la hora de pared
+       de donde esta el local, no la de Madrid. */
+    const tz = await this.zonaDeSede(data.sedeId);
+
     try {
-      const appointmentDay = this.getDateInTimezone(fecha);
-      const inicioDia = this.getDateInTimezone(horaInicio);
-      const finDia = this.getDateInTimezone(horaFin);
+      const appointmentDay = this.getDateInTimezone(fecha, tz);
+      const inicioDia = this.getDateInTimezone(horaInicio, tz);
+      const finDia = this.getDateInTimezone(horaFin, tz);
 
       if (appointmentDay !== inicioDia || appointmentDay !== finDia) {
         throw new BadRequestException(
@@ -1075,7 +1128,7 @@ export class AppointmentService {
         ...appointmentData
       } = data;
 
-      const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio);
+      const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio, tz);
       const dayNames = [
         'domingo',
         'lunes',
@@ -1086,7 +1139,7 @@ export class AppointmentService {
         'sábado',
       ];
       const horaEnTimezone = new Date(
-        horaInicio.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+        horaInicio.toLocaleString('en-US', { timeZone: tz }),
       );
       this.logger.log(
         `Debug horario: horaInicio=${horaInicio.toISOString()}, getHours()=${horaEnTimezone.getHours()}, getDay()=${dayOfWeek} (${dayNames[dayOfWeek]}), getMinutes()=${horaEnTimezone.getMinutes()}, isUtc=${this.isUtcFormat(data.horaInicio)}`,
@@ -1144,8 +1197,8 @@ export class AppointmentService {
       // validar que entra antes del cierre y de bloquear el horario.
       const bufferMinutos = relation.tiempoAdicionalMinutos ?? 0;
 
-      const inicio = this.getMinutesFromDate(horaInicio);
-      const fin = this.getMinutesFromDate(horaFin);
+      const inicio = this.getMinutesFromDate(horaInicio, tz);
+      const fin = this.getMinutesFromDate(horaFin, tz);
       const finConBuffer = fin + bufferMinutos;
 
       const fitsWithinSchedule = scheduleRanges.some((range) => {
@@ -1197,6 +1250,7 @@ export class AppointmentService {
               sede: sede as SedeConHorarios,
               fecha,
               duracionRestante,
+              tz,
             });
 
             throw new BadRequestException({
@@ -1237,7 +1291,7 @@ export class AppointmentService {
         if (!cierreParcial.fecha) continue;
         const cierreFecha = new Date(cierreParcial.fecha);
         if (Number.isNaN(cierreFecha.getTime())) continue;
-        const cierreDia = this.getDateInTimezone(cierreFecha);
+        const cierreDia = this.getDateInTimezone(cierreFecha, tz);
         if (cierreDia !== appointmentDay) continue;
 
         if (cierreParcial.todoElDia ?? true) {
@@ -2207,6 +2261,9 @@ export class AppointmentService {
     const fecha = this.parseDate(data.fecha);
     const horaInicio = this.parseDate(data.horaInicio);
     const horaFin = this.parseDate(data.horaFin);
+    /* Huso de la sede: la agenda se valida en la hora de pared de donde
+       esta el local, no en la de Madrid. */
+    const tz = await this.zonaDeSede(data.sedeId);
     const durationMinutes = Math.round(
       (horaFin.getTime() - horaInicio.getTime()) / (1000 * 60),
     );
@@ -2267,7 +2324,7 @@ export class AppointmentService {
       );
     }
 
-    const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio);
+    const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio, tz);
     const dayNames = [
       'domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado',
     ];
@@ -2288,8 +2345,8 @@ export class AppointmentService {
       scheduleRanges = this.parseScheduleRanges(entry ?? undefined);
     }
 
-    const inicio = this.getMinutesFromDate(horaInicio);
-    const fin = this.getMinutesFromDate(horaFin);
+    const inicio = this.getMinutesFromDate(horaInicio, tz);
+    const fin = this.getMinutesFromDate(horaFin, tz);
     const bufferMinutos = relation.tiempoAdicionalMinutos ?? 0;
     const rangoDeInicio = scheduleRanges.find(
       (range) => inicio >= range.start && inicio <= range.end,
@@ -2336,6 +2393,7 @@ export class AppointmentService {
       sede,
       fecha,
       duracionRestante,
+      tz,
     });
     if (!sugerencia) {
       throw new BadRequestException(
@@ -2489,6 +2547,10 @@ export class AppointmentService {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
 
+    /* Huso de la sede de la cita: reprogramar valida horario, dia de la
+       semana y cierres en la hora de pared del local. */
+    const tz = await this.zonaDeSede(cita.sedeId);
+
     const oldFecha = cita.fecha.toISOString().split('T')[0];
     const oldHoraInicio = cita.horaInicio
       .toISOString()
@@ -2579,7 +2641,7 @@ export class AppointmentService {
     const bufferMinutos = relacion?.tiempoAdicionalMinutos ?? 0;
 
     const fecha = new Date(Date.UTC(año, mes, dia));
-    const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio);
+    const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio, tz);
     const dayNames = [
       'domingo',
       'lunes',
@@ -2590,7 +2652,7 @@ export class AppointmentService {
       'sábado',
     ];
     const horaEnTimezone = new Date(
-      horaInicio.toLocaleString('en-US', { timeZone: APP_TIMEZONE }),
+      horaInicio.toLocaleString('en-US', { timeZone: tz }),
     );
 
     const horarioRegistro = sede.HorarioSede.find(
@@ -2617,8 +2679,8 @@ export class AppointmentService {
       throw new BadRequestException('La sede está cerrada el día seleccionado');
     }
 
-    const inicio = this.getMinutesFromDate(horaInicio);
-    const fin = this.getMinutesFromDate(horaFin);
+    const inicio = this.getMinutesFromDate(horaInicio, tz);
+    const fin = this.getMinutesFromDate(horaFin, tz);
     const finConBuffer = fin + bufferMinutos;
 
     const fitsWithinSchedule = scheduleRanges.some((range) => {
@@ -2639,7 +2701,7 @@ export class AppointmentService {
       );
     }
 
-    const appointmentDay = this.getDateInTimezone(fecha);
+    const appointmentDay = this.getDateInTimezone(fecha, tz);
     const diasCerradosRegistros = sede.DiaCerradoSede.length
       ? sede.DiaCerradoSede
       : Array.isArray(sede.diasCerrado)
@@ -2655,7 +2717,7 @@ export class AppointmentService {
       if (!cierreParcial.fecha) continue;
       const cierreFecha = new Date(cierreParcial.fecha);
       if (Number.isNaN(cierreFecha.getTime())) continue;
-      const cierreDia = this.getDateInTimezone(cierreFecha);
+      const cierreDia = this.getDateInTimezone(cierreFecha, tz);
       if (cierreDia !== appointmentDay) continue;
 
       if (cierreParcial.todoElDia ?? true) {
