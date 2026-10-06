@@ -141,7 +141,15 @@ export class EmpresaService {
     /* Con el pais incluido: la lista de empresas del SUPER_ADMIN ensena de
        que mercado es cada negocio, que es lo que hace que un solo panel
        siga siendo mejor que dos. */
-    return this.prisma.empresa.findMany({ include: { country: true } });
+    return this.prisma.empresa.findMany({
+      include: {
+        country: true,
+        /* El estado de la verificación viaja con cada empresa: el SUPER_ADMIN
+           tiene que ver de un vistazo quién está verificado y a quién le falta
+           subir papeles, sin abrir la cola ni pedir una consulta por empresa. */
+        kyc: { select: { estado: true, enviadoEn: true, motivoRechazo: true } },
+      },
+    });
   }
 
   async findOne(id: number) {
@@ -149,7 +157,10 @@ export class EmpresaService {
       where: { id },
       /* El pais viaja siempre con la empresa: el panel se configura con el
          -moneda, huso, formatos y etiquetas- y sin el se quedaria en euros. */
-      include: { country: true },
+      include: {
+        country: true,
+        kyc: { select: { estado: true, enviadoEn: true, motivoRechazo: true } },
+      },
     });
     if (!empresa) {
       throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
