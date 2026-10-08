@@ -14,6 +14,7 @@ import { DiaCerradoSedeModule } from './data/diaCerradoSede/dia-cerrado-sede.mod
 import { DisponibilidadProfesionalModule } from './data/disponibilidadProfesional/disponibilidad-profesional.module';
 import { MailModule } from './data/email/mail.module';
 import { EmpresaModule } from './data/empresa/empresa.module';
+import { BackupModule } from './data/backup/backup.module';
 import { FestivoModule } from './data/festivo/festivo.module';
 import { PaisModule } from './data/pais/pais.module';
 import { EntityViewModule } from './data/entity-view/entity-view.module';
@@ -88,6 +89,7 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     AssistantModule,
     SearchModule,
     FestivoModule,
+    BackupModule,
     PaisModule,
     EntityViewModule,
     EstadisticasModule,
