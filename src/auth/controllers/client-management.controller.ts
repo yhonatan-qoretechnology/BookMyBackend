@@ -37,7 +37,7 @@ export class ClientManagementController {
   @Post('search')
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
   @ApiOperation({ 
-    summary: 'Buscar cliente por email',
+    summary: 'Buscar un cliente por su correo o su teléfono completos',
     description: 'Busca un cliente tipo CLIENT por email. Devuelve datos completos del cliente.'
   })
   @ApiResponse({ 
@@ -49,7 +49,7 @@ export class ClientManagementController {
     description: 'Cliente no encontrado' 
   })
   async searchClient(@Body() searchClientDto: SearchClientDto) {
-    return this.clientManagementService.searchClient(searchClientDto.email);
+    return this.clientManagementService.searchClient(searchClientDto);
   }
 
   @Get()

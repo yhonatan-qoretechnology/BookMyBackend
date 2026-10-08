@@ -77,25 +77,48 @@ export class ClientManagementService {
     };
   }
 
-  async searchClient(email: string) {
-    // Buscar por email
+  /**
+   * Busca un cliente por su correo, su telefono o su documento, SIEMPRE
+   * completos. Es la unica forma de traer al negocio a alguien que aun no
+   * ha reservado con el: el listado solo ensena los suyos.
+   *
+   * No admite busquedas parciales a proposito. Con ellas, cualquier
+   * administrador podria recorrer la cartera de los demas negocios
+   * escribiendo trozos de correo y mirando que sale.
+   */
+  async searchClient(datos: { email?: string; telefono?: string }) {
+    const email = datos.email?.trim().toLowerCase();
+    const telefono = datos.telefono?.trim();
+
+    if (!email && !telefono) {
+      throw new BadRequestException(
+        'Indica el correo o el teléfono completo del cliente.',
+      );
+    }
+
+    /* Por documento todavia no se puede: `UserData` no guarda el numero,
+       solo nombre, telefono, idioma y fecha de nacimiento. El telefono si
+       es unico en toda la plataforma, asi que sirve igual de ancla. */
     const client = await this.prisma.users.findFirst({
       where: {
-        email: email.toLowerCase(),
         role: Role.CLIENT,
+        ...(email ? { email } : {}),
+        ...(telefono ? { UserData: { phone: telefono } } : {}),
       },
       include: CLIENT_INCLUDE,
     });
 
     if (!client) {
-      throw new NotFoundException('Cliente no encontrado con el email proporcionado');
+      throw new NotFoundException(
+        'No hay ningún cliente con esos datos. Comprueba que estén completos.',
+      );
     }
 
     return this.toClientResponse(client);
   }
 
   async listClients(filters: ClientListDto, user: AuthenticatedUser) {
-    const { email, id, name, page = 1, limit = 20 } = filters;
+    const { email, id, name, empresaId, page = 1, limit = 20 } = filters;
     const skip = (page - 1) * limit;
 
     // Construir where clause
@@ -136,6 +159,11 @@ export class ClientManagementService {
       };
     } else if (user.role === Role.BRANCH_ADMIN && user.sedeId) {
       whereClause.Appointment = { some: { sedeId: user.sedeId } };
+    } else if (user.role === Role.SUPER_ADMIN && empresaId) {
+      /* El superadmin si ve a todos, pero cuando crea una reserva EN
+         NOMBRE de un negocio tiene que ver los de ese negocio: en el paso
+         de elegir cliente le salian los de toda la plataforma. */
+      whereClause.Appointment = { some: { sede: { empresaId } } };
     }
 
     const [clients, total] = await Promise.all([

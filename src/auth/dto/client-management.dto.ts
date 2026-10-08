@@ -16,10 +16,28 @@ import {
   PASSWORD_RULES_MESSAGE,
 } from '../common/validators/password.decorator';
 
+/**
+ * Busqueda EXACTA de un cliente, para traer al negocio a alguien que
+ * todavia no ha reservado con el.
+ *
+ * Es exacta a proposito: el listado solo ensena los clientes del propio
+ * negocio, asi que esto es la unica via de llegar a uno de fuera. Si
+ * admitiera busquedas parciales, cualquier administrador podria recorrer
+ * la cartera de los demas escribiendo "@gmail" y mirando lo que sale.
+ * Haciendo falta el correo, el telefono o el documento COMPLETOS, solo
+ * encuentra a quien ya tienes delante dandotelos.
+ */
 export class SearchClientDto {
-  @ApiProperty({ example: 'cliente@email.com', description: 'Email del cliente' })
+  @ApiPropertyOptional({ example: 'cliente@email.com', description: 'Correo completo' })
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
+
+  @ApiPropertyOptional({ example: '+34600111222', description: 'Teléfono completo' })
+  @IsOptional()
+  @IsString()
+  telefono?: string;
+
 }
 
 /**
@@ -36,6 +54,18 @@ export class ClientListDto {
   @IsOptional()
   @IsString()
   email?: string;
+
+  @ApiPropertyOptional({
+    example: 7,
+    description:
+      'Acotar a los clientes de una empresa. Lo usa el SUPER_ADMIN cuando crea una ' +
+      'reserva en nombre de un negocio: sin esto veria los clientes de toda la ' +
+      'plataforma en el paso de elegir cliente.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  empresaId?: number;
 
   @ApiPropertyOptional({ example: 123, description: 'Filtrar por ID' })
   @IsOptional()

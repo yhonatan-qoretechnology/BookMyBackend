@@ -310,8 +310,11 @@ model EmpresaKyc {
   estado          KycEstado @default(PENDIENTE)
   /// NIF/CIF del negocio, para cruzarlo con los datos de facturación
   nifCif          String?   @map("nif_cif")
-  /// Tipo de documento del responsable (DNI/NIE/Pasaporte), de DocumentType
+  /// Tipo de documento del responsable. Depende del pais del negocio:
+  /// DNI/NIE/Pasaporte en Espana, CC/CE/NIT en Colombia.
   documentoTipo   String?   @map("documento_tipo")
+  /// Numero de ese documento. Sin el, el tipo no identifica a nadie.
+  documentoNumero String?   @map("documento_numero") @db.VarChar(40)
   /// Rutas relativas ("uploads/kyc/…"), igual que el resto de archivos
   documentoFrente String?   @map("documento_frente")
   documentoDorso  String?   @map("documento_dorso")

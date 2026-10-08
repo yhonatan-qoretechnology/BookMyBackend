@@ -28,6 +28,14 @@ export interface ArchivosKyc {
  * producto: una empresa sin verificar trabaja igual, solo ve el aviso en
  * su panel y aparece en la cola de revisión.
  */
+/**
+ * Dias que tiene un negocio para subir su documentacion, contados desde
+ * que creo la cuenta. Pasado el plazo el aviso se vuelve urgente, pero la
+ * cuenta sigue funcionando: no se le tira el negocio a nadie por un papel,
+ * y menos a quien ya tiene citas cogidas.
+ */
+export const DIAS_PARA_VERIFICAR = 7;
+
 @Injectable()
 export class KycService {
   private readonly logger = new Logger(KycService.name);
@@ -97,7 +105,7 @@ export class KycService {
 
     const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
-      select: { id: true, nombre: true },
+      select: { id: true, nombre: true, createdAt: true },
     });
     if (!empresa) throw new NotFoundException('La empresa no existe.');
 
@@ -106,12 +114,26 @@ export class KycService {
       include: { revisadoPor: { select: { id: true, email: true } } },
     });
 
+    /* El plazo cuenta desde que se creo la cuenta, que es el unico
+       momento que el negocio reconoce como "cuando empece". */
+    const limite = new Date(empresa.createdAt);
+    limite.setDate(limite.getDate() + DIAS_PARA_VERIFICAR);
+    const restantes = Math.ceil((limite.getTime() - Date.now()) / 86_400_000);
+    const plazo = {
+      diasParaVerificar: Math.max(0, restantes),
+      limiteVerificacion: limite.toISOString(),
+      plazoVencido: restantes <= 0,
+    };
+
     return (
-      kyc ?? {
+      kyc
+        ? { ...kyc, ...plazo }
+        : {
         empresaId,
         estado: KycEstado.PENDIENTE,
         nifCif: null,
         documentoTipo: null,
+        documentoNumero: null,
         documentoFrente: null,
         documentoDorso: null,
         selfie: null,
@@ -121,6 +143,7 @@ export class KycService {
         revisadoPorId: null,
         motivoRechazo: null,
         revisadoPor: null,
+        ...plazo,
       }
     );
   }
@@ -133,7 +156,7 @@ export class KycService {
    */
   async enviar(
     empresaId: number,
-    datos: { nifCif?: string; documentoTipo?: string },
+    datos: { nifCif?: string; documentoTipo?: string; documentoNumero?: string },
     archivos: ArchivosKyc,
     user?: AuthenticatedUser,
   ) {
@@ -168,6 +191,8 @@ export class KycService {
       estado: KycEstado.EN_REVISION,
       nifCif: datos.nifCif?.trim() || previo?.nifCif || null,
       documentoTipo: datos.documentoTipo?.trim() || previo?.documentoTipo || null,
+      documentoNumero:
+        datos.documentoNumero?.trim() || previo?.documentoNumero || null,
       documentoFrente,
       documentoDorso: dorso ?? previo?.documentoDorso ?? null,
       selfie: selfie ?? previo?.selfie ?? null,

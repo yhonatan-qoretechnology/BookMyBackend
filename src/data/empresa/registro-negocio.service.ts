@@ -15,7 +15,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthService } from '../../auth/auth.service';
 import { HashService } from '../../auth/services/hash/hash.service';
 import { RegistroNegocioDto } from './dto/registro-negocio.dto';
-import { PlanService } from './plan.service';
+import { PRO_SE_OFRECE, PlanService } from './plan.service';
 
 /** Horario con el que nace una sede: de lunes a sábado. */
 const HORARIO_INICIAL = [
@@ -81,7 +81,11 @@ export class RegistroNegocioService {
 
     const countryId = dto.countryId ?? (await this.resolverPais(dto.paisIso));
     const hashedPassword = await this.hashService.hash(dto.password);
-    const conPrueba = dto.plan === 'pro';
+    /* Bookmy CRM Pro no se ofrece todavia: aunque el formulario mande
+       plan "pro", el negocio nace en Free y sin prueba. Asi no hay que
+       tocar la web ni dejar a nadie esperando una prueba que no llega.
+       Ver PRO_SE_OFRECE en plan.service.ts. */
+    const conPrueba = PRO_SE_OFRECE && dto.plan === 'pro';
     const nombreCompleto = `${dto.firstName.trim()} ${dto.lastName.trim()}`.trim();
 
     try {

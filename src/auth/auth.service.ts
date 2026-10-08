@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Role, UserAuth } from '@prisma/client';
+import { Role, UserAuth, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -686,8 +686,50 @@ export class AuthService {
     return { message: 'Contraseña actualizada correctamente.' };
   }
 
-  async findAllUsers(_user?: AuthenticatedUser) {
+  /**
+   * Hasta dónde llega la sesión al listar usuarios.
+   *
+   * Esto devolvía TODOS los de la plataforma a cualquier administrador,
+   * con su nombre, su teléfono y su correo. El asistente de nueva reserva
+   * tira de aquí, así que en el paso de elegir cliente un negocio veía la
+   * cartera entera de los demás.
+   *
+   * Un cliente no pertenece a ninguna empresa —puede reservar hoy en un
+   * sitio y mañana en otro—, así que la única pertenencia que existe en el
+   * modelo es haber reservado allí. Es lo que se usa, igual que ya se hizo
+   * en reseñas y en el equipo. El superadmin los sigue viendo todos.
+   */
+  private alcanceDeUsuarios(
+    user?: AuthenticatedUser,
+  ): Prisma.UsersWhereInput | undefined {
+    if (!user || user.role === Role.SUPER_ADMIN) return undefined;
+
+    if (user.role === Role.COMPANY_ADMIN && user.empresaId) {
+      return {
+        OR: [
+          /* Sus clientes: los que han reservado en alguna de sus sedes. */
+          { Appointment: { some: { sede: { empresaId: user.empresaId } } } },
+          /* Y su propia gente: administradores y profesionales. */
+          { AdminProfile: { empresaId: user.empresaId } },
+        ],
+      };
+    }
+
+    if (user.role === Role.BRANCH_ADMIN && user.sedeId) {
+      return {
+        OR: [
+          { Appointment: { some: { sedeId: user.sedeId } } },
+          { AdminProfile: { sedeId: user.sedeId } },
+        ],
+      };
+    }
+
+    return undefined;
+  }
+
+  async findAllUsers(user?: AuthenticatedUser) {
     return this.prisma.users.findMany({
+      where: this.alcanceDeUsuarios(user),
       include: {
         UserData: true,
         UserCategories: {
