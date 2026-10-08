@@ -8,39 +8,40 @@ datasource db {
 }
 
 model Users {
-  entityViews EntityView[]
-  id                                               Int            @id @default(autoincrement()) @map("id")
-  email                                            String         @unique @map("email") @db.VarChar(100)
-  clientType                                       ClientType     @default(people) @map("client_type")
-  state                                            ClientState    @default(disabled) @map("state")
-  acceptTerms                                      Boolean        @default(false) @map("accept_terms")
-  acceptPolitics                                   Boolean        @default(false) @map("accept_polits")
-  createdAt                                        DateTime       @default(now()) @map("created_at")
-  updatedAt                                        DateTime       @updatedAt @map("updated_at")
-  fotoPerfil                                       String?        @map("foto_perfil")
-  role                                             Role           @default(CLIENT) @map("role")
-  status_id                                        Int?           @default(7)
+  entityViews                                      EntityView[]
+  id                                               Int                     @id @default(autoincrement()) @map("id")
+  email                                            String                  @unique @map("email") @db.VarChar(100)
+  clientType                                       ClientType              @default(people) @map("client_type")
+  state                                            ClientState             @default(disabled) @map("state")
+  acceptTerms                                      Boolean                 @default(false) @map("accept_terms")
+  acceptPolitics                                   Boolean                 @default(false) @map("accept_polits")
+  createdAt                                        DateTime                @default(now()) @map("created_at")
+  updatedAt                                        DateTime                @updatedAt @map("updated_at")
+  fotoPerfil                                       String?                 @map("foto_perfil")
+  role                                             Role                    @default(CLIENT) @map("role")
+  status_id                                        Int?                    @default(7)
   Appointment                                      Appointment[]
   AdminProfile                                     AdminProfile?
-  chat_chat_receiver_idTousers                     chat[]         @relation("chat_receiver_idTousers")
-  chat_chat_sender_idTousers                       chat[]         @relation("chat_sender_idTousers")
-  chat_contact_chat_contact_owner_user_idTousers   chat_contact[] @relation("chat_contact_owner_user_idTousers")
-  chat_contact_chat_contact_contact_user_idTousers chat_contact[] @relation("chat_contact_contact_user_idTousers")
+  chat_chat_receiver_idTousers                     chat[]                  @relation("chat_receiver_idTousers")
+  chat_chat_sender_idTousers                       chat[]                  @relation("chat_sender_idTousers")
+  chat_contact_chat_contact_owner_user_idTousers   chat_contact[]          @relation("chat_contact_owner_user_idTousers")
+  chat_contact_chat_contact_contact_user_idTousers chat_contact[]          @relation("chat_contact_contact_user_idTousers")
   chat_log                                         chat_log[]
   paymentCards                                     PaymentCard[]
   payments                                         Payment[]
   profesionales                                    Profesional?
-  resenas                                          Resena[]       @relation("UserToResena")
-  UserAuth                                         UserAuth?      @relation("UserToUserAuth")
+  resenas                                          Resena[]                @relation("UserToResena")
+  UserAuth                                         UserAuth?               @relation("UserToUserAuth")
   UserCategories                                   UserCategory[]
-  UserData                                         UserData?      @relation("UserToUserData")
-  UserLocation                                     UserLocation?  @relation("UserToLocation")
-  UserStatus                                       UserStatus?    @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_status")
-  gastos                                            Gasto[]
+  UserData                                         UserData?               @relation("UserToUserData")
+  UserLocation                                     UserLocation?           @relation("UserToLocation")
+  UserStatus                                       UserStatus?             @relation(fields: [status_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_users_status")
+  gastos                                           Gasto[]
   assistantConversations                           AssistantConversation[]
-  notifications                                     Notification[]
-  appointmentHistories                              AppointmentHistory[]
-  kycRevisados                                      EmpresaKyc[]
+  notifications                                    Notification[]
+  appointmentHistories                             AppointmentHistory[]
+  kycRevisados                                     EmpresaKyc[]
+  solicitudesInventario                            SolicitudInventario[]
 
   @@index([email])
   @@map("users")
@@ -65,17 +66,19 @@ model AdminProfile {
 }
 
 model UserAuth {
-  /* Obliga a fijar contrasena propia en el primer acceso. */
-  mustChangePassword Boolean   @default(false) @map("must_change_password")
-  passwordChangedAt  DateTime? @map("password_changed_at")
+  /**
+   * Obliga a fijar contrasena propia en el primer acceso.
+   */
+  mustChangePassword Boolean              @default(false) @map("must_change_password")
+  passwordChangedAt  DateTime?            @map("password_changed_at")
   setupTokens        PasswordSetupToken[]
-  id        Int      @id @default(autoincrement()) @map("id")
-  email     String   @unique @map("email")
-  password  String   @map("password")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  user_id   Int      @unique @map("user_id")
-  user      Users    @relation("UserToUserAuth", fields: [user_id], references: [id])
+  id                 Int                  @id @default(autoincrement()) @map("id")
+  email              String               @unique @map("email")
+  password           String               @map("password")
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  user_id            Int                  @unique @map("user_id")
+  user               Users                @relation("UserToUserAuth", fields: [user_id], references: [id])
 
   @@map("user_auth")
 }
@@ -109,35 +112,45 @@ model Country {
   flagUrl     String? @map("flag_url")
   dialingCode String  @map("dialing_code") @db.VarChar(10)
 
-  /* ── Dinero ─────────────────────────────────────────────
-     El peso colombiano no usa decimales: son 45.000 COP, no 45.000,00.
-     Y un corte de pelo son 18 EUR o 45.000 COP, asi que el tope de precio
-     tampoco puede ser el mismo numero. */
+  /**
+   * ── Dinero ─────────────────────────────────────────────
+   * El peso colombiano no usa decimales: son 45.000 COP, no 45.000,00.
+   * Y un corte de pelo son 18 EUR o 45.000 COP, asi que el tope de precio
+   * tampoco puede ser el mismo numero.
+   */
   moneda          String @default("EUR") @map("moneda") @db.VarChar(3)
   decimalesMoneda Int    @default(2) @map("decimales_moneda")
   locale          String @default("es-ES") @map("locale") @db.VarChar(10)
   precioMinimo    Float  @default(0.5) @map("precio_minimo")
   precioMaximo    Float  @default(1000) @map("precio_maximo")
 
-  /* ── Tiempo ─────────────────────────────────────────────
-     Colombia es UTC-5 todo el ano; Espana cambia la hora dos veces. */
+  /**
+   * ── Tiempo ─────────────────────────────────────────────
+   * Colombia es UTC-5 todo el ano; Espana cambia la hora dos veces.
+   */
   zonaHoraria String @default("Europe/Madrid") @map("zona_horaria") @db.VarChar(64)
 
-  /* ── Como se llaman aqui las cosas ──────────────────────
-     Lo que a un espanol le suena normal a un colombiano le suena a
-     software extranjero, y al reves. Son cuatro palabras, pero salen en
-     casi todos los formularios. */
+  /**
+   * ── Como se llaman aqui las cosas ──────────────────────
+   * Lo que a un espanol le suena normal a un colombiano le suena a
+   * software extranjero, y al reves. Son cuatro palabras, pero salen en
+   * casi todos los formularios.
+   */
   etiquetaFiscal    String @default("NIF/CIF") @map("etiqueta_fiscal") @db.VarChar(24)
   etiquetaRegion    String @default("Provincia") @map("etiqueta_region") @db.VarChar(32)
   etiquetaMunicipio String @default("Municipio") @map("etiqueta_municipio") @db.VarChar(32)
   etiquetaImpuesto  String @default("IVA") @map("etiqueta_impuesto") @db.VarChar(24)
 
-  /* ── Reglas del mercado ─────────────────────────────────
-     Espana tiene festivos por comunidad autonoma; Colombia no tiene
-     festivos regionales: los 18 son nacionales (Ley 51/1983). */
+  /**
+   * ── Reglas del mercado ─────────────────────────────────
+   * Espana tiene festivos por comunidad autonoma; Colombia no tiene
+   * festivos regionales: los 18 son nacionales (Ley 51/1983).
+   */
   tieneRegiones      Boolean @default(true) @map("tiene_regiones")
   impuestoPorDefecto Float   @default(21) @map("impuesto_por_defecto")
-  /* Un pais se apaga sin borrarlo, para dejar de admitir altas nuevas. */
+  /**
+   * Un pais se apaga sin borrarlo, para dejar de admitir altas nuevas.
+   */
   activo             Boolean @default(true) @map("activo")
 
   DocumentTypes DocumentTypeByCountry[]
@@ -221,36 +234,42 @@ model UserCategory {
 }
 
 model UserLocation {
-  /* Ciudad resuelta por geocodificacion inversa, para 2.1 y 2.8. */
-  city           String? @map("city") @db.VarChar(120)
-  cityNormalized String? @map("city_normalized") @db.VarChar(120)
-  region         String? @map("region") @db.VarChar(120)
-  country        String? @map("country") @db.VarChar(120)
-  id        Int      @id @default(autoincrement()) @map("id")
-  latitude  Float    @map("latitude")
-  longitude Float    @map("longitude")
-  address   String?  @map("address") @db.VarChar(255)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  userId    Int      @unique @map("user_id")
-  user      Users    @relation("UserToLocation", fields: [userId], references: [id], onDelete: Cascade)
+  /**
+   * Ciudad resuelta por geocodificacion inversa, para 2.1 y 2.8.
+   */
+  city           String?  @map("city") @db.VarChar(120)
+  cityNormalized String?  @map("city_normalized") @db.VarChar(120)
+  region         String?  @map("region") @db.VarChar(120)
+  country        String?  @map("country") @db.VarChar(120)
+  id             Int      @id @default(autoincrement()) @map("id")
+  latitude       Float    @map("latitude")
+  longitude      Float    @map("longitude")
+  address        String?  @map("address") @db.VarChar(255)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  userId         Int      @unique @map("user_id")
+  user           Users    @relation("UserToLocation", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_locations")
 }
 
-/* Plan contratado por el negocio. El plan EFECTIVO se calcula: es PRO si
-   tiene el plan contratado o si su prueba de 30 dias sigue viva. */
+/**
+ * Plan contratado por el negocio. El plan EFECTIVO se calcula: es PRO si
+ * tiene el plan contratado o si su prueba de 30 dias sigue viva.
+ */
 enum PlanEmpresa {
   FREE
   PRO
 }
 
 model Empresa {
-  /* ── Plan y prueba gratuita ──────────────────────────────
-     Al darse de alta, el negocio elige Free o probar Pro 30 dias. La
-     prueba se regala una sola vez (`trialUsed`), y cuando caduca la
-     empresa vuelve sola a Free: no hace falta ningun proceso que la
-     degrade, basta con comparar `trialEndsAt` con la fecha de hoy. */
+  /**
+   * ── Plan y prueba gratuita ──────────────────────────────
+   * Al darse de alta, el negocio elige Free o probar Pro 30 dias. La
+   * prueba se regala una sola vez (`trialUsed`), y cuando caduca la
+   * empresa vuelve sola a Free: no hace falta ningun proceso que la
+   * degrade, basta con comparar `trialEndsAt` con la fecha de hoy.
+   */
   plan        PlanEmpresa @default(FREE)
   trialEndsAt DateTime?   @map("trial_ends_at")
   trialUsed   Boolean     @default(false) @map("trial_used")
@@ -261,35 +280,40 @@ model Empresa {
   bloqueadaEn     DateTime? @map("bloqueada_en")
   bloqueadaMotivo String?   @map("bloqueada_motivo")
 
-  /* ── Pais del negocio ───────────────────────────────────
-     Se elige al crear la cuenta y no cambia: de el salen la moneda, el
-     huso, los festivos, el documento fiscal y los formatos. Es del
-     NEGOCIO y no de la sede porque la identidad fiscal (NIF/CIF o NIT)
-     es de la empresa, y porque mezclar euros y pesos en una misma
-     estadistica no significa nada. */
+  /**
+   * ── Pais del negocio ───────────────────────────────────
+   * Se elige al crear la cuenta y no cambia: de el salen la moneda, el
+   * huso, los festivos, el documento fiscal y los formatos. Es del
+   * NEGOCIO y no de la sede porque la identidad fiscal (NIF/CIF o NIT)
+   * es de la empresa, y porque mezclar euros y pesos en una misma
+   * estadistica no significa nada.
+   */
   countryId Int     @map("country_id")
   country   Country @relation(fields: [countryId], references: [id])
 
-  id               Int            @id @default(autoincrement())
-  nombre           String         @unique
-  telefono         String?        @map("telefono")
-  email            String?        @map("email")
-  /* Identificador fiscal: NIF/CIF en Espana, NIT en Colombia. Como se
-     llama en pantalla lo dice `country.etiquetaFiscal`. */
-  nit              String?        @map("nit")
-  logo             String?        @map("logo_url")
-  descripcion      String?        @map("descripcion")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
-  descripcionLarga String?        @map("descripcion_larga")
-  facebookUrl      String?        @map("facebook_url")
-  instagramUrl     String?        @map("instagram_url")
-  tiktokUrl        String?        @map("tiktok_url")
-  webUrl           String?        @map("web_url")
+  id               Int              @id @default(autoincrement())
+  nombre           String           @unique
+  telefono         String?          @map("telefono")
+  email            String?          @map("email")
+  /**
+   * Identificador fiscal: NIF/CIF en Espana, NIT en Colombia. Como se
+   * llama en pantalla lo dice `country.etiquetaFiscal`.
+   */
+  nit              String?          @map("nit")
+  logo             String?          @map("logo_url")
+  descripcion      String?          @map("descripcion")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  descripcionLarga String?          @map("descripcion_larga")
+  facebookUrl      String?          @map("facebook_url")
+  instagramUrl     String?          @map("instagram_url")
+  tiktokUrl        String?          @map("tiktok_url")
+  webUrl           String?          @map("web_url")
   adminProfiles    AdminProfile[]
   sedes            Sede[]
   categoriasGasto  CategoriaGasto[]
   kyc              EmpresaKyc?
+  insumos          Insumo[]
 
   @@map("empresas")
 }
@@ -298,10 +322,10 @@ model Empresa {
 // SUPER_ADMIN. No bloquea nada: el negocio trabaja igual mientras tanto;
 // solo se le avisa en el panel y queda en la cola de revisión.
 enum KycEstado {
-  PENDIENTE   // nunca envió documentación
+  PENDIENTE // nunca envió documentación
   EN_REVISION // la envió y espera al superadmin
   APROBADA
-  RECHAZADA   // con motivo; puede volver a enviar
+  RECHAZADA // con motivo; puede volver a enviar
 }
 
 model EmpresaKyc {
@@ -335,34 +359,42 @@ model EmpresaKyc {
 }
 
 model Sede {
-  /* Geografia de la sede. `provincia` ya existia (y hoy guarda municipios).
-     Los rellena el buscador de direcciones de Google Places en el alta.
-     `pais` es el nombre que devuelve Places, en el idioma del navegador
-     ("España", "Spain"): sirve para ensenarlo, no para decidir nada. Lo
-     que manda es `countryId`. */
-  pais         String? @map("pais")
-  municipio    String? @map("municipio")
-  localidad    String? @map("localidad")
+  /**
+   * Geografia de la sede. `provincia` ya existia (y hoy guarda municipios).
+   * Los rellena el buscador de direcciones de Google Places en el alta.
+   * `pais` es el nombre que devuelve Places, en el idioma del navegador
+   * ("España", "Spain"): sirve para ensenarlo, no para decidir nada. Lo
+   * que manda es `countryId`.
+   */
+  pais      String? @map("pais")
+  municipio String? @map("municipio")
+  localidad String? @map("localidad")
 
-  /* Pais de la sede. Normalmente es el de su empresa, pero se guarda aqui
-     porque de el cuelgan los festivos y el huso, que son de donde esta el
-     local y no de donde esta la razon social. */
+  /**
+   * Pais de la sede. Normalmente es el de su empresa, pero se guarda aqui
+   * porque de el cuelgan los festivos y el huso, que son de donde esta el
+   * local y no de donde esta la razon social.
+   */
   countryId Int?     @map("country_id")
   country   Country? @relation(fields: [countryId], references: [id])
 
-  /* Region administrativa a la que pertenece la sede, en ISO 3166-2 sin el
-     prefijo de pais: "AN", "MD", "CT" en Espana. Sirve para resolver los
-     festivos REGIONAL. Se llamaba `ccaa`, pero una comunidad autonoma es
-     una figura espanola y esto tiene que valer para cualquier pais.
-     Colombia no la usa: sus 18 festivos son nacionales. Opcional: si no se
-     carga, se infiere del municipio o la provincia (ver festivo.service.ts). */
-  region       String? @map("region") @db.VarChar(10)
+  /**
+   * Region administrativa a la que pertenece la sede, en ISO 3166-2 sin el
+   * prefijo de pais: "AN", "MD", "CT" en Espana. Sirve para resolver los
+   * festivos REGIONAL. Se llamaba `ccaa`, pero una comunidad autonoma es
+   * una figura espanola y esto tiene que valer para cualquier pais.
+   * Colombia no la usa: sus 18 festivos son nacionales. Opcional: si no se
+   * carga, se infiere del municipio o la provincia (ver festivo.service.ts).
+   */
+  region String? @map("region") @db.VarChar(10)
 
-  /* Huso propio, solo para los casos en que no coincide con el del pais
-     (Canarias es Atlantic/Canary, una hora por detras de la Peninsula).
-     NO se ensena en la interfaz: si esta vacio se usa el del pais, que es
-     lo que pasa en el 99% de las sedes. */
-  zonaHoraria  String? @map("zona_horaria") @db.VarChar(64)
+  /**
+   * Huso propio, solo para los casos en que no coincide con el del pais
+   * (Canarias es Atlantic/Canary, una hora por detras de la Peninsula).
+   * NO se ensena en la interfaz: si esta vacio se usa el del pais, que es
+   * lo que pasa en el 99% de las sedes.
+   */
+  zonaHoraria String? @map("zona_horaria") @db.VarChar(64)
 
   id                     Int                      @id @default(autoincrement())
   nombre                 String
@@ -388,6 +420,8 @@ model Sede {
   serviceSedeProfesional ServiceSedeProfesional[]
   Service                Service[]                @relation("SedeServicios")
   gastos                 Gasto[]
+  existencias            StockSede[]
+  solicitudesInventario  SolicitudInventario[]
 
   // Antes no existía ningún constraint real detrás del catch de P2002 en
   // SedeService.create() — por eso las duplicaba sin avisar (ver seedSedes()
@@ -397,9 +431,11 @@ model Sede {
 }
 
 model Profesional {
-  /* Correo REAL del empleado. El de `Users.email` es sintetico
-     (nombre@empresa.com) y no es un buzon al que se pueda escribir. */
-  emailPersonal String? @map("email_personal")
+  /**
+   * Correo REAL del empleado. El de `Users.email` es sintetico
+   * (nombre@empresa.com) y no es un buzon al que se pueda escribir.
+   */
+  emailPersonal             String?                     @map("email_personal")
   id                        Int                         @id @default(autoincrement())
   nombre                    String
   biografia                 String?
@@ -491,57 +527,59 @@ model ServiceTranslation {
 }
 
 model ServiceSedeProfesional {
-  id            Int          @id @default(autoincrement())
-  sedeId        Int
-  serviceId     Int
-  profesionalId Int?
+  id                      Int          @id @default(autoincrement())
+  sedeId                  Int
+  serviceId               Int
+  profesionalId           Int?
   // Minutos que se bloquean automáticamente después de cada cita de este
   // servicio en esta sede (limpieza, preparación, etc.) — se suman al
   // validar solapes y horario de cierre en AppointmentService.
-  tiempoAdicionalMinutos Int @default(0) @map("tiempo_adicional_minutos")
+  tiempoAdicionalMinutos  Int          @default(0) @map("tiempo_adicional_minutos")
   // "Regla configurada" que pide 1.6: si al reservar este servicio en esta
   // sede no alcanza el tiempo antes del cierre, permite partirlo en dos
   // citas enlazadas (hoy hasta el cierre + el resto el próximo día
   // disponible del mismo profesional) en vez de rechazar la reserva.
   // Off por defecto — no todos los servicios deberían poder partirse.
-  permiteContinuarOtroDia Boolean @default(false) @map("permite_continuar_otro_dia")
-  profesional   Profesional? @relation(fields: [profesionalId], references: [id])
-  sede          Sede         @relation(fields: [sedeId], references: [id])
-  service       Service      @relation(fields: [serviceId], references: [id])
+  permiteContinuarOtroDia Boolean      @default(false) @map("permite_continuar_otro_dia")
+  profesional             Profesional? @relation(fields: [profesionalId], references: [id])
+  sede                    Sede         @relation(fields: [sedeId], references: [id])
+  service                 Service      @relation(fields: [serviceId], references: [id])
 
   @@unique([sedeId, serviceId, profesionalId])
   @@map("service_sede_profesional")
 }
 
 model Appointment {
-  /* Texto libre para el cliente que espera a ser atendido. Va aparte de
-     `notas` porque reschedule machaca notas con "Reagendado...". */
-  observacionEspera String? @map("observacion_espera")
-  id            Int               @id @default(autoincrement())
-  fecha         DateTime
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  sedeId        Int
-  serviceId     Int
-  profesionalId Int
-  duracion      Int
-  estado        AppointmentStatus @default(PENDING)
-  horaFin       DateTime
-  horaInicio    DateTime
-  notas         String?
-  userId        Int
-  profesional   Profesional       @relation(fields: [profesionalId], references: [id])
-  sede          Sede              @relation(fields: [sedeId], references: [id])
-  service       Service           @relation(fields: [serviceId], references: [id])
-  user          Users             @relation(fields: [userId], references: [id])
-  Payment       Payment?
-  history       AppointmentHistory[]
+  /**
+   * Texto libre para el cliente que espera a ser atendido. Va aparte de
+   * `notas` porque reschedule machaca notas con "Reagendado...".
+   */
+  observacionEspera String?              @map("observacion_espera")
+  id                Int                  @id @default(autoincrement())
+  fecha             DateTime
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  sedeId            Int
+  serviceId         Int
+  profesionalId     Int
+  duracion          Int
+  estado            AppointmentStatus    @default(PENDING)
+  horaFin           DateTime
+  horaInicio        DateTime
+  notas             String?
+  userId            Int
+  profesional       Profesional          @relation(fields: [profesionalId], references: [id])
+  sede              Sede                 @relation(fields: [sedeId], references: [id])
+  service           Service              @relation(fields: [serviceId], references: [id])
+  user              Users                @relation(fields: [userId], references: [id])
+  Payment           Payment?
+  history           AppointmentHistory[]
   // Extender una cita en curso crea OTRA cita (mismo cliente, profesional y
   // servicio) enlazada a la original, para que el tiempo extra quede
   // registrado y cobrado al cliente. Null = cita normal.
-  extensionDeId Int?
-  extensionDe   Appointment?  @relation("AppointmentExtensiones", fields: [extensionDeId], references: [id], onDelete: SetNull)
-  extensiones   Appointment[] @relation("AppointmentExtensiones")
+  extensionDeId     Int?
+  extensionDe       Appointment?         @relation("AppointmentExtensiones", fields: [extensionDeId], references: [id], onDelete: SetNull)
+  extensiones       Appointment[]        @relation("AppointmentExtensiones")
 
   // Antes era @@unique: una cita cancelada conserva su horaInicio y
   // bloqueaba crear otra (p. ej. la extensión) a esa misma hora. Los
@@ -625,7 +663,7 @@ model DisponibilidadProfesional {
 }
 
 model Payment {
-  items PaymentItem[]
+  items          PaymentItem[]
   id             Int           @id @default(autoincrement())
   appointmentId  Int           @unique
   method         PaymentMethod
@@ -819,8 +857,6 @@ enum ClientState {
   blocked
 }
 
-
-
 enum Role {
   SUPER_ADMIN
   COMPANY_ADMIN
@@ -861,21 +897,22 @@ enum PaymentStatus {
   CANCELLED
 }
 
-
-/* ============================================================
-   Lineas de detalle de una factura (adicionales)
-   Payment solo tenia un importe total, asi que no habia donde
-   guardar "recubrimiento en gel +5 EUR". El total se recalcula
-   en el backend sumando las lineas.
-============================================================ */
+/**
+ * ============================================================
+ * Lineas de detalle de una factura (adicionales)
+ * Payment solo tenia un importe total, asi que no habia donde
+ * guardar "recubrimiento en gel +5 EUR". El total se recalcula
+ * en el backend sumando las lineas.
+ * ============================================================
+ */
 model PaymentItem {
-  id            Int      @id @default(autoincrement())
-  paymentId     Int      @map("payment_id")
-  concepto      String   @map("concepto") @db.VarChar(160)
-  cantidad      Int      @default(1) @map("cantidad")
-  precioUnitario Float   @map("precio_unitario")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id             Int      @id @default(autoincrement())
+  paymentId      Int      @map("payment_id")
+  concepto       String   @map("concepto") @db.VarChar(160)
+  cantidad       Int      @default(1) @map("cantidad")
+  precioUnitario Float    @map("precio_unitario")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
@@ -885,16 +922,20 @@ model PaymentItem {
 
 enum AmbitoFestivo {
   NACIONAL
-  /* Antes AUTONOMICO. Es la comunidad autonoma en Espana y seria el
-     departamento o el estado en otro pais; Colombia no tiene festivos de
-     este ambito. */
+  /**
+   * Antes AUTONOMICO. Es la comunidad autonoma en Espana y seria el
+   * departamento o el estado en otro pais; Colombia no tiene festivos de
+   * este ambito.
+   */
   REGIONAL
   LOCAL
 }
 
-/* Festivos: se pintan en rojo en el calendario pero NO bloquean
-   el agendado (decision del cliente). Si una sede cierra ese dia,
-   se cierra con el mecanismo existente de dias cerrados. */
+/**
+ * Festivos: se pintan en rojo en el calendario pero NO bloquean
+ * el agendado (decision del cliente). Si una sede cierra ese dia,
+ * se cierra con el mecanismo existente de dias cerrados.
+ */
 /// Calendario laboral. Las fechas se guardan por pais porque Espana y
 /// Colombia comparten seis festivos nacionales el mismo dia (Ano Nuevo,
 /// Viernes Santo, 1 de mayo, 12 de octubre, 8 de diciembre y Navidad): sin
@@ -907,31 +948,37 @@ model Festivo {
   nombre    String        @map("nombre") @db.VarChar(160)
   ambito    AmbitoFestivo @map("ambito")
   pais      String        @default("ES") @map("pais") @db.VarChar(2)
-  /* Antes `ccaa`: una comunidad autonoma es una figura espanola. Cadena
-     vacia en los nacionales y en todo Colombia -no NULL, ver la nota del
-     indice de abajo-. */
+  /**
+   * Antes `ccaa`: una comunidad autonoma es una figura espanola. Cadena
+   * vacia en los nacionales y en todo Colombia -no NULL, ver la nota del
+   * indice de abajo-.
+   */
   region    String        @default("") @map("region") @db.VarChar(60)
   municipio String        @default("") @map("municipio") @db.VarChar(120)
   createdAt DateTime      @default(now()) @map("created_at")
 
-  /* En Postgres un UNIQUE no restringe filas con NULL, asi que un indice
-     sobre columnas opcionales no deduplica nada: dos "1 de enero"
-     nacionales entraban los dos. Por eso `region` y `municipio` se guardan
-     como cadena vacia en vez de NULL cuando no aplican. */
+  /**
+   * En Postgres un UNIQUE no restringe filas con NULL, asi que un indice
+   * sobre columnas opcionales no deduplica nada: dos "1 de enero"
+   * nacionales entraban los dos. Por eso `region` y `municipio` se guardan
+   * como cadena vacia en vez de NULL cuando no aplican.
+   */
   @@unique([pais, fecha, ambito, region, municipio])
   @@index([pais, fecha])
   @@map("festivos")
 }
 
-/* Token de un solo uso del enlace "fija tu contrasena" que recibe
-   el empleado por correo. Se guarda el hash, nunca el token. */
+/**
+ * Token de un solo uso del enlace "fija tu contrasena" que recibe
+ * el empleado por correo. Se guarda el hash, nunca el token.
+ */
 model PasswordSetupToken {
-  id        Int       @id @default(autoincrement())
-  userAuthId Int      @map("user_auth_id")
-  tokenHash String    @unique @map("token_hash")
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
+  id         Int       @id @default(autoincrement())
+  userAuthId Int       @map("user_auth_id")
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  usedAt     DateTime? @map("used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
   userAuth UserAuth @relation(fields: [userAuthId], references: [id], onDelete: Cascade)
 
@@ -947,11 +994,13 @@ enum ViewEntityType {
   CATEGORIA
 }
 
-/* Registro de vistas del catalogo (2.2-2.5 y 2.7). Una sola tabla
-   generica en vez de una por entidad: los rankings son la misma
-   consulta con distinto entityType. empresaId/sedeId van
-   desnormalizados para poder acotar el ranking por negocio sin
-   encadenar joins. */
+/**
+ * Registro de vistas del catalogo (2.2-2.5 y 2.7). Una sola tabla
+ * generica en vez de una por entidad: los rankings son la misma
+ * consulta con distinto entityType. empresaId/sedeId van
+ * desnormalizados para poder acotar el ranking por negocio sin
+ * encadenar joins.
+ */
 model EntityView {
   id         Int            @id @default(autoincrement())
   entityType ViewEntityType @map("entity_type")
@@ -970,3 +1019,99 @@ model EntityView {
   @@map("entity_views")
 }
 
+/**
+ * ══════════════════════════════════════════════════════════
+ * STOCK E INSUMOS
+ * ──────────────────────────────────────────────────────────
+ * Hasta ahora el modulo era una maqueta: el catalogo vivia en
+ * memoria del navegador, con ocho productos de ejemplo iguales
+ * para todos los negocios, y lo que alguien escribia se perdia
+ * al recargar.
+ * El catalogo es de cada EMPRESA -una peluqueria y una clinica
+ * no gastan lo mismo- y las existencias son de cada SEDE, que
+ * es donde de verdad se acaba el bote.
+ * ══════════════════════════════════════════════════════════
+ */
+
+/// Un producto del catalogo de un negocio: esmalte, cera, algodon...
+model Insumo {
+  id        Int      @id @default(autoincrement())
+  empresaId Int      @map("empresa_id")
+  nombre    String   @db.VarChar(120)
+  categoria String   @default("General") @db.VarChar(60)
+  /// Unidad de medida: ud, bote, pack, caja...
+  unidad    String   @default("ud") @db.VarChar(20)
+  /// Precio de referencia, en la moneda del pais del negocio.
+  precioRef Float    @default(0) @map("precio_ref")
+  /// Se archiva en vez de borrarse: las solicitudes antiguas lo citan.
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  empresa     Empresa         @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  existencias StockSede[]
+  lineas      SolicitudItem[]
+
+  /// Dos insumos con el mismo nombre en el mismo negocio no tienen sentido.
+  @@unique([empresaId, nombre])
+  @@index([empresaId])
+  @@map("insumos")
+}
+
+/// Lo que queda de un insumo en una sede concreta.
+model StockSede {
+  id        Int      @id @default(autoincrement())
+  sedeId    Int      @map("sede_id")
+  insumoId  Int      @map("insumo_id")
+  /// Unidades disponibles. Empieza en cero: nadie tiene nada hasta que lo compra.
+  stock     Float    @default(0)
+  /// Capacidad objetivo, para saber si el nivel es critico, medio o bueno.
+  max       Float    @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  sede   Sede   @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+  insumo Insumo @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+
+  @@unique([sedeId, insumoId])
+  @@index([sedeId])
+  @@map("stock_sede")
+}
+
+enum EstadoSolicitud {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
+/// Pedido de reposicion que una sede manda a la administracion.
+model SolicitudInventario {
+  id            Int             @id @default(autoincrement())
+  sedeId        Int             @map("sede_id")
+  solicitanteId Int?            @map("solicitante_id")
+  estado        EstadoSolicitud @default(PENDIENTE)
+  notas         String?         @db.VarChar(500)
+  resueltaEn    DateTime?       @map("resuelta_en")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  sede        Sede            @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+  solicitante Users?          @relation(fields: [solicitanteId], references: [id], onDelete: SetNull)
+  items       SolicitudItem[]
+
+  @@index([sedeId, estado])
+  @@map("solicitudes_inventario")
+}
+
+/// Una linea del pedido: cuanto se pide de que insumo.
+model SolicitudItem {
+  id          Int   @id @default(autoincrement())
+  solicitudId Int   @map("solicitud_id")
+  insumoId    Int   @map("insumo_id")
+  cantidad    Float
+
+  solicitud SolicitudInventario @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  insumo    Insumo              @relation(fields: [insumoId], references: [id], onDelete: Restrict)
+
+  @@unique([solicitudId, insumoId])
+  @@map("solicitud_items")
+}

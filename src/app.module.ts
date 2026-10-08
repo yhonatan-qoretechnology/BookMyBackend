@@ -17,6 +17,7 @@ import { EmpresaModule } from './data/empresa/empresa.module';
 import { BackupModule } from './data/backup/backup.module';
 import { FestivoModule } from './data/festivo/festivo.module';
 import { PaisModule } from './data/pais/pais.module';
+import { StockModule } from './data/stock/stock.module';
 import { EntityViewModule } from './data/entity-view/entity-view.module';
 import { EstadisticasModule } from './data/estadisticas/estadisticas.module';
 import { GastoModule } from './data/gasto/gasto.module';
@@ -91,6 +92,7 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     FestivoModule,
     BackupModule,
     PaisModule,
+    StockModule,
     EntityViewModule,
     EstadisticasModule,
     NotificationModule,
