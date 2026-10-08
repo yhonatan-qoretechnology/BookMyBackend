@@ -1043,6 +1043,10 @@ model Insumo {
   unidad    String   @default("ud") @db.VarChar(20)
   /// Precio de referencia, en la moneda del pais del negocio.
   precioRef Float    @default(0) @map("precio_ref")
+  /// Cuanto quiere tener el negocio de esto en cada sede. Sin un objetivo
+  /// no se puede decir si quedan pocas: todo saldria en rojo y el boton de
+  /// reponer nunca se activaria.
+  maxPorDefecto Float @default(10) @map("max_por_defecto")
   /// Se archiva en vez de borrarse: las solicitudes antiguas lo citan.
   activo    Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")

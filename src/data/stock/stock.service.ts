@@ -75,6 +75,7 @@ export class StockService {
       categoria?: string;
       unidad?: string;
       precioRef?: number;
+      maxPorDefecto?: number;
       empresaId?: number;
     },
   ) {
@@ -90,6 +91,9 @@ export class StockService {
           categoria: datos.categoria?.trim() || 'General',
           unidad: datos.unidad?.trim() || 'ud',
           precioRef: datos.precioRef ?? 0,
+          ...(datos.maxPorDefecto !== undefined
+            ? { maxPorDefecto: datos.maxPorDefecto }
+            : {}),
         },
       });
     } catch (error) {
@@ -111,6 +115,7 @@ export class StockService {
       categoria?: string;
       unidad?: string;
       precioRef?: number;
+      maxPorDefecto?: number;
       activo?: boolean;
       empresaId?: number;
     },
@@ -129,6 +134,9 @@ export class StockService {
         ...(datos.categoria !== undefined ? { categoria: datos.categoria.trim() } : {}),
         ...(datos.unidad !== undefined ? { unidad: datos.unidad.trim() } : {}),
         ...(datos.precioRef !== undefined ? { precioRef: datos.precioRef } : {}),
+        ...(datos.maxPorDefecto !== undefined
+          ? { maxPorDefecto: datos.maxPorDefecto }
+          : {}),
         ...(datos.activo !== undefined ? { activo: datos.activo } : {}),
       },
     });
@@ -169,7 +177,10 @@ export class StockService {
         insumoId: insumo.id,
         insumo,
         stock: e?.stock ?? 0,
-        max: e?.max ?? 0,
+        /* Sin objetivo propio en la sede manda el del catalogo. Si esto
+           devolviera 0, la barra de nivel marcaria todo como critico y el
+           boton de reponer saldria siempre apagado. */
+        max: e?.max || insumo.maxPorDefecto,
       };
     });
   }

@@ -66,6 +66,7 @@ export class StockController {
       categoria?: string;
       unidad?: string;
       precioRef?: number;
+      maxPorDefecto?: number;
       empresaId?: number;
     },
   ) {
@@ -83,6 +84,7 @@ export class StockController {
       categoria?: string;
       unidad?: string;
       precioRef?: number;
+      maxPorDefecto?: number;
       activo?: boolean;
       empresaId?: number;
     },
