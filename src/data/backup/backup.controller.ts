@@ -1,5 +1,5 @@
-import { Controller, Get, Logger, Res, UseGuards } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Logger, Query, Res, UseGuards } from '@nestjs/common';
+import { ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { Response } from 'express';
 import { once } from 'events';
@@ -41,16 +41,34 @@ export class BackupController {
   @ApiOperation({
     summary: 'Descargar la copia de seguridad completa (solo SUPER_ADMIN)',
     description:
-      'Devuelve un JSON con todas las tablas. Se genera por lotes y se escribe en streaming, ' +
-      'así que no se carga la base entera en memoria. No incluye los archivos subidos.',
+      'En SQL por defecto: un archivo restaurable con psql sobre el esquema que crean las ' +
+      'migraciones de Prisma. En JSON si se pide, para mirar o migrar los datos. Se genera ' +
+      'por lotes y en streaming, así que no se carga la base entera en memoria. No incluye ' +
+      'los archivos subidos.',
   })
-  async descargar(@Res() res: Response, @AuthUser() user?: AuthenticatedUser) {
+  @ApiQuery({
+    name: 'formato',
+    required: false,
+    enum: ['sql', 'json'],
+    description: 'sql (por defecto) para restaurar; json para inspeccionar.',
+  })
+  async descargar(
+    @Res() res: Response,
+    @Query('formato') formato?: string,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    const esJson = formato?.toLowerCase() === 'json';
     const fecha = new Date().toISOString().slice(0, 10);
-    const nombre = `bookmy-backup-${fecha}.json`;
+    const nombre = `bookmy-backup-${fecha}.${esJson ? 'json' : 'sql'}`;
 
-    this.logger.log(`Copia de seguridad solicitada por ${user?.email ?? 'desconocido'}`);
+    this.logger.log(
+      `Copia de seguridad (${esJson ? 'json' : 'sql'}) solicitada por ${user?.email ?? 'desconocido'}`,
+    );
 
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader(
+      'Content-Type',
+      esJson ? 'application/json; charset=utf-8' : 'application/sql; charset=utf-8',
+    );
     res.setHeader('Content-Disposition', `attachment; filename="${nombre}"`);
     /* Sin esto el panel, que está en otro origen, no puede leer el nombre
        del archivo que manda la cabecera. */
@@ -58,7 +76,8 @@ export class BackupController {
     res.setHeader('Cache-Control', 'no-store');
 
     try {
-      for await (const trozo of this.backup.volcar()) {
+      const volcado = esJson ? this.backup.volcarJson() : this.backup.volcarSql();
+      for await (const trozo of volcado) {
         /* `write` devuelve false cuando el buffer de salida está lleno:
            esperar al 'drain' es lo que evita que una base grande se acumule
            en memoria pese a ir por lotes. */
