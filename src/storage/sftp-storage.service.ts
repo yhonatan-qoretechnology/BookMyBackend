@@ -44,6 +44,22 @@ export class SftpStorageService {
       .replace(/\/+$/g, '');
   }
 
+  /*
+   * Base publica de antes de la mudanza de dominio, si esta puesta.
+   *
+   * Las URLs de las fotos se guardan enteras en la base de datos, asi que el
+   * dia que UPLOADS_PUBLIC_BASE_URL cambie (de bookmy.es a cdn.bookmy.es) las
+   * ya guardadas seguiran llevando la base vieja. Esta variable existe para
+   * poder reconocerlas y borrar su fichero; para subir no se usa nunca.
+   */
+  private getPreviousPublicBaseUrl() {
+    return (
+      this.configService.get<string>('UPLOADS_PUBLIC_BASE_URL_ANTERIOR') ?? ''
+    )
+      .trim()
+      .replace(/\/+$/g, '');
+  }
+
   private getRemoteRootPath() {
     return (this.configService.get<string>('SFTP_REMOTE_ROOT_PATH') ?? '')
       .trim()
@@ -168,11 +184,25 @@ export class SftpStorageService {
   }
 
   async deleteByPublicUrl(publicUrl: string) {
-    const base = this.getPublicBaseUrl();
-    if (!publicUrl || !base) return;
+    if (!publicUrl) return;
 
     const normalizedUrl = publicUrl.trim();
-    if (!normalizedUrl.startsWith(base)) return;
+
+    /* Se admite la base de hoy y la de antes de la mudanza, porque una foto
+       subida antes del cambio de dominio tiene guardada la base vieja y, si no
+       se reconociera, el borrado se iria de puntillas sin borrar nada y el
+       fichero se quedaria en el espacio web para siempre.
+
+       La mas larga primero: si una base es prefijo de la otra, la mas
+       especifica es la que da la ruta relativa correcta. Mientras
+       UPLOADS_PUBLIC_BASE_URL_ANTERIOR no este puesta, esta lista tiene un
+       solo elemento y el comportamiento es el de siempre. */
+    const bases = [this.getPublicBaseUrl(), this.getPreviousPublicBaseUrl()]
+      .filter((candidate) => Boolean(candidate))
+      .sort((a, b) => b.length - a.length);
+
+    const base = bases.find((candidate) => normalizedUrl.startsWith(candidate));
+    if (!base) return;
 
     const rel = normalizedUrl
       .slice(base.length)

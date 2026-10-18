@@ -17,9 +17,21 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private prisma: PrismaService,
   ) {
     super({
+      /*
+       * El Bearer manda sobre la cookie, y no al contrario.
+       *
+       * Hasta ahora el panel y la API vivian en dominios registrables
+       * distintos, asi que la cookie `access_token` (SameSite=Lax) no viajaba
+       * nunca y este orden daba igual. Con bookmy.es y api.bookmy.es pasan a
+       * ser el MISMO sitio: la cookie acompana a todas las peticiones y, si se
+       * leyera primero, ganaria al token que el panel manda en la cabecera.
+       * Abrir una segunda cuenta en otra pestana haria que la primera actuase
+       * en silencio como la segunda, con sus clientes y sus citas delante. La
+       * cookie se queda como respaldo, para quien no manda cabecera.
+       */
       jwtFromRequest: ExtractJwt.fromExtractors([
-        cookieJwtExtractor,
         ExtractJwt.fromAuthHeaderAsBearerToken(),
+        cookieJwtExtractor,
       ]),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_SECRET_KEY'),

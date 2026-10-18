@@ -4,6 +4,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  HttpCode,
   HttpException,
   HttpStatus,
   Param,
@@ -31,7 +32,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { Response } from 'express';
+import { CookieOptions, Response } from 'express';
 import { AuthService } from './auth.service';
 import { AuthUser } from './common/decorators/auth-user.decorator';
 import { Public } from './common/decorators/public.decorator';
@@ -60,6 +61,25 @@ const ADMIN_ROLES = [
   Role.COMPANY_ADMIN,
   Role.BRANCH_ADMIN,
 ] as const;
+
+const ACCESS_TOKEN_COOKIE = 'access_token';
+
+/*
+ * Las opciones de la cookie de sesion, en un solo sitio: el login la emite con
+ * ellas y el logout la borra con ellas TAL CUAL. El navegador solo borra una
+ * cookie si el nombre, el path y el dominio coinciden con los de la que
+ * guardo, asi que dos listas separadas acaban en un logout que no borra nada y
+ * no avisa de ello.
+ *
+ * `secure` sale del entorno y no es `true` a secas: en desarrollo el panel
+ * habla por http y una cookie Secure no llegaria a guardarse.
+ */
+const ACCESS_TOKEN_COOKIE_OPTIONS: CookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: process.env.NODE_ENV === 'production',
+  path: '/',
+};
 
 @ApiTags('Auth')
 @ApiBearerAuth()
@@ -156,14 +176,29 @@ export class AuthController {
   ) {
     const result = await this.authService.login(loginDto);
     if ((result as any)?.token) {
-      res.cookie('access_token', (result as any).token, {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: false,
+      res.cookie(ACCESS_TOKEN_COOKIE, (result as any).token, {
+        ...ACCESS_TOKEN_COOKIE_OPTIONS,
         maxAge: 12 * 60 * 60 * 1000,
       });
     }
     return result;
+  }
+
+  /* Publica a proposito: cerrar sesion tiene que funcionar tambien con el
+     token caducado o ya invalido. Si exigiera sesion valida, el caso en el que
+     mas falta hace seria justo el unico en el que no se podria usar. */
+  @Public()
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Cerrar sesion',
+    description:
+      'Borra la cookie access_token con las mismas opciones con que se emite. El token que el panel guarde por su cuenta lo tira el panel.',
+  })
+  @ApiResponse({ status: 200, description: 'Cookie de sesion borrada.' })
+  logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie(ACCESS_TOKEN_COOKIE, ACCESS_TOKEN_COOKIE_OPTIONS);
+    return { ok: true };
   }
 
   @Public()

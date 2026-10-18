@@ -52,12 +52,30 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
       envFilePath: '.env',
       validationSchema: Joi.object({
         JWT_SECRET_KEY: Joi.string().required(),
+        /* Los enlaces de los correos (confirmar la cuenta, fijar la contrasena
+           del empleado nuevo) se construyen con APP_URL y apuntan al PANEL.
+           Si falta, MailService cae en http://localhost:3000 y el empleado
+           recibe un enlace muerto, sin que nadie se entere.
+
+           Solo se exige en produccion: ahi un despliegue sin la variable es
+           mejor que no arranque, mientras que en local y en CI la ausencia
+           sigue significando lo de hoy, el valor por defecto del propio
+           MailService. `allow('')` deja pasar la variable puesta pero vacia,
+           que es como esta en .env.example y hoy tampoco impide arrancar. */
+        APP_URL:
+          process.env.NODE_ENV === 'production'
+            ? Joi.string().required()
+            : Joi.string().allow('').optional(),
         SFTP_HOST: Joi.string().optional(),
         SFTP_PORT: Joi.number().optional(),
         SFTP_USER: Joi.string().optional(),
         SFTP_PASSWORD: Joi.string().optional(),
         SFTP_REMOTE_ROOT_PATH: Joi.string().optional(),
         UPLOADS_PUBLIC_BASE_URL: Joi.string().optional(),
+        /* Base publica ANTERIOR de los ficheros subidos. Solo sirve para poder
+           BORRARLOS: ver SftpStorageService.deleteByPublicUrl. Si no esta
+           puesta, el borrado se comporta exactamente como hoy. */
+        UPLOADS_PUBLIC_BASE_URL_ANTERIOR: Joi.string().allow('').optional(),
       }),
     }),
     StorageModule,
