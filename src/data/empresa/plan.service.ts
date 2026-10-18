@@ -8,8 +8,21 @@ import { Empresa, PlanEmpresa, Role } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 
-/** Días que dura la prueba de Bookmy CRM Pro. */
-export const DIAS_DE_PRUEBA = 30;
+/**
+ * Bookmy CRM Pro no se ofrece todavia.
+ *
+ * Con esto en false no se regala la prueba al crear una cuenta, no se
+ * puede activar desde el panel y el aviso deja de ofrecerla. Lo que NO
+ * hace es quitarsela a quien ya la tiene: una empresa con PRO contratado
+ * sigue usando sus modulos, porque apagar la venta no es lo mismo que
+ * retirarle funciones a un negocio que ya trabaja con ellas.
+ *
+ * Para volver a abrirlo basta con ponerlo en true.
+ */
+export const PRO_SE_OFRECE = false;
+
+/** Días que duraría la prueba, el día que se vuelva a ofrecer. */
+export const DIAS_DE_PRUEBA = 7;
 
 export interface EstadoPlan {
   /** Lo contratado: FREE o PRO. */
@@ -31,7 +44,7 @@ export interface EstadoPlan {
 type EmpresaPlan = Pick<Empresa, 'plan' | 'trialEndsAt' | 'trialUsed'>;
 
 /**
- * Plan de un negocio y prueba de 30 días.
+ * Plan de un negocio y su prueba.
  *
  * El plan efectivo no se guarda: se calcula comparando la fecha de fin de
  * prueba con hoy. Así una prueba caduca sola, sin ningún proceso que
@@ -61,7 +74,8 @@ export class PlanService {
       enPrueba,
       diasDePrueba,
       pruebaCaducada: !!fin && !enPrueba && empresa.plan === PlanEmpresa.FREE,
-      puedeProbar: !empresa.trialUsed && empresa.plan === PlanEmpresa.FREE,
+      puedeProbar:
+        PRO_SE_OFRECE && !empresa.trialUsed && empresa.plan === PlanEmpresa.FREE,
     };
   }
 
@@ -83,10 +97,15 @@ export class PlanService {
   }
 
   /**
-   * Regala los 30 días de Pro. Solo una vez por empresa: si no, bastaría
-   * con pulsar el botón cada mes para tener Pro gratis para siempre.
+   * Regala los días de Pro. Solo una vez por empresa: si no, bastaría con
+   * pulsar el botón cada mes para tener Pro gratis para siempre.
    */
   async activarPrueba(empresaId: number, user: AuthenticatedUser) {
+    if (!PRO_SE_OFRECE) {
+      throw new BadRequestException(
+        'Bookmy CRM Pro no está disponible todavía.',
+      );
+    }
     if (
       user.role !== Role.SUPER_ADMIN &&
       !(user.role === Role.COMPANY_ADMIN && user.empresaId === empresaId)
@@ -152,7 +171,9 @@ export class PlanService {
     const estado = await this.estadoDe(user.empresaId);
     if (estado.planEfectivo !== PlanEmpresa.PRO) {
       throw new ForbiddenException(
-        `${que} forma parte de Bookmy CRM Pro. Prueba 30 días gratis desde tu panel.`,
+        PRO_SE_OFRECE
+          ? `${que} forma parte de Bookmy CRM Pro. Pruébalo gratis desde tu panel.`
+          : `${que} forma parte de Bookmy CRM Pro, que todavía no está disponible.`,
       );
     }
   }

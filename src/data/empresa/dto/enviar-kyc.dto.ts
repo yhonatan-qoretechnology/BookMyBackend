@@ -25,4 +25,15 @@ export class EnviarKycDto {
   @IsString()
   @MaxLength(40)
   documentoTipo?: string;
+
+  @ApiProperty({
+    example: '12345678Z',
+    required: false,
+    description:
+      'Número del documento del responsable. Sin él, el tipo no identifica a nadie.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  documentoNumero?: string;
 }
