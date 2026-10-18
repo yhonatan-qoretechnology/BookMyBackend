@@ -14,6 +14,7 @@ import { ClientManagementController } from './controllers/client-management.cont
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { AccessControlService } from './services/access-control/access-control.service';
+import { AccesoUsuarioService } from './services/acceso-usuario/acceso-usuario.service';
 import { AdminManagementService } from './services/admin-management/admin-management.service';
 import { ClientManagementService } from './services/client-management/client-management.service';
 import { HashService } from './services/hash/hash.service';
@@ -47,6 +48,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     HashService,
     PasswordSetupService,
     AccessControlService,
+    AccesoUsuarioService,
     AdminManagementService,
     ClientManagementService,
     JwtAuthGuard,

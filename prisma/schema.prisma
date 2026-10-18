@@ -41,9 +41,44 @@ model Users {
   notifications                                     Notification[]
   appointmentHistories                              AppointmentHistory[]
   kycRevisados                                      EmpresaKyc[]
+  accesos                                           AccesoUsuario[]
 
   @@index([email])
   @@map("users")
+}
+
+// Auditoría de login: cada intento (exitoso o no) queda registrado con IP,
+// país/región/ciudad (resueltos localmente con geoip-lite, sin llamar a
+// ningún servicio externo) y el dispositivo/navegador (de ua-parser-js).
+// Pantalla de "Seguimiento y Control" en SUPER_ADMIN. Es solo lectura para
+// auditoría — no bloquea ni afecta el login en sí (ver AuthService.login(),
+// el registro es best-effort y nunca puede tumbarlo).
+model AccesoUsuario {
+  id               Int      @id @default(autoincrement())
+  userId           Int?     @map("user_id")
+  /// El email tal como se intentó, exista o no la cuenta (para detectar
+  /// intentos de fuerza bruta contra emails inexistentes).
+  email            String   @map("email")
+  exito            Boolean  @default(false) @map("exito")
+  /// El mismo `code` que ya devuelve AuthService.login() (INVALID_PASSWORD,
+  /// ACCOUNT_INACTIVE, EMPRESA_BLOQUEADA, etc.) — null si exito=true.
+  motivoFallo      String?  @map("motivo_fallo")
+  ipAddress        String   @map("ip_address")
+  pais             String?  @map("pais")
+  region           String?  @map("region")
+  ciudad           String?  @map("ciudad")
+  userAgent        String?  @map("user_agent")
+  dispositivo      String?  @map("dispositivo")
+  navegador        String?  @map("navegador")
+  sistemaOperativo String?  @map("sistema_operativo")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user Users? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([email])
+  @@index([createdAt])
+  @@map("accesos_usuario")
 }
 
 model AdminProfile {

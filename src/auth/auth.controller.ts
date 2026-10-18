@@ -18,6 +18,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Request as ExpressRequest } from 'express';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -33,6 +34,7 @@ import {
 import { Role } from '@prisma/client';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
+import { AccesoUsuarioService } from './services/acceso-usuario/acceso-usuario.service';
 import { AuthUser } from './common/decorators/auth-user.decorator';
 import { Public } from './common/decorators/public.decorator';
 import { Roles } from './common/decorators/roles.decorator';
@@ -75,6 +77,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private readonly passwordSetupService: PasswordSetupService,
+    private readonly accesoUsuarioService: AccesoUsuarioService,
   ) {}
 
   /** Solo el propio usuario o un administrador pueden tocar una cuenta. */
@@ -152,9 +155,13 @@ export class AuthController {
   @Post('login')
   async login(
     @Body() loginDto: LoginDto,
+    @Req() req: ExpressRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.login(loginDto);
+    const result = await this.authService.login(loginDto, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
     if ((result as any)?.token) {
       res.cookie('access_token', (result as any).token, {
         httpOnly: true,
@@ -391,5 +398,43 @@ export class AuthController {
     @Body() dto: ChangePasswordByAdminDto,
   ) {
     return this.authService.changePasswordById(id, dto);
+  }
+
+  // Panel de "Seguimiento y Control": auditoría de login (IP, país,
+  // dispositivo). Solo SUPER_ADMIN la puede ver.
+  @Get('accesos')
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Listar los accesos (login) registrados' })
+  @ApiForbiddenResponse({ description: 'Requiere rol SUPER_ADMIN.' })
+  async listarAccesos(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('userId') userId?: string,
+    @Query('email') email?: string,
+    @Query('pais') pais?: string,
+    @Query('soloFallidos') soloFallidos?: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    return this.accesoUsuarioService.listar({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      userId: userId ? parseInt(userId, 10) : undefined,
+      email,
+      pais,
+      soloFallidos: soloFallidos === 'true',
+      desde: desde ? new Date(desde) : undefined,
+      hasta: hasta ? new Date(hasta) : undefined,
+    });
+  }
+
+  @Get('accesos/resumen')
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Resumen de accesos: totales, fallidos y países distintos',
+  })
+  @ApiForbiddenResponse({ description: 'Requiere rol SUPER_ADMIN.' })
+  async resumenAccesos(@Query('dias') dias?: string) {
+    return this.accesoUsuarioService.resumen(dias ? parseInt(dias, 10) : undefined);
   }
 }

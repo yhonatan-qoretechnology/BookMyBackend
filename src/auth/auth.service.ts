@@ -13,6 +13,10 @@ import * as path from 'path';
 import { OtpService } from '../data/otp/otp.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SftpStorageService } from '../storage/sftp-storage.service';
+import {
+  AccesoUsuarioService,
+  RegistrarAccesoInput,
+} from './services/acceso-usuario/acceso-usuario.service';
 import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
 import { ChangePasswordByAdminDto } from './dto/change-password-by-admin.dto';
 import { ChangePasswordOtpDto } from './dto/change-password-otp.dto';
@@ -41,6 +45,7 @@ export class AuthService {
     private hashService: HashService,
     private otpService: OtpService,
     private readonly sftpStorage: SftpStorageService,
+    private readonly accesoUsuarioService: AccesoUsuarioService,
   ) {}
 
   private async storeUserImage(file: Express.Multer.File) {
@@ -717,7 +722,20 @@ export class AuthService {
     return user;
   }
 
-  async login(loginDto: LoginDto) {
+  /**
+   * Dispara el registro de auditoría sin esperarlo ni dejar que su falla
+   * tumbe el login — el guard contra errores que ya tiene adentro
+   * AccesoUsuarioService.registrar() es "best effort", pero este .catch()
+   * es la última red por si la propia llamada (no la promesa interna) explota.
+   */
+  private registrarAcceso(input: RegistrarAccesoInput) {
+    this.accesoUsuarioService.registrar(input).catch(() => undefined);
+  }
+
+  async login(
+    loginDto: LoginDto,
+    contexto?: { ip?: string; userAgent?: string },
+  ) {
     const { email, password } = loginDto;
 
     // Buscar solo lo necesario
@@ -803,6 +821,13 @@ export class AuthService {
       console.log(
         `[LOGIN] UserAuth NOT FOUND or NO PASSWORD for email: ${email}`,
       );
+      this.registrarAcceso({
+        email,
+        exito: false,
+        motivoFallo: 'USER_NOT_FOUND',
+        ip: contexto?.ip,
+        userAgent: contexto?.userAgent,
+      });
       return { error: 'Credenciales incorrectas.', code: 'USER_NOT_FOUND' };
     }
 
@@ -810,6 +835,13 @@ export class AuthService {
       console.log(
         `[LOGIN] UserAuth FOUND but RELATIONAL USER IS MISSING for email: ${email}, authId: ${userAuth.id}`,
       );
+      this.registrarAcceso({
+        email,
+        exito: false,
+        motivoFallo: 'ACCOUNT_INTEGRITY',
+        ip: contexto?.ip,
+        userAgent: contexto?.userAgent,
+      });
       return {
         error: 'Error de integridad de cuenta.',
         code: 'ACCOUNT_INTEGRITY',
@@ -823,6 +855,14 @@ export class AuthService {
 
     if (!isPasswordValid) {
       console.log(`[LOGIN] Password INVALID for email: ${email}`);
+      this.registrarAcceso({
+        email,
+        userId: userAuth.user.id,
+        exito: false,
+        motivoFallo: 'INVALID_PASSWORD',
+        ip: contexto?.ip,
+        userAgent: contexto?.userAgent,
+      });
       return {
         error: 'Usuario o contraseña incorrecta.',
         code: 'INVALID_PASSWORD',
@@ -837,6 +877,14 @@ export class AuthService {
       console.log(
         `[LOGIN] BLOCK: User state is '${userAuth.user.state}' for email: ${email}`,
       );
+      this.registrarAcceso({
+        email,
+        userId: userAuth.user.id,
+        exito: false,
+        motivoFallo: 'ACCOUNT_INACTIVE',
+        ip: contexto?.ip,
+        userAgent: contexto?.userAgent,
+      });
       return {
         error: 'El usuario no está activo.',
         code: 'ACCOUNT_INACTIVE',
@@ -861,6 +909,14 @@ export class AuthService {
         adminProfile?.empresa?.bloqueadaMotivo ??
         profesional?.sede?.empresa?.bloqueadaMotivo;
       console.log(`[LOGIN] BLOCK: Empresa bloqueada for email: ${email}`);
+      this.registrarAcceso({
+        email,
+        userId: userAuth.user.id,
+        exito: false,
+        motivoFallo: 'EMPRESA_BLOQUEADA',
+        ip: contexto?.ip,
+        userAgent: contexto?.userAgent,
+      });
       return {
         error: motivo
           ? `Esta empresa está bloqueada: ${motivo}`
@@ -884,6 +940,14 @@ export class AuthService {
       empresaId: adminProfile?.empresaId ?? profesional?.sede?.empresaId ?? null,
       sedeId: adminProfile?.sedeId ?? profesional?.sedeId ?? null,
       profesionalId: profesional?.id ?? null,
+    });
+
+    this.registrarAcceso({
+      email,
+      userId: userAuth.user.id,
+      exito: true,
+      ip: contexto?.ip,
+      userAgent: contexto?.userAgent,
     });
 
     return {
