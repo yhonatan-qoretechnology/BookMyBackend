@@ -21,6 +21,7 @@ PENDIENTES=(
   20261008120000_kyc_numero_documento
   20261008130000_stock_e_insumos
   20261008140000_insumo_objetivo
+  20261018173435_add_acceso_usuario
 )
 
 rojo()  { printf '\033[31m%s\033[0m\n' "$*"; }
@@ -105,6 +106,25 @@ for m in "${PENDIENTES[@]}"; do
 done
 echo
 
+# ---- Avisa de migraciones que nadie ha mirado ------------------------------
+# Si alguien anade una carpeta y no la mete en PENDIENTES, pasaria inadvertida.
+OTRAS=""
+for dir in prisma/migrations/*/; do
+  nombre="$(basename "$dir")"
+  [ -f "$dir/migration.sql" ] || continue
+  en_lista=no
+  for m in "${PENDIENTES[@]}"; do [ "$m" = "$nombre" ] && en_lista=si; done
+  [ "$en_lista" = si ] && continue
+  YA="$(psql "$DATABASE_URL" -qtA -c "SELECT count(*) FROM \"_prisma_migrations\" WHERE migration_name = '$nombre';")"
+  [ "$YA" -eq 0 ] && OTRAS="${OTRAS:+$OTRAS, }$nombre"
+done
+if [ -n "$OTRAS" ]; then
+  rojo "AVISO: hay migraciones en el repo que NO estan en la base NI en la lista:"
+  echo "  $OTRAS"
+  echo "  Este script no las toca. Revisalas antes de seguir."
+  echo
+fi
+
 # ---- Aviso si los objetos ya existen sin estar apuntados -------------------
 HUERFANOS="$(psql "$DATABASE_URL" -qtA -c "
   SELECT string_agg(t, ', ') FROM (
@@ -185,7 +205,8 @@ psql "$DATABASE_URL" -q -c "
     FROM \"_prisma_migrations\"
    WHERE migration_name IN ('20261008120000_kyc_numero_documento',
                             '20261008130000_stock_e_insumos',
-                            '20261008140000_insumo_objetivo')
+                            '20261008140000_insumo_objetivo',
+                            '20261018173435_add_acceso_usuario')
    ORDER BY migration_name;"
 
 psql "$DATABASE_URL" -q -c "
@@ -193,10 +214,13 @@ psql "$DATABASE_URL" -q -c "
     FROM pg_tables WHERE schemaname='public'
      AND tablename IN ('insumos','stock_sede','solicitudes_inventario','solicitud_items')
   UNION ALL
+  SELECT 'tabla de accesos', count(*) FROM pg_tables
+   WHERE schemaname='public' AND tablename = 'accesos_usuario'
+  UNION ALL
   SELECT 'columnas nuevas', count(*) FROM information_schema.columns
    WHERE (table_name='empresa_kyc' AND column_name='documento_numero')
       OR (table_name='insumos'     AND column_name='max_por_defecto');"
 
 echo
-verde "Listo. Esperado: 4 tablas y 2 columnas."
+verde "Listo. Esperado: 4 tablas de stock, 1 de accesos y 2 columnas."
 echo "Ahora ya se puede desplegar el backend."
