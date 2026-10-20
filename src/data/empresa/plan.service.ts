@@ -22,7 +22,7 @@ import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface
 export const PRO_SE_OFRECE = false;
 
 /** Días que duraría la prueba, el día que se vuelva a ofrecer. */
-export const DIAS_DE_PRUEBA = 7;
+export const DIAS_DE_PRUEBA = 30;
 
 export interface EstadoPlan {
   /** Lo contratado: FREE o PRO. */
@@ -129,7 +129,9 @@ export class PlanService {
 
     const actualizada = await this.prisma.empresa.update({
       where: { id: empresaId },
-      data: { trialEndsAt: this.finDePrueba(), trialUsed: true },
+      // trialAvisoEnviado en false: si ya usó una prueba anterior y el
+      // cron ya le había avisado, esta prueba nueva vuelve a poder avisar.
+      data: { trialEndsAt: this.finDePrueba(), trialUsed: true, trialAvisoEnviado: false },
       select: { plan: true, trialEndsAt: true, trialUsed: true },
     });
     return this.estado(actualizada);

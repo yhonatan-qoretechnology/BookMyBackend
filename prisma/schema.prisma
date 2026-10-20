@@ -43,6 +43,7 @@ model Users {
   kycRevisados                                      EmpresaKyc[]
   accesos                                           AccesoUsuario[]
   solicitudesInventario                             SolicitudInventario[]
+  telemetriaEventos                                 TelemetriaEvento[]
 
   @@index([email])
   @@map("users")
@@ -308,6 +309,9 @@ model Empresa {
   plan        PlanEmpresa @default(FREE)
   trialEndsAt DateTime?   @map("trial_ends_at")
   trialUsed   Boolean     @default(false) @map("trial_used")
+  /// Para no repetir el correo de "tu prueba acaba pronto" cada día que
+  /// pasa el cron de EmpresaPlanPagoCron. Se resetea en activarPrueba().
+  trialAvisoEnviado Boolean @default(false) @map("trial_aviso_enviado")
 
   // Bloqueo administrativo (solo SUPER_ADMIN): no borra nada, solo impide
   // login de sus admins/profesionales y que se reserve en sus sedes.
@@ -349,8 +353,43 @@ model Empresa {
   categoriasGasto  CategoriaGasto[]
   kyc              EmpresaKyc?
   insumos          Insumo[]
+  planPagos        EmpresaPlanPago[]
+  liquidacionesWise LiquidacionWise[]
 
   @@map("empresas")
+}
+
+// Monitoreo de uso del plan Pro: como hoy no existe cobro recurrente real
+// (Bookmy CRM Pro se activa/desactiva a mano, ver PlanService), el
+// SUPER_ADMIN carga el vencimiento de cada pago y un cron avisa por email
+// cuando se pasa la fecha. "Pagado" es el único evento de "esta empresa le
+// pagó a Bookmy" que existe en el sistema — de ahí se enganchan los
+// referidos (ver ReferidoService, pase 2).
+enum EstadoPagoPlan {
+  PENDIENTE
+  PAGADO
+  VENCIDO
+}
+
+model EmpresaPlanPago {
+  id        Int            @id @default(autoincrement())
+  empresaId Int            @map("empresa_id")
+  monto     Float          @map("monto")
+  vence     DateTime       @map("vence")
+  pagadoEn  DateTime?      @map("pagado_en")
+  estado    EstadoPagoPlan @default(PENDIENTE) @map("estado")
+  /// Evita reenviar el correo de "vencido" cada día que pasa el cron.
+  notificado  Boolean  @default(false) @map("notificado")
+  creadoPorId Int?     @map("creado_por_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@index([estado])
+  @@index([vence])
+  @@map("empresa_plan_pagos")
 }
 
 // Verificación de identidad del negocio (KYC), revisada a mano por el
@@ -1153,4 +1192,87 @@ model SolicitudItem {
 
   @@unique([solicitudId, insumoId])
   @@map("solicitud_items")
+}
+
+/**
+ * ══════════════════════════════════════════════════════════
+ * LIQUIDACIONES WISE (scaffold, sin credenciales todavía)
+ * ──────────────────────────────────────────────────────────
+ * Wise sirve para que Bookmy le PAGUE/liquide fondos a los negocios (no
+ * para cobrarle tarjeta a un cliente final: eso lo hace Payment, simulado
+ * en payment.service.ts). El registro se crea igual sin credenciales
+ * reales; WiseService.isEnabled() decide si de verdad se intenta la
+ * llamada a la API o se deja en PENDIENTE a la espera de configurarla.
+ * ══════════════════════════════════════════════════════════
+ */
+enum EstadoLiquidacionWise {
+  PENDIENTE
+  ENVIADA
+  COMPLETADA
+  FALLIDA
+}
+
+model LiquidacionWise {
+  id              Int                   @id @default(autoincrement())
+  empresaId       Int                   @map("empresa_id")
+  monto           Float                 @map("monto")
+  moneda          String                @default("EUR") @db.VarChar(3) @map("moneda")
+  wiseQuoteId     String?               @map("wise_quote_id")
+  wiseRecipientId String?               @map("wise_recipient_id")
+  wiseTransferId  String?               @map("wise_transfer_id")
+  estado          EstadoLiquidacionWise @default(PENDIENTE)
+  /// Respuesta cruda de la API de Wise, para depurar sin tener que volver
+  /// a llamarla.
+  respuestaWise Json?    @map("respuesta_wise")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@map("liquidaciones_wise")
+}
+
+/**
+ * ══════════════════════════════════════════════════════════
+ * TELEMETRÍA DEL PANEL Y LA WEB PÚBLICA
+ * ──────────────────────────────────────────────────────────
+ * Distinto de EntityView (que es "qué ficha de negocio/servicio miró un
+ * cliente en la app móvil"): esto es "qué página del panel/sitio público
+ * de bookmy-next se visitó", más la apertura de la app móvil como proxy
+ * de "distribución por plataforma" — el conteo real de descargas de App
+ * Store/Google Play necesita las credenciales de esas consolas, que no
+ * existen todavía (mismo caso que Wise).
+ * ══════════════════════════════════════════════════════════
+ */
+enum TipoEventoTelemetria {
+  PAGEVIEW
+  APP_SESSION
+}
+
+model TelemetriaEvento {
+  id     Int                  @id @default(autoincrement())
+  tipo   TipoEventoTelemetria @map("tipo")
+  /// Ruta del panel/web ("/accesos", "/bookmy-crm-pro"...). Solo PAGEVIEW.
+  ruta String? @map("ruta")
+  /// "web" | "ios" | "android". Solo relevante para APP_SESSION.
+  plataforma String? @map("plataforma")
+  userId     Int?    @map("user_id")
+  /// Id de visitante anónimo (localStorage), para no depender de sesión
+  /// en la web pública, donde la mayoría no está logueada.
+  sesionId  String?  @map("sesion_id")
+  ipAddress String?  @map("ip_address")
+  pais      String?  @map("pais")
+  region    String?  @map("region")
+  ciudad    String?  @map("ciudad")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user Users? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tipo, createdAt])
+  @@index([ruta])
+  @@index([plataforma])
+  @@index([pais])
+  @@map("telemetria_eventos")
 }

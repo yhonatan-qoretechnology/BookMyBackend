@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UploadedFile,
   UploadedFiles,
   UseGuards,
@@ -25,7 +26,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { PlanEmpresa, Role } from '@prisma/client';
+import { EstadoPagoPlan, PlanEmpresa, Role } from '@prisma/client';
 import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
 import { Public } from '../../auth/common/decorators/public.decorator';
 import { Roles } from '../../auth/common/decorators/roles.decorator';
@@ -33,8 +34,10 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateEmpresaWithFileDto } from '../empresa/dto/create-empresa-with-file.dto';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
+import { CrearEmpresaPlanPagoDto } from './dto/crear-empresa-plan-pago.dto';
 import { EnviarKycDto } from './dto/enviar-kyc.dto';
 import { ArchivosKyc, KycService } from './kyc.service';
+import { EmpresaPlanPagoService } from './empresa-plan-pago.service';
 import { RegistroNegocioDto } from './dto/registro-negocio.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
 import { EmpresaService } from './empresa.service';
@@ -49,6 +52,7 @@ export class EmpresaController {
     private readonly planService: PlanService,
     private readonly registroNegocio: RegistroNegocioService,
     private readonly kyc: KycService,
+    private readonly empresaPlanPago: EmpresaPlanPagoService,
   ) {}
 
   /* ── Alta de un negocio desde la web ──────────────────────
@@ -209,6 +213,62 @@ export class EmpresaController {
     @AuthUser() user?: AuthenticatedUser,
   ) {
     return this.kyc.rechazar(id, motivo, user);
+  }
+
+  /* ── Monitoreo de Bookmy CRM Pro ───────────────────────────
+     No hay cobro automático todavía (ver PlanService, PRO_SE_OFRECE): el
+     SUPER_ADMIN carga el vencimiento a mano y EmpresaPlanPagoCron avisa.
+     "plan-pagos" va ANTES de @Get(':id') por el mismo motivo que kyc/pendientes. */
+  @Get('plan-pagos')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Todos los pagos de Pro (oversight, solo SUPER_ADMIN)' })
+  async planPagosTodos(
+    @Query('estado') estado?: EstadoPagoPlan,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.empresaPlanPago.listarTodas({
+      estado,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  @Get('plan-pagos/resumen')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Totales de pagos de Pro (pendientes/vencidas/pagadas)' })
+  async planPagosResumen() {
+    return this.empresaPlanPago.resumen();
+  }
+
+  @Patch('plan-pagos/:pagoId/marcar-pagado')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Marcar un pago de Pro como pagado' })
+  async planPagoMarcarPagado(@Param('pagoId', ParseIntPipe) pagoId: number) {
+    return this.empresaPlanPago.marcarPagado(pagoId);
+  }
+
+  @Post(':id/plan-pagos')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Registrar un cobro de Pro para una empresa' })
+  async planPagosCrear(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CrearEmpresaPlanPagoDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.empresaPlanPago.crear(id, dto, user?.userId);
+  }
+
+  @Get(':id/plan-pagos')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiOperation({ summary: 'Pagos de Pro de una empresa' })
+  async planPagosDeEmpresa(@Param('id', ParseIntPipe) id: number) {
+    return this.empresaPlanPago.listarDeEmpresa(id);
   }
 
   @Post()

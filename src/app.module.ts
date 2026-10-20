@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { SwaggerModule } from '@nestjs/swagger';
 import * as Joi from 'joi';
 import { AssistantModule } from './assistant/assistant.module';
@@ -20,6 +22,8 @@ import { PaisModule } from './data/pais/pais.module';
 import { StockModule } from './data/stock/stock.module';
 import { EntityViewModule } from './data/entity-view/entity-view.module';
 import { EstadisticasModule } from './data/estadisticas/estadisticas.module';
+import { TelemetriaModule } from './data/telemetria/telemetria.module';
+import { WiseModule } from './data/wise/wise.module';
 import { GastoModule } from './data/gasto/gasto.module';
 import { HorarioSedeModule } from './data/HorarioSede/horario-sede.module';
 import { NotificationModule } from './data/notification/notification.module';
@@ -76,8 +80,21 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
            BORRARLOS: ver SftpStorageService.deleteByPublicUrl. Si no esta
            puesta, el borrado se comporta exactamente como hoy. */
         UPLOADS_PUBLIC_BASE_URL_ANTERIOR: Joi.string().allow('').optional(),
+        /* Pasarela de liquidaciones a negocios (WiseService). Sin estas
+           tres, WiseService.isEnabled() es false y las liquidaciones
+           quedan en PENDIENTE sin llamar a ningún sitio — no hace falta
+           tenerlas para desplegar. */
+        WISE_API_KEY: Joi.string().optional(),
+        WISE_API_URL: Joi.string().optional(),
+        WISE_PROFILE_ID: Joi.string().optional(),
       }),
     }),
+    /* Cron (avisos de prueba/pago vencido) y emisor de eventos de dominio
+       (plan-pago.pagado/vencido, trial.por-vencer — ver common/events).
+       `wildcard: true` para que el futuro motor de automatizaciones pueda
+       suscribirse por patrón en vez de a cada nombre exacto. */
+    ScheduleModule.forRoot(),
+    EventEmitterModule.forRoot({ wildcard: true }),
     StorageModule,
     AuthModule,
     PrismaModule,
@@ -113,6 +130,8 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     StockModule,
     EntityViewModule,
     EstadisticasModule,
+    TelemetriaModule,
+    WiseModule,
     NotificationModule,
   ],
   providers: [

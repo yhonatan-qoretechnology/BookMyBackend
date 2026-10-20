@@ -1,0 +1,44 @@
+<html lang='es'>
+  <head>
+    <meta charset='UTF-8' />
+    <meta http-equiv='X-UA-Compatible' content='IE=edge' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <title>Pago de Bookmy CRM Pro vencido</title>
+    <style>
+      body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin:
+      0; padding: 0; -webkit-font-smoothing: antialiased;
+      -webkit-text-size-adjust: none; width: 100% !important; } .container {
+      width: 100%; max-width: 600px; margin: 0 auto; background-color: #ffffff;
+      border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow:
+      hidden; margin-top: 20px; } .header { background-color: #b91c1c; color:
+      #ffffff; padding: 20px; text-align: center; } .content { padding: 30px;
+      color: #333333; line-height: 1.6; } .monto-box { text-align: center; margin:
+      25px 0; } .monto { display: inline-block; font-size: 28px; font-weight:
+      bold; padding: 15px 30px; background-color: #fdeceb; border-radius: 6px;
+      color: #b91c1c; } .footer { background-color: #f4f4ff; color: #888888;
+      text-align: center; padding: 20px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+
+    <div class='container'>
+      <div class='header'>
+        <h2>Pago de Bookmy CRM Pro vencido</h2>
+      </div>
+      <div class='content'>
+        <h3>Hola {{empresaNombre}},</h3>
+        <p>El pago de tu suscripción a Bookmy CRM Pro venció el {{vence}} y todavía no lo registramos como pagado.</p>
+
+        <div class='monto-box'>
+          <span class='monto'>{{monto}}</span>
+        </div>
+
+        <p>Si ya lo pagaste, contactanos y lo confirmamos. Mientras tanto, tu negocio sigue funcionando con normalidad.</p>
+      </div>
+      <div class='footer'>
+        <p>&copy; 2026 BookMy. Todos los derechos reservados.</p>
+      </div>
+    </div>
+
+  </body>
+</html>

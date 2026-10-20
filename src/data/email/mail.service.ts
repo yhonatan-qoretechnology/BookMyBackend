@@ -164,6 +164,59 @@ export class MailService {
     });
   }
 
+  /** Mismo patrón de carga (src en desarrollo, dist en producción) que
+      usa cada método de arriba, factorizado para no repetirlo una vez
+      más en los dos de abajo. */
+  private async loadTemplate(fileName: string): Promise<string> {
+    const templatePathFromSrc = join(
+      process.cwd(),
+      'src',
+      'data',
+      'email',
+      'templates',
+      fileName,
+    );
+    try {
+      return await readFile(templatePathFromSrc, 'utf-8');
+    } catch {
+      const templatePathFromDist = join(__dirname, 'templates', fileName);
+      return readFile(templatePathFromDist, 'utf-8');
+    }
+  }
+
+  /** Aviso de pago de Bookmy CRM Pro vencido — EmpresaPlanPagoCron. */
+  async sendPlanPagoVencido(params: {
+    to: string;
+    empresaNombre: string;
+    monto: string;
+    vence: string;
+  }) {
+    const template = Handlebars.compile(
+      await this.loadTemplate('plan-pago-vencido.hbs'),
+    );
+    await this.transporter.sendMail({
+      to: params.to,
+      subject: 'Pago de Bookmy CRM Pro vencido',
+      html: template(params),
+    });
+  }
+
+  /** Aviso de prueba de Bookmy CRM Pro por vencer — EmpresaPlanPagoCron. */
+  async sendTrialPorVencer(params: {
+    to: string;
+    empresaNombre: string;
+    diasRestantes: number;
+  }) {
+    const template = Handlebars.compile(
+      await this.loadTemplate('trial-por-vencer.hbs'),
+    );
+    await this.transporter.sendMail({
+      to: params.to,
+      subject: 'Tu prueba de Bookmy CRM Pro está por terminar',
+      html: template(params),
+    });
+  }
+
   // 🔥 GENERAR PDF
   async generateInvoicePdf(data: any): Promise<Buffer> {
     const templatePathFromSrc = join(
