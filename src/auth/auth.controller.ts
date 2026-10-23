@@ -36,6 +36,8 @@ import { Role } from '@prisma/client';
 import { CookieOptions, Response } from 'express';
 import { AuthService } from './auth.service';
 import { AccesoUsuarioService } from './services/acceso-usuario/acceso-usuario.service';
+import { BiometricService } from './services/biometric/biometric.service';
+import { BiometricTokenDto, EnableBiometricDto } from './dto/biometric.dto';
 import { AuthUser } from './common/decorators/auth-user.decorator';
 import { Public } from './common/decorators/public.decorator';
 import { Roles } from './common/decorators/roles.decorator';
@@ -98,6 +100,7 @@ export class AuthController {
     private authService: AuthService,
     private readonly passwordSetupService: PasswordSetupService,
     private readonly accesoUsuarioService: AccesoUsuarioService,
+    private readonly biometricService: BiometricService,
   ) {}
 
   /** Solo el propio usuario o un administrador pueden tocar una cuenta. */
@@ -206,6 +209,48 @@ export class AuthController {
   logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie(ACCESS_TOKEN_COOKIE, ACCESS_TOKEN_COOKIE_OPTIONS);
     return { ok: true };
+  }
+
+  /* Login con huella / Face ID (app movil). Ver BiometricService. */
+
+  /* probar contraseñas con un JWT robado */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('biometric/enable')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Activar el login con huella en este telefono',
+    description:
+      'Pide la contraseña actual y devuelve un token de dispositivo de 90 dias que la app guarda en el llavero detras de la biometria.',
+  })
+  enableBiometric(
+    @Body() dto: EnableBiometricDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.biometricService.enable(user.userId, dto);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('biometric/login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Iniciar sesion con el token de dispositivo',
+    description:
+      'Devuelve `{ user, token, deviceToken }` (el deviceToken anterior deja de valer) o `{ error, code }` como /auth/login; `BIOMETRIC_INVALID` si hay que volver a entrar con contraseña.',
+  })
+  biometricLogin(@Body() dto: BiometricTokenDto, @Req() req: ExpressRequest) {
+    return this.biometricService.login(dto.deviceToken, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Public()
+  @Post('biometric/disable')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Desactivar el login con huella en este telefono' })
+  disableBiometric(@Body() dto: BiometricTokenDto) {
+    return this.biometricService.disable(dto.deviceToken);
   }
 
   @Public()

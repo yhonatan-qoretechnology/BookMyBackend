@@ -108,6 +108,7 @@ model UserAuth {
   mustChangePassword Boolean              @default(false) @map("must_change_password")
   passwordChangedAt  DateTime?            @map("password_changed_at")
   setupTokens        PasswordSetupToken[]
+  biometricDevices   BiometricDevice[]
   id                 Int                  @id @default(autoincrement()) @map("id")
   email              String               @unique @map("email")
   password           String               @map("password")
@@ -1097,6 +1098,33 @@ model PasswordSetupToken {
 
   @@index([userAuthId])
   @@map("password_setup_tokens")
+}
+
+/**
+ * Un telefono con el login por huella / Face ID activado. La biometria la
+ * comprueba el propio telefono; lo que llega aqui es el token largo que el
+ * telefono guarda tras ella, y de ese token solo se guarda el hash.
+ *
+ * `credentialStamp` es un hash del hash de la contrasena que habia al
+ * activarlo: si la contrasena cambia (por la via que sea) deja de coincidir y
+ * el dispositivo queda fuera hasta que se vuelva a entrar con contrasena.
+ */
+model BiometricDevice {
+  id              Int       @id @default(autoincrement())
+  userAuthId      Int       @map("user_auth_id")
+  tokenHash       String    @unique @map("token_hash")
+  credentialStamp String    @map("credential_stamp")
+  deviceName      String?   @map("device_name") @db.VarChar(120)
+  platform        String?   @map("platform") @db.VarChar(20)
+  expiresAt       DateTime  @map("expires_at")
+  lastUsedAt      DateTime? @map("last_used_at")
+  revokedAt       DateTime? @map("revoked_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  userAuth UserAuth @relation(fields: [userAuthId], references: [id], onDelete: Cascade)
+
+  @@index([userAuthId])
+  @@map("biometric_devices")
 }
 
 enum ViewEntityType {

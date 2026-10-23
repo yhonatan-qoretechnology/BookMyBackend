@@ -35,6 +35,80 @@ type UserAuthContext = {
   userAuth: UserAuth;
 };
 
+/**
+ * Lo que el login lee del usuario: lo justo para validar la cuenta y armar el
+ * token. Va aparte porque el login con biometria (BiometricService) emite la
+ * sesion con exactamente los mismos datos y las mismas comprobaciones.
+ */
+export const LOGIN_USER_SELECT = {
+  id: true,
+  email: true,
+  clientType: true,
+  state: true,
+  acceptTerms: true,
+  acceptPolitics: true,
+  createdAt: true,
+  updatedAt: true,
+  fotoPerfil: true,
+  role: true,
+  UserData: {
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      idioma: true,
+      gender: true,
+      birthdate: true,
+      country: {
+        select: {
+          id: true,
+          name: true,
+          isoCode: true,
+        },
+      },
+    },
+  },
+  AdminProfile: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      photoUrl: true,
+      empresaId: true,
+      sedeId: true,
+      empresa: {
+        select: { bloqueada: true, bloqueadaMotivo: true },
+      },
+    },
+  },
+  profesionales: {
+    select: {
+      id: true,
+      nombre: true,
+      phone: true,
+      imagen: true,
+      sedeId: true,
+      sede: {
+        select: {
+          id: true,
+          nombre: true,
+          empresaId: true,
+          empresa: {
+            select: { bloqueada: true, bloqueadaMotivo: true },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.UsersSelect;
+
+export type LoginUser = Prisma.UsersGetPayload<{
+  select: typeof LOGIN_USER_SELECT;
+}>;
+
+export type LoginContexto = { ip?: string; userAgent?: string };
+
 @Injectable()
 export class AuthService {
   EXPIRATION_TOKEN_TIME = process.env.JWT_EXPIRATION ?? '12h';
@@ -774,10 +848,7 @@ export class AuthService {
     this.accesoUsuarioService.registrar(input).catch(() => undefined);
   }
 
-  async login(
-    loginDto: LoginDto,
-    contexto?: { ip?: string; userAgent?: string },
-  ) {
+  async login(loginDto: LoginDto, contexto?: LoginContexto) {
     const { email, password } = loginDto;
 
     // Buscar solo lo necesario
@@ -786,70 +857,7 @@ export class AuthService {
       select: {
         id: true,
         password: true,
-        user: {
-          select: {
-            id: true,
-            email: true,
-            clientType: true,
-            state: true,
-            acceptTerms: true,
-            acceptPolitics: true,
-            createdAt: true,
-            updatedAt: true,
-            fotoPerfil: true,
-            role: true,
-            UserData: {
-              select: {
-                id: true,
-                name: true,
-                phone: true,
-                idioma: true,
-                gender: true,
-                birthdate: true,
-                country: {
-                  select: {
-                    id: true,
-                    name: true,
-                    isoCode: true,
-                  },
-                },
-              },
-            },
-            AdminProfile: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                phone: true,
-                photoUrl: true,
-                empresaId: true,
-                sedeId: true,
-                empresa: {
-                  select: { bloqueada: true, bloqueadaMotivo: true },
-                },
-              },
-            },
-            profesionales: {
-              select: {
-                id: true,
-                nombre: true,
-                phone: true,
-                imagen: true,
-                sedeId: true,
-                sede: {
-                  select: {
-                    id: true,
-                    nombre: true,
-                    empresaId: true,
-                    empresa: {
-                      select: { bloqueada: true, bloqueadaMotivo: true },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+        user: { select: LOGIN_USER_SELECT },
       },
     });
 
@@ -915,13 +923,27 @@ export class AuthService {
       `[LOGIN] SUCCESS STEP 1: AuthEmail=${email}, UserID=${userAuth.user.id}, UserEmail=${userAuth.user.email}, State=${userAuth.user.state}`,
     );
 
-    if (userAuth.user.state !== 'enabled') {
+    return this.emitirSesion(userAuth.user, email, contexto);
+  }
+
+  /**
+   * Segunda mitad del login, una vez probada la identidad (con contraseña o
+   * con el token de dispositivo de la biometria): comprueba que la cuenta y su
+   * empresa pueden entrar, firma el JWT y deja el acceso en la auditoria.
+   * Devuelve `{ user, token }` o `{ error, code }`, igual que `login()`.
+   */
+  async emitirSesion(
+    user: LoginUser,
+    email: string,
+    contexto?: LoginContexto,
+  ) {
+    if (user.state !== 'enabled') {
       console.log(
-        `[LOGIN] BLOCK: User state is '${userAuth.user.state}' for email: ${email}`,
+        `[LOGIN] BLOCK: User state is '${user.state}' for email: ${email}`,
       );
       this.registrarAcceso({
         email,
-        userId: userAuth.user.id,
+        userId: user.id,
         exito: false,
         motivoFallo: 'ACCOUNT_INACTIVE',
         ip: contexto?.ip,
@@ -933,12 +955,9 @@ export class AuthService {
       };
     }
 
-    // Remover password de la respuesta
-    const { password: _, ...userData } = userAuth;
-
     // Generar token con los datos del usuario
-    const adminProfile = userAuth.user.AdminProfile;
-    const profesional = userAuth.user.profesionales;
+    const adminProfile = user.AdminProfile;
+    const profesional = user.profesionales;
 
     // Empresa bloqueada (solo SUPER_ADMIN puede bloquear/desbloquear, ver
     // EmpresaService.bloquear()): no borra nada, pero sus admins y
@@ -953,7 +972,7 @@ export class AuthService {
       console.log(`[LOGIN] BLOCK: Empresa bloqueada for email: ${email}`);
       this.registrarAcceso({
         email,
-        userId: userAuth.user.id,
+        userId: user.id,
         exito: false,
         motivoFallo: 'EMPRESA_BLOQUEADA',
         ip: contexto?.ip,
@@ -968,17 +987,17 @@ export class AuthService {
     }
 
     const token = await this.generateToken({
-      id: userAuth.user.id,
-      email: userAuth.user.email,
+      id: user.id,
+      email: user.email,
       // Para EMPLOYEE (profesionales) usamos su nombre/teléfono del registro
       // de Profesional si no tienen UserData cargado.
-      name: userAuth.user.UserData?.name ?? profesional?.nombre,
-      gender: userAuth.user.UserData?.gender,
-      birthdate: userAuth.user.UserData?.birthdate,
-      phone: userAuth.user.UserData?.phone ?? profesional?.phone,
-      idioma: userAuth.user.UserData?.idioma,
-      country: userAuth.user.UserData?.country,
-      role: userAuth.user.role,
+      name: user.UserData?.name ?? profesional?.nombre,
+      gender: user.UserData?.gender,
+      birthdate: user.UserData?.birthdate,
+      phone: user.UserData?.phone ?? profesional?.phone,
+      idioma: user.UserData?.idioma,
+      country: user.UserData?.country,
+      role: user.role,
       empresaId: adminProfile?.empresaId ?? profesional?.sede?.empresaId ?? null,
       sedeId: adminProfile?.sedeId ?? profesional?.sedeId ?? null,
       profesionalId: profesional?.id ?? null,
@@ -986,14 +1005,14 @@ export class AuthService {
 
     this.registrarAcceso({
       email,
-      userId: userAuth.user.id,
+      userId: user.id,
       exito: true,
       ip: contexto?.ip,
       userAgent: contexto?.userAgent,
     });
 
     return {
-      user: userAuth.user,
+      user,
       token,
     };
   }

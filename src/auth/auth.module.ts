@@ -16,6 +16,7 @@ import { RolesGuard } from './guards/roles.guard';
 import { AccessControlService } from './services/access-control/access-control.service';
 import { AccesoUsuarioService } from './services/acceso-usuario/acceso-usuario.service';
 import { AdminManagementService } from './services/admin-management/admin-management.service';
+import { BiometricService } from './services/biometric/biometric.service';
 import { ClientManagementService } from './services/client-management/client-management.service';
 import { HashService } from './services/hash/hash.service';
 import { PasswordSetupService } from './services/password-setup/password-setup.service';
@@ -50,6 +51,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     AccessControlService,
     AccesoUsuarioService,
     AdminManagementService,
+    BiometricService,
     ClientManagementService,
     JwtAuthGuard,
     RolesGuard,
