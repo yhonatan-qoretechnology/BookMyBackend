@@ -4,6 +4,7 @@ import { AuthModule } from '../../auth/auth.module';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { MailModule } from '../email/mail.module';
 import { EmpresaController } from './empresa.controller';
+import { EmpresaCuentaPagoService } from './empresa-cuenta-pago.service';
 import { EmpresaPlanPagoCron } from './empresa-plan-pago.cron';
 import { EmpresaPlanPagoService } from './empresa-plan-pago.service';
 import { EmpresaService } from './empresa.service';
@@ -26,6 +27,7 @@ import { RegistroNegocioService } from './registro-negocio.service';
     PlanProGuard,
     EmpresaPlanPagoService,
     EmpresaPlanPagoCron,
+    EmpresaCuentaPagoService,
   ],
   exports: [PlanService, PlanProGuard],
 })

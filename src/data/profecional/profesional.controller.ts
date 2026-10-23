@@ -15,6 +15,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import * as fs from 'fs';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
@@ -148,6 +149,48 @@ export class ProfesionalController {
       throw new BadRequestException('Debe subir un archivo de imagen.');
     }
     return this.profesionalService.updateImage(id, user, file);
+  }
+
+  @Patch(':id/hoja-vida')
+  @ApiOperation({ summary: 'Subir o reemplazar la hoja de vida de un profesional' })
+  @ApiResponse({ status: 200, description: 'Hoja de vida actualizada exitosamente.' })
+  @ApiNotFoundResponse({ description: 'Profesional no encontrado.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'PDF o documento de la hoja de vida',
+    schema: {
+      type: 'object',
+      properties: { hojaVida: { type: 'string', format: 'binary' } },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('hojaVida', {
+      dest: './uploads/profesionales/temp',
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  async updateHojaVida(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Debe subir un archivo.');
+    }
+    const tiposPermitidos = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (!tiposPermitidos.includes(file.mimetype)) {
+      // El interceptor ya guardó el temporal antes de llegar acá: se borra
+      // para no dejar basura en ./uploads/profesionales/temp.
+      fs.unlink(file.path, () => undefined);
+      throw new BadRequestException(
+        'El archivo debe ser PDF o Word (.doc/.docx).',
+      );
+    }
+    return this.profesionalService.updateHojaVida(id, user, file);
   }
 
   /* Eliminar es exclusivo de SUPER_ADMIN; el resto de administradores

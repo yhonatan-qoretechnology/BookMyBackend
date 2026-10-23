@@ -251,6 +251,7 @@ export class PaymentService {
         concepto: dto.concepto.trim(),
         cantidad: dto.cantidad,
         precioUnitario: dto.precioUnitario,
+        moneda: dto.moneda ?? null,
       },
     });
 

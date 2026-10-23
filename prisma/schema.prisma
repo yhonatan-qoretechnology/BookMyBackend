@@ -355,8 +355,39 @@ model Empresa {
   insumos          Insumo[]
   planPagos        EmpresaPlanPago[]
   liquidacionesWise LiquidacionWise[]
+  cuentaPago       EmpresaCuentaPago?
 
   @@map("empresas")
+}
+
+// Cómo cobra ONLINE un negocio: el dueño elige Wise o cuenta bancaria y
+// carga los datos para que Bookmy sepa a dónde liquidarle. Distinto de
+// LiquidacionWise (que es el REGISTRO de cada pago que Bookmy ya le hizo):
+// esto es la CONFIGURACIÓN que el propio negocio entrega una sola vez.
+enum MetodoCobroOnline {
+  WISE
+  BANCO
+}
+
+model EmpresaCuentaPago {
+  id        Int               @id @default(autoincrement())
+  empresaId Int               @unique @map("empresa_id")
+  metodo    MetodoCobroOnline @map("metodo")
+  /// Email de la cuenta Wise del negocio (destinatario de la liquidación).
+  wiseEmail String? @map("wise_email")
+  /// Nombre del titular de la cuenta bancaria.
+  bancoTitular String? @map("banco_titular")
+  /// IBAN (España) o número de cuenta (Colombia) — un solo campo, la
+  /// etiqueta la decide el país del negocio en el formulario.
+  bancoNumero String? @map("banco_numero")
+  /// Solo Colombia: "ahorros" o "corriente". España no la usa (IBAN basta).
+  bancoTipoCuenta String?  @map("banco_tipo_cuenta")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@map("empresa_cuentas_pago")
 }
 
 // Monitoreo de uso del plan Pro: como hoy no existe cobro recurrente real
@@ -514,6 +545,9 @@ model Profesional {
   nombre                    String
   biografia                 String?
   imagen                    String?
+  /// Ruta relativa del PDF/doc de la hoja de vida, igual que `imagen`
+  /// (SFTP o disco local — ver ProfesionalService.storeProfesionalImage).
+  hojaVidaUrl               String?                     @map("hoja_de_vida_url")
   phone                     String                      @unique @map("phone") @db.VarChar(20)
   state                     ClientState                 @default(enabled) @map("state")
   createdAt                 DateTime                    @default(now())
@@ -985,6 +1019,11 @@ model PaymentItem {
   concepto       String   @map("concepto") @db.VarChar(160)
   cantidad       Int      @default(1) @map("cantidad")
   precioUnitario Float    @map("precio_unitario")
+  /// ISO 4217 ("EUR"/"USD"). null = la moneda de la factura (la del país
+  /// del negocio); solo se guarda cuando el adicional se cobró en otra,
+  /// un dato nuevo que antes no existía en ningún lado (ver PaymentItem
+  /// en el schema: no había moneda por línea, solo por negocio).
+  moneda         String?  @map("moneda")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 

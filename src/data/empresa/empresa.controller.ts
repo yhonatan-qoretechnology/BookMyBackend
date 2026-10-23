@@ -35,8 +35,10 @@ import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface
 import { CreateEmpresaWithFileDto } from '../empresa/dto/create-empresa-with-file.dto';
 import { CreateEmpresaDto } from './dto/create-empresa.dto';
 import { CrearEmpresaPlanPagoDto } from './dto/crear-empresa-plan-pago.dto';
+import { GuardarCuentaPagoDto } from './dto/guardar-cuenta-pago.dto';
 import { EnviarKycDto } from './dto/enviar-kyc.dto';
 import { ArchivosKyc, KycService } from './kyc.service';
+import { EmpresaCuentaPagoService } from './empresa-cuenta-pago.service';
 import { EmpresaPlanPagoService } from './empresa-plan-pago.service';
 import { RegistroNegocioDto } from './dto/registro-negocio.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
@@ -53,6 +55,7 @@ export class EmpresaController {
     private readonly registroNegocio: RegistroNegocioService,
     private readonly kyc: KycService,
     private readonly empresaPlanPago: EmpresaPlanPagoService,
+    private readonly cuentaPago: EmpresaCuentaPagoService,
   ) {}
 
   /* ── Alta de un negocio desde la web ──────────────────────
@@ -269,6 +272,34 @@ export class EmpresaController {
   @ApiOperation({ summary: 'Pagos de Pro de una empresa' })
   async planPagosDeEmpresa(@Param('id', ParseIntPipe) id: number) {
     return this.empresaPlanPago.listarDeEmpresa(id);
+  }
+
+  /* ── Cómo cobra online el negocio (Wise o banco) ──────────
+     La carga el propio dueño en Configuración. El servicio vuelve a
+     comprobar que sea SU empresa (o el superadmin) aunque el rol ya
+     filtre acá: así una llamada directa al API no puede leer o pisar
+     los datos de otro negocio solo porque también es COMPANY_ADMIN. */
+  @Get(':id/cuenta-pago')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiOperation({ summary: 'Cómo cobra online el negocio (Wise o banco)' })
+  async cuentaPagoObtener(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.cuentaPago.obtener(id, user);
+  }
+
+  @Post(':id/cuenta-pago')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiOperation({ summary: 'Guardar o editar cómo cobra online el negocio' })
+  async cuentaPagoGuardar(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: GuardarCuentaPagoDto,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    return this.cuentaPago.guardar(id, dto, user);
   }
 
   @Post()

@@ -59,6 +59,43 @@ export class ProfesionalService {
     return this.moveProfesionalFileToFinalPath(file);
   }
 
+  /** Mismo mecanismo que storeProfesionalImage (SFTP o disco local), en
+      una subcarpeta propia para no mezclar PDFs con fotos de perfil. */
+  private async storeHojaVida(file: Express.Multer.File) {
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const relativePath = path
+      .join('uploads', 'profesionales', 'hoja-vida', finalFileName)
+      .replace(/\\/g, '/');
+
+    if (this.sftpStorage.isEnabled()) {
+      await this.sftpStorage.uploadLocalFile({
+        localPath: file.path,
+        remoteRelativePath: relativePath,
+        deleteLocalAfter: true,
+      });
+      return relativePath;
+    }
+
+    const uploadDirAbs = path.join(
+      process.cwd(),
+      'uploads',
+      'profesionales',
+      'hoja-vida',
+    );
+    if (!fs.existsSync(uploadDirAbs)) {
+      fs.mkdirSync(uploadDirAbs, { recursive: true });
+    }
+    const finalAbsPath = path.join(uploadDirAbs, finalFileName);
+    const tempAbsPath = path.isAbsolute(file.path)
+      ? file.path
+      : path.join(process.cwd(), file.path);
+    if (tempAbsPath !== finalAbsPath) {
+      fs.renameSync(tempAbsPath, finalAbsPath);
+    }
+    return relativePath;
+  }
+
   private async safeDeleteRemoteOrLocal(filePath: string) {
     if (!filePath) return;
     if (this.sftpStorage.isEnabled()) {
@@ -761,6 +798,38 @@ export class ProfesionalService {
       });
     } catch (error) {
       await this.safeDeleteRemoteOrLocal(newImagenPath);
+      throw error;
+    }
+  }
+
+  /** Sube/reemplaza la hoja de vida (PDF/doc) de un profesional. */
+  async updateHojaVida(
+    id: number,
+    user: AuthenticatedUser | undefined,
+    file: Express.Multer.File,
+  ) {
+    await this.accessControlService.ensureProfessionalAccessForUser(id, user);
+    const profesional = await this.prisma.profesional.findUnique({
+      where: { id },
+    });
+
+    if (!profesional) {
+      await this.safeDeleteRemoteOrLocal(file.path);
+      throw new NotFoundException(`Profesional con ID ${id} no encontrado.`);
+    }
+
+    const newPath = await this.storeHojaVida(file);
+
+    try {
+      if (profesional.hojaVidaUrl) {
+        await this.safeDeleteRemoteOrLocal(profesional.hojaVidaUrl);
+      }
+      return await this.prisma.profesional.update({
+        where: { id },
+        data: { hojaVidaUrl: newPath },
+      });
+    } catch (error) {
+      await this.safeDeleteRemoteOrLocal(newPath);
       throw error;
     }
   }
