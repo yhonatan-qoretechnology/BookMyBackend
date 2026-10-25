@@ -1,3 +1,6 @@
+/* El primero, como en main.ts: con un .env.local, la semilla va a la base
+   de desarrollo y no a la del .env (ver config/env-local.ts). */
+import '../config/env-local';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { SeedService } from './seed.service';
 

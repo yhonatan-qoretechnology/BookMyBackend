@@ -53,7 +53,15 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      /* Gana el primero que tenga la variable. El .env apunta a PRODUCCION
+         (base de datos, SFTP, JWT, correo); para trabajar en local se crea
+         un .env.local, ignorado por git, que lo pisa con la base de
+         desarrollo y valores de prueba. En el servidor no hay .env.local y
+         todo sigue como siempre. Lo que venga del entorno gana a los dos.
+         Ojo: Prisma mete el .env en process.env al importarse, antes de
+         llegar aqui, asi que el .env.local lo carga main.ts antes que nada
+         (config/env-local.ts); esta lista solo no bastaria. */
+      envFilePath: ['.env.local', '.env'],
       validationSchema: Joi.object({
         JWT_SECRET_KEY: Joi.string().required(),
         /* Los enlaces de los correos (confirmar la cuenta, fijar la contrasena
@@ -87,6 +95,10 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
         WISE_API_KEY: Joi.string().optional(),
         WISE_API_URL: Joi.string().optional(),
         WISE_PROFILE_ID: Joi.string().optional(),
+        /* "local" guarda las subidas en ./uploads aunque esten las SFTP_*
+           (ver SftpStorageService.isEnabled). Sin ella, o con "sftp", se
+           usa SFTP si esta configurado, como siempre. */
+        STORAGE_MODE: Joi.string().valid('local', 'sftp').optional(),
       }),
     }),
     /* Cron (avisos de prueba/pago vencido) y emisor de eventos de dominio

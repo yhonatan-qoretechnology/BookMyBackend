@@ -13,6 +13,13 @@ export class SftpStorageService {
     if (this.enabledCache !== null) {
       return this.enabledCache;
     }
+    /* STORAGE_MODE=local guarda en ./uploads aunque esten puestas las
+       SFTP_*: el .env de desarrollo apunta al espacio web de produccion, y
+       una subida de prueba no tiene por que acabar alli. */
+    if (this.configService.get<string>('STORAGE_MODE') === 'local') {
+      this.enabledCache = false;
+      return this.enabledCache;
+    }
     const host = this.configService.get<string>('SFTP_HOST');
     const username = this.configService.get<string>('SFTP_USER');
     const password = this.configService.get<string>('SFTP_PASSWORD');

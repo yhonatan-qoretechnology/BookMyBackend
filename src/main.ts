@@ -1,3 +1,6 @@
+/* El primero: el .env.local tiene que estar en process.env antes de que
+   nadie importe Prisma (ver config/env-local.ts). */
+import './config/env-local';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
