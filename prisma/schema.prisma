@@ -1190,6 +1190,35 @@ model Insumo {
   maxPorDefecto Float @default(10) @map("max_por_defecto")
   /// Se archiva en vez de borrarse: las solicitudes antiguas lo citan.
   activo    Boolean  @default(true)
+
+  /**
+   * ── Catalogo web ───────────────────────────────────────
+   * Lo que el negocio ensena en su propia web, que lo lee de
+   * GET /catalogo-web/:empresaId con el stock de todas sus sedes.
+   * Sin publicar, un insumo es solo un insumo.
+   */
+  /// Sale en la web del negocio. Por defecto no: publicar es una decision.
+  publicadoWeb     Boolean  @default(false) @map("publicado_web")
+  /// Seccion dentro de la categoria, por ejemplo "Tienda Apple".
+  subcategoria     String?  @db.VarChar(60)
+  marca            String?  @db.VarChar(60)
+  /// Distintivo de la tarjeta: "Nuevo", "Top" u "Oferta".
+  etiqueta         String?  @db.VarChar(20)
+  /// Descripcion corta, la de la tarjeta.
+  descripcion      String?  @db.VarChar(500)
+  /// Descripcion larga, la de la ficha del producto.
+  descripcionLarga String?  @map("descripcion_larga") @db.Text
+  /// Fotos; la primera es la principal. URL completa si estan en el espacio
+  /// web (SFTP), o ruta relativa uploads/... si estan en el disco de este
+  /// servidor.
+  imagenes         String[] @default([])
+  /// Ficha tecnica: lista de pares [etiqueta, valor], como mucho 20.
+  especificaciones Json?
+  /// Con opciones de capacidad y color en la ficha (los moviles de QORE).
+  conVariantes     Boolean  @default(false) @map("con_variantes")
+  /// Orden en la web: de menor a mayor, y los que no tienen, al final.
+  ordenWeb         Int?     @map("orden_web")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
