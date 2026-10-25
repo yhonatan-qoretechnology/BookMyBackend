@@ -20,6 +20,7 @@ import { BackupModule } from './data/backup/backup.module';
 import { FestivoModule } from './data/festivo/festivo.module';
 import { PaisModule } from './data/pais/pais.module';
 import { StockModule } from './data/stock/stock.module';
+import { CatalogoWebModule } from './data/catalogo-web/catalogo-web.module';
 import { EntityViewModule } from './data/entity-view/entity-view.module';
 import { EstadisticasModule } from './data/estadisticas/estadisticas.module';
 import { TelemetriaModule } from './data/telemetria/telemetria.module';
@@ -99,6 +100,18 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
            (ver SftpStorageService.isEnabled). Sin ella, o con "sftp", se
            usa SFTP si esta configurado, como siempre. */
         STORAGE_MODE: Joi.string().valid('local', 'sftp').optional(),
+        /* Aviso a la web de un negocio cuando cambia su inventario (ver
+           CatalogoWebListener). Sin las tres no se avisa a nadie. */
+        CATALOGO_WEB_WEBHOOK_URL: Joi.string()
+          .uri({ scheme: ['http', 'https'] })
+          .allow('')
+          .optional(),
+        CATALOGO_WEB_WEBHOOK_SECRET: Joi.string().allow('').optional(),
+        CATALOGO_WEB_EMPRESA_ID: Joi.number()
+          .integer()
+          .positive()
+          .allow('')
+          .optional(),
       }),
     }),
     /* Cron (avisos de prueba/pago vencido) y emisor de eventos de dominio
@@ -140,6 +153,7 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     BackupModule,
     PaisModule,
     StockModule,
+    CatalogoWebModule,
     EntityViewModule,
     EstadisticasModule,
     TelemetriaModule,

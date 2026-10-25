@@ -2,11 +2,30 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  ParseIntPipe,
 } from '@nestjs/common';
-import { EstadoSolicitud, Prisma, Role } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EstadoSolicitud, Insumo, Prisma, Role } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
+import { compressChatImageInPlace } from 'src/data/chatMessage/chat-image-compressor';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { SftpStorageService } from 'src/storage/sftp-storage.service';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
+import {
+  BOOKMY_EVENTS,
+  InventarioCambiadoEvento,
+  MotivoInventario,
+} from '../../common/events/event-names';
+import { ActualizarInsumoDto } from './dto/actualizar-insumo.dto';
+import { CrearInsumoDto } from './dto/crear-insumo.dto';
+import {
+  INSUMO_IMAGEN_EXTENSIONES,
+  INSUMO_MAX_IMAGENES,
+} from './insumo-imagen.constants';
+import { tipoRealDeFoto } from './insumo-imagen.filter';
 
 /**
  * Stock e insumos.
@@ -19,10 +38,19 @@ import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface
  * Todo va acotado por empresa desde el primer día. Es un módulo nuevo y no
  * tiene por qué repetir la historia de reseñas o del equipo, donde el
  * aislamiento llegó después.
+ *
+ * Cada cambio del catálogo o de las existencias emite inventario.cambiado:
+ * el catálogo web lo escucha para que la web del negocio se refresque.
  */
 @Injectable()
 export class StockService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(StockService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private readonly sftpStorage: SftpStorageService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   /**
    * La empresa con la que trabaja esta sesión. El superadmin tiene que
@@ -56,6 +84,59 @@ export class StockService {
     }
   }
 
+  /** El insumo, si es de esa empresa. */
+  private async insumoDeEmpresa(
+    id: number,
+    empresaId: number,
+    db: Prisma.TransactionClient = this.prisma,
+  ) {
+    const insumo = await db.insumo.findFirst({
+      where: { id, empresaId },
+    });
+    if (!insumo) {
+      throw new NotFoundException('Ese insumo no es de este negocio.');
+    }
+    return insumo;
+  }
+
+  /**
+   * El insumo con su fila bloqueada hasta que acabe la transacción. Quien
+   * cambie sus fotos a la vez espera su turno y lee la lista ya cambiada, en
+   * vez de escribir encima la que leyó antes: así no se pierde una foto
+   * recién subida ni vuelve una recién borrada.
+   */
+  private async insumoBloqueado(
+    tx: Prisma.TransactionClient,
+    id: number,
+    empresaId: number,
+  ) {
+    await tx.$queryRaw`SELECT 1 FROM insumos WHERE id = ${id} AND empresa_id = ${empresaId} FOR UPDATE`;
+    return this.insumoDeEmpresa(id, empresaId, tx);
+  }
+
+  /** El @@unique([empresaId, nombre]) sale como un 400 legible, no un 500. */
+  private async conNombreUnico<T>(nombre: string, guardar: () => Promise<T>) {
+    try {
+      return await guardar();
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException(
+          `Ya tienes un insumo llamado "${nombre}".`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  /** Cuenta que el inventario de un negocio ha cambiado. */
+  private avisarCambio(empresaId: number, motivo: MotivoInventario) {
+    const evento: InventarioCambiadoEvento = { empresaId, motivo };
+    this.eventEmitter.emit(BOOKMY_EVENTS.INVENTARIO_CAMBIADO, evento);
+  }
+
   /* ── Catálogo ─────────────────────────────────────────── */
 
   async listarInsumos(user: AuthenticatedUser, empresaId?: number, incluirArchivados = false) {
@@ -68,78 +149,84 @@ export class StockService {
     });
   }
 
-  async crearInsumo(
-    user: AuthenticatedUser,
-    datos: {
-      nombre: string;
-      categoria?: string;
-      unidad?: string;
-      precioRef?: number;
-      maxPorDefecto?: number;
-      empresaId?: number;
-    },
-  ) {
+  async crearInsumo(user: AuthenticatedUser, datos: CrearInsumoDto) {
     const empresaId = this.empresaDe(user, datos.empresaId);
     const nombre = datos.nombre?.trim();
     if (!nombre) throw new BadRequestException('El insumo necesita un nombre.');
+    exigirPrecioParaPublicar({
+      publicadoWeb: datos.publicadoWeb ?? false,
+      precioRef: datos.precioRef ?? 0,
+    });
 
-    try {
-      return await this.prisma.insumo.create({
+    const insumo = await this.conNombreUnico(nombre, () =>
+      this.prisma.insumo.create({
         data: {
           empresaId,
           nombre,
           categoria: datos.categoria?.trim() || 'General',
           unidad: datos.unidad?.trim() || 'ud',
           precioRef: datos.precioRef ?? 0,
-          ...(datos.maxPorDefecto !== undefined
+          ...(datos.maxPorDefecto != null
             ? { maxPorDefecto: datos.maxPorDefecto }
             : {}),
+          ...(datos.activo != null ? { activo: datos.activo } : {}),
+          ...camposWeb(datos),
         },
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new BadRequestException(`Ya tienes un insumo llamado "${nombre}".`);
-      }
-      throw error;
-    }
+      }),
+    );
+    this.avisarCambio(empresaId, 'insumo-creado');
+    return insumo;
   }
 
+  /**
+   * Cambia lo que venga en la petición; lo demás se queda como estaba.
+   * Un null en un campo que no puede quedar vacío (nombre, precio...) se
+   * ignora en vez de romper.
+   */
   async actualizarInsumo(
     user: AuthenticatedUser,
     id: number,
-    datos: {
-      nombre?: string;
-      categoria?: string;
-      unidad?: string;
-      precioRef?: number;
-      maxPorDefecto?: number;
-      activo?: boolean;
-      empresaId?: number;
-    },
+    datos: ActualizarInsumoDto,
+    motivo: MotivoInventario = 'insumo-actualizado',
   ) {
     const empresaId = this.empresaDe(user, datos.empresaId);
-    const insumo = await this.prisma.insumo.findFirst({
-      where: { id, empresaId },
-      select: { id: true },
-    });
-    if (!insumo) throw new NotFoundException('Ese insumo no es de este negocio.');
+    await this.insumoDeEmpresa(id, empresaId);
 
-    return this.prisma.insumo.update({
-      where: { id },
-      data: {
-        ...(datos.nombre !== undefined ? { nombre: datos.nombre.trim() } : {}),
-        ...(datos.categoria !== undefined ? { categoria: datos.categoria.trim() } : {}),
-        ...(datos.unidad !== undefined ? { unidad: datos.unidad.trim() } : {}),
-        ...(datos.precioRef !== undefined ? { precioRef: datos.precioRef } : {}),
-        ...(datos.maxPorDefecto !== undefined
-          ? { maxPorDefecto: datos.maxPorDefecto }
-          : {}),
-        ...(datos.activo !== undefined ? { activo: datos.activo } : {}),
-      },
-    });
+    const nombre = datos.nombre?.trim();
+    if (datos.nombre != null && !nombre) {
+      throw new BadRequestException('El insumo necesita un nombre.');
+    }
+
+    const insumo = await this.conNombreUnico(nombre ?? '', () =>
+      this.prisma.$transaction(async (tx) => {
+        const actualizado = await tx.insumo.update({
+          where: { id },
+          data: {
+            ...(nombre ? { nombre } : {}),
+            ...(datos.categoria != null
+              ? { categoria: datos.categoria.trim() || 'General' }
+              : {}),
+            ...(datos.unidad != null
+              ? { unidad: datos.unidad.trim() || 'ud' }
+              : {}),
+            ...(datos.precioRef != null ? { precioRef: datos.precioRef } : {}),
+            ...(datos.maxPorDefecto != null
+              ? { maxPorDefecto: datos.maxPorDefecto }
+              : {}),
+            ...(datos.activo != null ? { activo: datos.activo } : {}),
+            ...camposWeb(datos),
+          },
+        });
+        /* Se mira cómo queda, no lo que trae la petición: publicar uno que
+           está a 0, o poner a 0 uno publicado, tampoco vale. Dentro de la
+           transacción, para que el error deshaga el cambio aunque otra
+           petición haya tocado el insumo a la vez. */
+        exigirPrecioParaPublicar(actualizado);
+        return actualizado;
+      }),
+    );
+    this.avisarCambio(empresaId, motivo);
+    return insumo;
   }
 
   /**
@@ -147,7 +234,171 @@ export class StockService {
    * citan y borrarlo dejaría el historial del negocio con huecos.
    */
   async archivarInsumo(user: AuthenticatedUser, id: number, empresaId?: number) {
-    return this.actualizarInsumo(user, id, { activo: false, empresaId });
+    return this.actualizarInsumo(
+      user,
+      id,
+      { activo: false, empresaId },
+      'insumo-archivado',
+    );
+  }
+
+  /* ── Fotos del catálogo web ───────────────────────────── */
+
+  /**
+   * Añade fotos al final de `imagenes`. Se comprimen como los tickets de
+   * gastos y van al espacio web por SFTP, guardando la URL completa, o, sin
+   * SFTP, al disco de este servidor, guardando la ruta relativa que sirve
+   * /uploads.
+   *
+   * El id llega como texto de la ruta y se valida aquí, con el mismo 400 que
+   * ParseIntPipe, para que un id que no vale también pase por el finally que
+   * vacía el temporal de multer.
+   */
+  async agregarImagenes(
+    user: AuthenticatedUser,
+    idDeRuta: string,
+    archivos: Express.Multer.File[],
+    empresaId?: number,
+  ) {
+    try {
+      const id = await new ParseIntPipe().transform(idDeRuta, {
+        type: 'param',
+        data: 'id',
+      });
+      if (!archivos.length) {
+        throw new BadRequestException('Sube al menos una foto.');
+      }
+      const empresa = this.empresaDe(user, empresaId);
+      /* Antes de comprimir y subir nada, que es lo lento. Al guardar se
+         vuelve a mirar: otra subida puede haber llenado el hueco entretanto. */
+      const { imagenes } = await this.insumoDeEmpresa(id, empresa);
+      exigirHuecoParaFotos(imagenes.length, archivos.length);
+
+      /* Todas antes de guardar ninguna: si una no es una foto de verdad, no
+         sube nada. */
+      const tipos = archivos.map((archivo) => tipoRealDeFoto(archivo.path));
+      if (tipos.some((tipo) => !tipo)) {
+        throw new BadRequestException(
+          'Formato no permitido. Solo se aceptan fotos JPG, PNG, WebP o GIF.',
+        );
+      }
+
+      const nuevas: string[] = [];
+      try {
+        for (const [i, archivo] of archivos.entries()) {
+          nuevas.push(await this.guardarImagen(empresa, archivo, tipos[i]!));
+        }
+        const insumo = await this.prisma.$transaction(async (tx) => {
+          const actual = await this.insumoBloqueado(tx, id, empresa);
+          exigirHuecoParaFotos(actual.imagenes.length, nuevas.length);
+          return tx.insumo.update({
+            where: { id },
+            data: { imagenes: { push: nuevas } },
+          });
+        });
+        this.avisarCambio(empresa, 'imagenes-anadidas');
+        return insumo;
+      } catch (error) {
+        /* Las que llegaron a guardarse no las cita nadie: las de una subida
+           que falló a medias y las que al final ya no cabían. */
+        await Promise.all(
+          nuevas.map((ruta) => this.borrarImagen(empresa, ruta)),
+        );
+        throw error;
+      }
+    } finally {
+      /* Lo que no llegó a su sitio no se queda en el temporal de multer. */
+      for (const archivo of archivos) borrarTemporal(archivo.path);
+    }
+  }
+
+  /**
+   * Quita fotos de `imagenes` y borra sus ficheros cuando los subió este
+   * backend. Las que no estaban en la lista se ignoran. Los ficheros se
+   * borran cuando la lista ya está guardada sin ellos, nunca antes.
+   */
+  async quitarImagenes(
+    user: AuthenticatedUser,
+    id: number,
+    quitar: string[],
+    empresaId?: number,
+  ) {
+    const empresa = this.empresaDe(user, empresaId);
+    const fuera = new Set(quitar.map((ruta) => ruta.trim()));
+
+    const { insumo, quitadas } = await this.prisma.$transaction(async (tx) => {
+      const actual = await this.insumoBloqueado(tx, id, empresa);
+      const enLaLista = actual.imagenes.filter((ruta) => fuera.has(ruta));
+      if (!enLaLista.length) return { insumo: actual, quitadas: enLaLista };
+      const restantes = actual.imagenes.filter((ruta) => !fuera.has(ruta));
+      return {
+        insumo: await tx.insumo.update({
+          where: { id },
+          data: { imagenes: restantes },
+        }),
+        quitadas: enLaLista,
+      };
+    });
+    if (!quitadas.length) return insumo;
+
+    await Promise.all(quitadas.map((ruta) => this.borrarImagen(empresa, ruta)));
+    this.avisarCambio(empresa, 'imagenes-quitadas');
+    return insumo;
+  }
+
+  /** `tipo` es el de tipoRealDeFoto, no el que declaró el cliente. */
+  private async guardarImagen(
+    empresaId: number,
+    archivo: Express.Multer.File,
+    tipo: string,
+  ) {
+    const temporal = path.resolve(archivo.path);
+    await compressChatImageInPlace(temporal, tipo);
+    const nombre = `${archivo.filename}${INSUMO_IMAGEN_EXTENSIONES.get(tipo) ?? ''}`;
+
+    if (this.sftpStorage.isEnabled()) {
+      const { publicUrl } = await this.sftpStorage.uploadLocalFile({
+        localPath: temporal,
+        remoteRelativePath: `uploads/bookmy/insumos/${empresaId}/${nombre}`,
+      });
+      return publicUrl;
+    }
+
+    const relativa = `uploads/insumos/${empresaId}/${nombre}`;
+    const destino = path.resolve(relativa);
+    fs.mkdirSync(path.dirname(destino), { recursive: true });
+    fs.renameSync(temporal, destino);
+    return relativa;
+  }
+
+  /**
+   * Borra el fichero de una foto si lo subió este backend para ESTE negocio;
+   * una foto de fuera (una URL enlazada a mano) solo sale de la lista. Un
+   * fallo se apunta y ya: la foto ha dejado de salir igualmente.
+   */
+  private async borrarImagen(empresaId: number, ruta: string) {
+    try {
+      if (/^https?:\/\//i.test(ruta)) {
+        const propia = new URL(ruta).pathname.startsWith(
+          `/uploads/bookmy/insumos/${empresaId}/`,
+        );
+        if (propia && this.sftpStorage.isEnabled()) {
+          await this.sftpStorage.deleteByPublicUrl(ruta);
+        }
+        return;
+      }
+      const relativa = ruta.replace(/^\/+/, '');
+      if (
+        relativa.startsWith(`uploads/insumos/${empresaId}/`) &&
+        !relativa.includes('..')
+      ) {
+        fs.rmSync(path.resolve(relativa), { force: true });
+      }
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo borrar la foto ${ruta}: ${(error as Error).message}`,
+      );
+    }
   }
 
   /* ── Existencias por sede ─────────────────────────────── */
@@ -205,7 +456,7 @@ export class StockService {
       throw new BadRequestException('Las cantidades no pueden ser negativas.');
     }
 
-    return this.prisma.stockSede.upsert({
+    const existencias = await this.prisma.stockSede.upsert({
       where: { sedeId_insumoId: { sedeId, insumoId } },
       update: {
         ...(datos.stock !== undefined ? { stock: datos.stock } : {}),
@@ -218,6 +469,8 @@ export class StockService {
         max: datos.max ?? 0,
       },
     });
+    this.avisarCambio(empresa, 'stock-ajustado');
+    return existencias;
   }
 
   /* ── Solicitudes de reposición ────────────────────────── */
@@ -301,7 +554,7 @@ export class StockService {
       throw new BadRequestException('Esa solicitud ya estaba resuelta.');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const resuelta = await this.prisma.$transaction(async (tx) => {
       if (estado === EstadoSolicitud.APROBADA) {
         for (const item of solicitud.items) {
           await tx.stockSede.upsert({
@@ -325,5 +578,88 @@ export class StockService {
         include: { items: { include: { insumo: true } } },
       });
     });
+    /* Rechazarla no mueve nada; aprobarla mete el material en la sede. */
+    if (estado === EstadoSolicitud.APROBADA) {
+      this.avisarCambio(empresa, 'solicitud-aprobada');
+    }
+    return resuelta;
+  }
+}
+
+/**
+ * Los campos del catálogo web que trae la petición, listos para Prisma. Lo
+ * que no viene no se toca; un texto vacío o null borra el valor.
+ */
+function camposWeb(datos: ActualizarInsumoDto) {
+  return {
+    ...(datos.publicadoWeb != null ? { publicadoWeb: datos.publicadoWeb } : {}),
+    ...(datos.subcategoria !== undefined
+      ? { subcategoria: textoOpcional(datos.subcategoria) }
+      : {}),
+    ...(datos.marca !== undefined ? { marca: textoOpcional(datos.marca) } : {}),
+    ...(datos.etiqueta !== undefined
+      ? { etiqueta: textoOpcional(datos.etiqueta) }
+      : {}),
+    ...(datos.descripcion !== undefined
+      ? { descripcion: textoOpcional(datos.descripcion) }
+      : {}),
+    ...(datos.descripcionLarga !== undefined
+      ? { descripcionLarga: textoOpcional(datos.descripcionLarga) }
+      : {}),
+    /* El orden manda (la primera es la principal); las repetidas, fuera. */
+    ...(datos.imagenes != null
+      ? { imagenes: [...new Set(datos.imagenes)] }
+      : {}),
+    ...(datos.especificaciones !== undefined
+      ? { especificaciones: fichaTecnica(datos.especificaciones) }
+      : {}),
+    ...(datos.conVariantes != null ? { conVariantes: datos.conVariantes } : {}),
+    ...(datos.ordenWeb !== undefined ? { ordenWeb: datos.ordenWeb } : {}),
+  };
+}
+
+/** En la web no hay diferencia entre vacío y sin poner: los dos son null. */
+function textoOpcional(texto: string | null | undefined) {
+  return texto?.trim() || null;
+}
+
+/** La ficha sin filas vacías; sin ninguna, el insumo no tiene ficha (null). */
+function fichaTecnica(pares: [string, string][] | null | undefined) {
+  const filas = (pares ?? [])
+    .map(([etiqueta, valor]): [string, string] => [
+      etiqueta.trim(),
+      valor.trim(),
+    ])
+    .filter(([etiqueta, valor]) => etiqueta || valor);
+  return filas.length ? filas : Prisma.DbNull;
+}
+
+/** En la web el precio es precioRef: un insumo publicado a 0 saldría gratis. */
+function exigirPrecioParaPublicar({
+  publicadoWeb,
+  precioRef,
+}: Pick<Insumo, 'publicadoWeb' | 'precioRef'>) {
+  if (publicadoWeb && precioRef <= 0) {
+    throw new BadRequestException(
+      'Para publicar un insumo en la web hace falta un precio mayor que 0.',
+    );
+  }
+}
+
+/** Las fotos nuevas caben todas o no entra ninguna. */
+function exigirHuecoParaFotos(tiene: number, nuevas: number) {
+  if (tiene + nuevas > INSUMO_MAX_IMAGENES) {
+    throw new BadRequestException(
+      `Un insumo puede tener como mucho ${INSUMO_MAX_IMAGENES} fotos y este ya tiene ${tiene}.`,
+    );
+  }
+}
+
+/** Un temporal que no se puede borrar no tiene por qué tapar la respuesta. */
+function borrarTemporal(ruta: string) {
+  try {
+    fs.rmSync(path.resolve(ruta), { force: true });
+  } catch {
+    /* se queda en uploads/insumos/temp */
   }
 }

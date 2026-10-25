@@ -8,9 +8,19 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBody,
+  ApiConsumes,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { EstadoSolicitud, Role } from '@prisma/client';
 import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
 import { Roles } from '../../auth/common/decorators/roles.decorator';
@@ -18,6 +28,15 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { ModuloPro } from '../empresa/plan-pro.guard';
 import { PlanProGuard } from '../empresa/plan-pro.guard';
+import { ActualizarInsumoDto } from './dto/actualizar-insumo.dto';
+import { CrearInsumoDto } from './dto/crear-insumo.dto';
+import { QuitarImagenesInsumoDto } from './dto/quitar-imagenes-insumo.dto';
+import {
+  INSUMO_IMAGEN_MAX_BYTES,
+  INSUMO_IMAGENES_POR_SUBIDA,
+  INSUMO_UPLOAD_TEMP_DIR,
+} from './insumo-imagen.constants';
+import { insumoImagenFilter } from './insumo-imagen.filter';
 import { StockService } from './stock.service';
 
 /**
@@ -60,36 +79,92 @@ export class StockController {
   @ApiOperation({ summary: 'Dar de alta un insumo' })
   crearInsumo(
     @AuthUser() user: AuthenticatedUser,
-    @Body()
-    body: {
-      nombre: string;
-      categoria?: string;
-      unidad?: string;
-      precioRef?: number;
-      maxPorDefecto?: number;
-      empresaId?: number;
-    },
+    @Body() body: CrearInsumoDto,
   ) {
     return this.stockService.crearInsumo(user, body);
   }
 
   @Patch('insumos/:id')
-  @ApiOperation({ summary: 'Editar un insumo' })
+  @ApiOperation({
+    summary: 'Editar un insumo',
+    description:
+      'Solo cambia lo que se manda. `imagenes` sustituye la lista entera (para reordenar o enlazar fotos de fuera) sin borrar ficheros.',
+  })
   actualizarInsumo(
     @AuthUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
-    @Body()
-    body: {
-      nombre?: string;
-      categoria?: string;
-      unidad?: string;
-      precioRef?: number;
-      maxPorDefecto?: number;
-      activo?: boolean;
-      empresaId?: number;
-    },
+    @Body() body: ActualizarInsumoDto,
   ) {
     return this.stockService.actualizarInsumo(user, id, body);
+  }
+
+  @Post('insumos/:id/imagenes')
+  @ApiOperation({
+    summary: 'Subir fotos de un insumo (catálogo web)',
+    description:
+      'Se añaden al final de `imagenes`. JPG, PNG, WebP o GIF, hasta 10 MB cada una y 12 por insumo. Devuelve el insumo.',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        imagenes: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+        },
+        empresaId: {
+          type: 'integer',
+          description: 'Solo SUPER_ADMIN (también vale ?empresaId=).',
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FilesInterceptor('imagenes', INSUMO_IMAGENES_POR_SUBIDA, {
+      dest: INSUMO_UPLOAD_TEMP_DIR,
+      limits: { fileSize: INSUMO_IMAGEN_MAX_BYTES },
+      fileFilter: insumoImagenFilter,
+    }),
+  )
+  agregarImagenes(
+    @AuthUser() user: AuthenticatedUser,
+    /* Sin ParseIntPipe: un pipe corre después de multer, y su 400 dejaría
+       las fotos en el temporal. Lo valida el servicio, que lo vacía. */
+    @Param('id') id: string,
+    @UploadedFiles() archivos?: Express.Multer.File[],
+    /* En multipart el empresaId del superadmin llega como campo de texto;
+       se admite también en la query, como en el resto de rutas. */
+    @Body('empresaId') empresaIdCampo?: string,
+    @Query('empresaId') empresaIdQuery?: string,
+  ) {
+    const empresaId = empresaIdCampo || empresaIdQuery;
+    return this.stockService.agregarImagenes(
+      user,
+      id,
+      archivos ?? [],
+      empresaId ? Number(empresaId) : undefined,
+    );
+  }
+
+  @Delete('insumos/:id/imagenes')
+  @ApiOperation({
+    summary: 'Quitar fotos de un insumo (catálogo web)',
+    description:
+      'Las quita de `imagenes` y borra el fichero cuando lo subió este backend. Devuelve el insumo.',
+  })
+  quitarImagenes(
+    @AuthUser() user: AuthenticatedUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: QuitarImagenesInsumoDto,
+  ) {
+    return this.stockService.quitarImagenes(
+      user,
+      id,
+      body.imagenes,
+      body.empresaId,
+    );
   }
 
   @Delete('insumos/:id')
