@@ -12,6 +12,7 @@ import {
 import { randomUUID } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { WiseService } from '../wise/wise.service';
 import { CreatePaymentCardDto } from './dto/create-payment-card.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentItemDto } from './dto/create-payment-item.dto';
@@ -38,6 +39,7 @@ export class PaymentService {
   constructor(
     private prisma: PrismaService,
     private httpService: HttpService,
+    private wiseService: WiseService,
   ) {}
 
   async createPayment(dto: CreatePaymentDto) {
@@ -102,6 +104,10 @@ export class PaymentService {
       return this.processCardPayment(payment, payload);
     }
 
+    if (dto.method === PaymentMethod.BIZUM) {
+      return this.processBizumPayment(payment);
+    }
+
     return this.processPartialPayment(payment);
   }
 
@@ -138,7 +144,7 @@ export class PaymentService {
         payload.amount ?? payment.totalAmount,
       );
 
-      return await this.prisma.payment.update({
+      const paid = await this.prisma.payment.update({
         where: { id: payment.id },
         data: {
           transactionId: data.transactionId,
@@ -147,6 +153,8 @@ export class PaymentService {
           paidAmount: payment.totalAmount,
         },
       });
+      await this.wiseService.liquidarPago(paid.id);
+      return paid;
     } catch (error) {
       await this.prisma.payment.update({
         where: { id: payment.id },
@@ -154,6 +162,36 @@ export class PaymentService {
       });
       throw new BadRequestException('Error al procesar el pago con tarjeta');
     }
+  }
+
+  /**
+   * Bizum: hoy simulado igual que la tarjeta (sin pasarela real; con Redsys
+   * este es el punto a cambiar). Cobra el total y lo liquida al negocio por
+   * Wise; la liquidación es best-effort y nunca hace fallar el pago.
+   */
+  private async processBizumPayment(payment) {
+    let paid;
+    try {
+      const data = await this.simulateBankResponse('BZM', payment.id, payment.totalAmount);
+      paid = await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          transactionId: data.transactionId,
+          bankResponse: { ...data, method: 'BIZUM' },
+          status: PaymentStatus.PAID,
+          paidAmount: payment.totalAmount,
+        },
+      });
+    } catch {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: PaymentStatus.FAILED },
+      });
+      throw new BadRequestException('Error al procesar el pago con Bizum');
+    }
+
+    await this.wiseService.liquidarPago(paid.id);
+    return paid;
   }
 
   // 💵 Pago parcial en establecimiento

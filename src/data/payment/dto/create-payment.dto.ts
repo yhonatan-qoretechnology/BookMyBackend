@@ -17,7 +17,7 @@ export class CreatePaymentDto {
   @ApiProperty({
     example: 'CARD',
     enum: PaymentMethod,
-    description: 'Método de pago: CARD o CASH',
+    description: 'Método de pago: CARD, CASH o BIZUM',
   })
   @IsEnum(PaymentMethod)
   method: PaymentMethod;

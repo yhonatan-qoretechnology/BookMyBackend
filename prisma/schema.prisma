@@ -383,6 +383,10 @@ model EmpresaCuentaPago {
   bancoNumero String? @map("banco_numero")
   /// Solo Colombia: "ahorros" o "corriente". España no la usa (IBAN basta).
   bancoTipoCuenta String?  @map("banco_tipo_cuenta")
+  /// Destinatario creado en Wise con estos datos: Wise valida el IBAN o
+  /// el email al crearlo, y las liquidaciones se envían a este id.
+  /// Null si Wise no está configurado o aún no se validó.
+  wiseRecipientId String?  @map("wise_recipient_id")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -791,6 +795,7 @@ model Payment {
   card           PaymentCard?  @relation(fields: [cardId], references: [id])
   service        Service       @relation(fields: [serviceId], references: [id])
   user           Users         @relation(fields: [userId], references: [id])
+  liquidacionWise LiquidacionWise?
 
   @@index([userId])
   @@index([serviceId])
@@ -996,6 +1001,9 @@ enum AppointmentStatus {
 enum PaymentMethod {
   CARD
   CASH
+  /// Bizum. Hoy simulado (sin pasarela real, como CARD); al pagarse se
+  /// registra la liquidación al negocio por Wise.
+  BIZUM
 }
 
 enum PaymentStatus {
@@ -1316,6 +1324,10 @@ model LiquidacionWise {
   wiseQuoteId     String?               @map("wise_quote_id")
   wiseRecipientId String?               @map("wise_recipient_id")
   wiseTransferId  String?               @map("wise_transfer_id")
+  /// Pago del cliente que origina la liquidación (null si se creó a mano).
+  /// Único: un mismo pago no se liquida dos veces.
+  paymentId       Int?                  @unique @map("payment_id")
+  payment         Payment?              @relation(fields: [paymentId], references: [id])
   estado          EstadoLiquidacionWise @default(PENDIENTE)
   /// Respuesta cruda de la API de Wise, para depurar sin tener que volver
   /// a llamarla.

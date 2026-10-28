@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { Role } from '@prisma/client';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { PrismaService } from '../../prisma/prisma.service';
+import { WiseService } from '../wise/wise.service';
 import { GuardarCuentaPagoDto } from './dto/guardar-cuenta-pago.dto';
 
 /**
@@ -9,10 +10,16 @@ import { GuardarCuentaPagoDto } from './dto/guardar-cuenta-pago.dto';
  * la carga el propio dueño una vez, en Configuración, para que Bookmy
  * sepa a dónde liquidarle. Distinto de LiquidacionWise, que es el
  * registro de cada pago que Bookmy ya efectuó.
+ *
+ * Al guardar, si Wise está configurado, se crea el destinatario en Wise:
+ * eso valida el IBAN o el email antes de aceptar la cuenta.
  */
 @Injectable()
 export class EmpresaCuentaPagoService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly wise: WiseService,
+  ) {}
 
   /** Solo el SUPER_ADMIN o el dueño de ESA empresa puede ver/editar sus datos de cobro. */
   private exigirAcceso(empresaId: number, user?: AuthenticatedUser) {
@@ -34,13 +41,17 @@ export class EmpresaCuentaPagoService {
     const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId } });
     if (!empresa) throw new NotFoundException('La empresa no existe.');
 
-    const data = {
+    const cuenta = {
       metodo: dto.metodo,
-      wiseEmail: dto.wiseEmail ?? null,
-      bancoTitular: dto.bancoTitular ?? null,
-      bancoNumero: dto.bancoNumero ?? null,
+      wiseEmail: dto.wiseEmail?.trim() ?? null,
+      bancoTitular: dto.bancoTitular?.trim() ?? null,
+      bancoNumero: dto.bancoNumero?.replace(/\s+/g, '').toUpperCase() ?? null,
       bancoTipoCuenta: dto.bancoTipoCuenta ?? null,
     };
+    // Lanza BadRequest con el motivo de Wise si la cuenta no es válida: así
+    // no se guarda una cuenta a la que luego no se podría liquidar.
+    const wiseRecipientId = await this.wise.crearDestinatario(cuenta, empresa.nombre);
+    const data = { ...cuenta, wiseRecipientId };
 
     return this.prisma.empresaCuentaPago.upsert({
       where: { empresaId },
