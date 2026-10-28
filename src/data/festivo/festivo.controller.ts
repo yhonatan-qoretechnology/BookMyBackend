@@ -29,7 +29,7 @@ export class FestivoController {
   @ApiOperation({
     summary: 'Festivos que aplican a una sede',
     description:
-      'Nacionales + los de su comunidad + los de su municipio. Son informativos: no bloquean el agendado.',
+      'Nacionales + los de su comunidad + los de su municipio. Bloquean el agendado: no se pueden crear ni reprogramar citas en un festivo de la sede.',
   })
   @ApiOkResponse({ description: 'Lista de festivos ordenada por fecha.' })
   findAll(@Query() query: QueryFestivosDto) {

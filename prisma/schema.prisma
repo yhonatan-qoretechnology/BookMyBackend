@@ -1046,9 +1046,9 @@ enum AmbitoFestivo {
 }
 
 /**
- * Festivos: se pintan en rojo en el calendario pero NO bloquean
- * el agendado (decision del cliente). Si una sede cierra ese dia,
- * se cierra con el mecanismo existente de dias cerrados.
+ * Festivos: se pintan en rojo en el calendario y bloquean el agendado
+ * (crear, reprogramar y continuar citas): ver
+ * AppointmentService.assertNoEsFestivo. Antes eran solo informativos.
  */
 /// Calendario laboral. Las fechas se guardan por pais porque Espana y
 /// Colombia comparten seis festivos nacionales el mismo dia (Ano Nuevo,

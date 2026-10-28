@@ -29,6 +29,7 @@ import { ReassignAppointmentDto } from './dto/reassign-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { ObservacionEsperaDto } from './dto/observacion-espera.dto';
 
+import { FestivoService } from '../festivo/festivo.service';
 import { NotificationService } from '../notification/notification.service';
 import { PaymentService } from '../payment/payment.service';
 
@@ -57,7 +58,22 @@ export class AppointmentService {
     private paymentService: PaymentService,
     private notificationService: NotificationService,
     private accessControlService: AccessControlService,
+    private festivoService: FestivoService,
   ) {}
+
+  /**
+   * Los festivos de la sede (nacionales, de su comunidad y de su municipio,
+   * los mismos que pinta el calendario) no admiten citas. `dia` es
+   * YYYY-MM-DD en la zona de la sede, como `appointmentDay`.
+   */
+  private async assertNoEsFestivo(sedeId: number, dia: string) {
+    const festivo = await this.festivoService.festivoDeSede(sedeId, dia);
+    if (festivo) {
+      throw new BadRequestException(
+        `La sede no abre ese día por festivo: ${festivo.nombre}`,
+      );
+    }
+  }
 
   /**
    * Best-effort: arma y dispara la notificación al BRANCH_ADMIN de la sede.
@@ -749,6 +765,10 @@ export class AppointmentService {
     if (!scheduleRanges.length) return [];
 
     const appointmentDay = this.getDateInTimezone(fecha, tz);
+    // Un festivo no tiene huecos: así las sugerencias nunca lo proponen.
+    if (await this.festivoService.festivoDeSede(sede.id, appointmentDay)) {
+      return [];
+    }
     const diasCerradosRegistros = sede.DiaCerradoSede.length
       ? sede.DiaCerradoSede
       : Array.isArray(sede.diasCerrado)
@@ -1275,6 +1295,8 @@ export class AppointmentService {
             : 'La cita se encuentra fuera del horario operativo de la sede',
         );
       }
+
+      await this.assertNoEsFestivo(sede.id, appointmentDay);
 
       const diasCerradosRegistros = sede.DiaCerradoSede.length
         ? sede.DiaCerradoSede
@@ -2324,6 +2346,13 @@ export class AppointmentService {
       );
     }
 
+    // La parte 1 se crea aquí sin pasar por create(): el festivo se mira a
+    // mano (la parte 2 sale de findSameDayFreeSlots, que ya los salta).
+    await this.assertNoEsFestivo(
+      sede.id,
+      this.getDateInTimezone(horaInicio, tz),
+    );
+
     const dayOfWeek = this.getDayOfWeekInTimezone(horaInicio, tz);
     const dayNames = [
       'domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado',
@@ -2702,6 +2731,8 @@ export class AppointmentService {
     }
 
     const appointmentDay = this.getDateInTimezone(fecha, tz);
+    await this.assertNoEsFestivo(sede.id, appointmentDay);
+
     const diasCerradosRegistros = sede.DiaCerradoSede.length
       ? sede.DiaCerradoSede
       : Array.isArray(sede.diasCerrado)

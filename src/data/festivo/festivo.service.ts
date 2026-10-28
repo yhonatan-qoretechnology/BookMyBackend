@@ -118,6 +118,21 @@ export class FestivoService {
   }
 
   /**
+   * El festivo que cae en `dia` (YYYY-MM-DD, en la zona de la sede) para esa
+   * sede, o null. Misma resolución de país, región y municipio que el
+   * listado: lo que el calendario pinta en rojo es lo que bloquea la reserva.
+   */
+  async festivoDeSede(sedeId: number, dia: string) {
+    const festivos = await this.findAll({
+      sedeId,
+      anio: Number(dia.slice(0, 4)),
+    });
+    return (
+      festivos.find((f) => f.fecha.toISOString().slice(0, 10) === dia) ?? null
+    );
+  }
+
+  /**
    * De QUIEN son los festivos que se van a devolver: pais, regiones y
    * municipios. Se resuelve igual para el listado y para el contexto que
    * muestra el panel, que es como el usuario comprueba que al cambiar de
