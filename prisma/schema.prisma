@@ -1001,9 +1001,9 @@ enum AppointmentStatus {
 enum PaymentMethod {
   CARD
   CASH
-  /// Bizum. Hoy simulado (sin pasarela real, como CARD); al pagarse se
-  /// registra la liquidación al negocio por Wise.
-  BIZUM
+  /// Wise. Hoy simulado (sin pasarela real, como CARD); al pagarse se
+  /// registra la liquidación al negocio por Wise. Reemplaza a BIZUM.
+  WISE
 }
 
 enum PaymentStatus {

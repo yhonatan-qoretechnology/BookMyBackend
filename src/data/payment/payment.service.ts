@@ -104,8 +104,8 @@ export class PaymentService {
       return this.processCardPayment(payment, payload);
     }
 
-    if (dto.method === PaymentMethod.BIZUM) {
-      return this.processBizumPayment(payment);
+    if (dto.method === PaymentMethod.WISE) {
+      return this.processWisePayment(payment);
     }
 
     return this.processPartialPayment(payment);
@@ -165,19 +165,19 @@ export class PaymentService {
   }
 
   /**
-   * Bizum: hoy simulado igual que la tarjeta (sin pasarela real; con Redsys
-   * este es el punto a cambiar). Cobra el total y lo liquida al negocio por
-   * Wise; la liquidación es best-effort y nunca hace fallar el pago.
+   * Wise: hoy simulado igual que la tarjeta (sin pasarela real; este es el
+   * punto a cambiar cuando haya cobro real). Cobra el total y lo liquida al
+   * negocio por Wise; la liquidación es best-effort y nunca hace fallar el pago.
    */
-  private async processBizumPayment(payment) {
+  private async processWisePayment(payment) {
     let paid;
     try {
-      const data = await this.simulateBankResponse('BZM', payment.id, payment.totalAmount);
+      const data = await this.simulateBankResponse('WSE', payment.id, payment.totalAmount);
       paid = await this.prisma.payment.update({
         where: { id: payment.id },
         data: {
           transactionId: data.transactionId,
-          bankResponse: { ...data, method: 'BIZUM' },
+          bankResponse: { ...data, method: 'WISE' },
           status: PaymentStatus.PAID,
           paidAmount: payment.totalAmount,
         },
@@ -187,7 +187,7 @@ export class PaymentService {
         where: { id: payment.id },
         data: { status: PaymentStatus.FAILED },
       });
-      throw new BadRequestException('Error al procesar el pago con Bizum');
+      throw new BadRequestException('Error al procesar el pago con Wise');
     }
 
     await this.wiseService.liquidarPago(paid.id);

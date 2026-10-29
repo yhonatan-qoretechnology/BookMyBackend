@@ -32,8 +32,8 @@ import { CrearLiquidacionWiseDto } from './dto/crear-liquidacion-wise.dto';
  * Sin WISE_API_KEY/WISE_API_URL/WISE_PROFILE_ID en el entorno, isEnabled()
  * es false: las liquidaciones se registran igual (PENDIENTE) pero nunca se
  * llama a Wise, así que se puede desplegar sin credenciales. Con el
- * sandbox (WISE_API_URL=https://api.sandbox.transferwise.tech) además se
- * usan los simuladores de Wise para llevar la transferencia a completada.
+ * sandbox (WISE_API_URL=https://api.wise-sandbox.com) además se usan los
+ * simuladores de Wise para llevar la transferencia a completada.
  */
 
 /** Parte del pago que se queda Bookmy (0 = todo para el negocio). */
@@ -41,7 +41,7 @@ export const COMISION_BOOKMY = 0;
 
 /** Métodos que cobra Bookmy y por tanto hay que liquidar al negocio. En
     efectivo el negocio ya tiene el dinero. */
-const METODOS_ONLINE: PaymentMethod[] = [PaymentMethod.CARD, PaymentMethod.BIZUM];
+const METODOS_ONLINE: PaymentMethod[] = [PaymentMethod.CARD, PaymentMethod.WISE];
 
 interface WiseQuote {
   id: string;
@@ -253,11 +253,24 @@ export class WiseService {
       });
       transferId = String(transfer.id);
 
-      const funding = await this.request<WiseFunding>(
-        'post',
-        `/v3/profiles/${this.profileId}/transfers/${transfer.id}/payments`,
-        { type: 'BALANCE' },
-      );
+      let funding: WiseFunding;
+      try {
+        funding = await this.request<WiseFunding>(
+          'post',
+          `/v3/profiles/${this.profileId}/transfers/${transfer.id}/payments`,
+          { type: 'BALANCE' },
+        );
+      } catch (error) {
+        // Con un token personal Wise no deja fondear por API (403) salvo en
+        // algunos países: la transferencia ya está creada y se paga a mano
+        // desde Wise. No es un fallo, queda PENDIENTE de ese clic.
+        if (!isAxiosError(error) || error.response?.status !== 403) throw error;
+        return guardar(
+          EstadoLiquidacionWise.PENDIENTE,
+          { transfer, motivo: 'Transferencia creada en Wise: falta pagarla desde la web de Wise.' },
+          { wiseQuoteId: quoteId, wiseRecipientId: recipientId, wiseTransferId: transferId },
+        );
+      }
       if (funding.status !== 'COMPLETED') {
         return guardar(
           EstadoLiquidacionWise.FALLIDA,
@@ -266,7 +279,8 @@ export class WiseService {
         );
       }
 
-      if (this.isSandbox()) {
+      // Wise no simula transferencias a destinatarios por email.
+      if (this.isSandbox() && cuenta.metodo !== MetodoCobroOnline.WISE) {
         await this.simularEntrega(transfer.id);
         return guardar(
           EstadoLiquidacionWise.COMPLETADA,
@@ -293,9 +307,11 @@ export class WiseService {
   }
 
   /** Solo sandbox: Wise no mueve dinero real, así que se le pide que haga
-      avanzar la transferencia por sus estados hasta "enviada". */
+      avanzar la transferencia por sus estados hasta "enviada". Wise pide
+      al menos 5 s entre pasos porque los procesa en segundo plano. */
   private async simularEntrega(transferId: number) {
     for (const paso of ['processing', 'funds_converted', 'outgoing_payment_sent']) {
+      await new Promise((resolve) => setTimeout(resolve, 6000));
       await this.request('get', `/v1/simulation/transfers/${transferId}/${paso}`);
     }
   }
