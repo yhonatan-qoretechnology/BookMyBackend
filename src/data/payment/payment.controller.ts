@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -16,6 +17,11 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
+import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { ModuloPro, PlanProGuard } from '../empresa/plan-pro.guard';
 import { CreatePaymentCardDto } from './dto/create-payment-card.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -83,6 +89,18 @@ export class PaymentController {
     return this.paymentService.cancelPayment(Number(id));
   }
 
+  @Patch(':id/confirm-wise-transfer')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Confirmar que la transferencia bancaria por Wise llegó a Bookmy',
+    description:
+      'Solo Bookmy puede ver su propia cuenta Wise, así que esto se confirma a mano. Marca el pago PAID y liquida al negocio.',
+  })
+  async confirmWiseTransfer(@Param('id') id: string) {
+    return this.paymentService.confirmWiseTransfer(Number(id));
+  }
+
   @Get()
   @ModuloPro('La facturación')
   @UseGuards(PlanProGuard)
@@ -122,34 +140,63 @@ export class PaymentController {
     });
   }
 
+  /* ── Tarjetas guardadas ──
+     El guard global ya exige sesión, pero el userId venía del body/URL:
+     cualquiera con sesión podía ver o tocar las tarjetas de otro. Ahora
+     cada uno solo opera sobre las suyas (SUPER_ADMIN, sobre cualquiera). */
+  private titularDeTarjetas(user: AuthenticatedUser, userId?: number) {
+    if (user.role === Role.SUPER_ADMIN && userId) return userId;
+    if (userId && userId !== user.userId)
+      throw new ForbiddenException('Solo puede gestionar sus propias tarjetas.');
+    return user.userId;
+  }
+
   @Post('cards')
-  @ApiOperation({ summary: 'Registrar una tarjeta para un usuario' })
+  @ApiOperation({ summary: 'Registrar una tarjeta para el usuario de la sesión' })
   @ApiCreatedResponse({ type: PaymentCardResponseDto })
-  async createCard(@Body() dto: CreatePaymentCardDto) {
-    return this.paymentService.createPaymentCard(dto);
+  async createCard(
+    @Body() dto: CreatePaymentCardDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    const userId = this.titularDeTarjetas(user, dto.userId);
+    return this.paymentService.createPaymentCard({ ...dto, userId });
   }
 
   @Get('cards/:userId')
   @ApiOperation({ summary: 'Listar tarjetas guardadas de un usuario' })
   @ApiOkResponse({ type: PaymentCardResponseDto, isArray: true })
-  async listCards(@Param('userId') userId: string) {
-    return this.paymentService.listPaymentCards(Number(userId));
+  async listCards(
+    @Param('userId') userId: string,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.listPaymentCards(
+      this.titularDeTarjetas(user, Number(userId)),
+    );
   }
 
   @Patch('cards/:id')
   @ApiOperation({ summary: 'Actualizar datos de una tarjeta guardada' })
   @ApiOkResponse({ type: PaymentCardResponseDto })
-  async updateCard(@Param('id') id: string, @Body() dto: UpdatePaymentCardDto) {
-    return this.paymentService.updatePaymentCard(Number(id), dto);
+  async updateCard(
+    @Param('id') id: string,
+    @Body() dto: UpdatePaymentCardDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    const userId = this.titularDeTarjetas(user, dto.userId);
+    return this.paymentService.updatePaymentCard(Number(id), { ...dto, userId });
   }
 
   @Delete('cards/:id')
   @ApiOperation({ summary: 'Eliminar (desactivar) una tarjeta guardada' })
   @ApiOkResponse({ type: PaymentCardResponseDto })
-  async removeCard(@Param('id') id: string, @Query('userId') userId?: string) {
+  async removeCard(
+    @Param('id') id: string,
+    @AuthUser() user: AuthenticatedUser,
+    @Query('userId') userId?: string,
+  ) {
     return this.paymentService.removePaymentCard(
       Number(id),
-      userId ? Number(userId) : undefined,
+      this.titularDeTarjetas(user, userId ? Number(userId) : undefined),
     );
   }
 }

@@ -990,7 +990,8 @@ export class AppointmentService {
     };
   }
 
-  async create(data: CreateAppointmentDto, _user?: AuthenticatedUser) {
+  async create(data: CreateAppointmentDto, user?: AuthenticatedUser) {
+    this.exigirTarjetaPropia(data, user);
     const fecha = this.parseDate(data.fecha);
     const horaInicio = this.parseDate(data.horaInicio);
     const horaFin = this.parseDate(data.horaFin);
@@ -1458,7 +1459,13 @@ export class AppointmentService {
           ),
       );
 
-      return appointment;
+      /* Con WISE el pago queda PENDING con los datos de la transferencia en
+         Payment.bankResponse: el front los necesita en esta misma respuesta
+         para mostrárselos al cliente, sin un segundo viaje a /payments. */
+      return this.prisma.appointment.findUnique({
+        where: { id: appointment.id },
+        include: { Payment: true },
+      });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : JSON.stringify(error);
@@ -2282,7 +2289,17 @@ export class AppointmentService {
    * ejemplo, se liberó un hueco), se crea como una cita normal — no falla
    * ni obliga a partir algo que ya no hace falta partir.
    */
+  /* El personal del panel reserva en nombre de clientes (userId distinto
+     del de la sesión), pero pagar con una tarjeta guardada solo puede
+     hacerlo su titular: si no, cualquiera pagaría con la tarjeta de otro. */
+  private exigirTarjetaPropia(data: CreateAppointmentDto, user?: AuthenticatedUser) {
+    if (!data.existingCardId || user?.role === Role.SUPER_ADMIN) return;
+    if (!user || user.userId !== data.userId)
+      throw new ForbiddenException('Solo puede pagar con sus propias tarjetas.');
+  }
+
   async crearConContinuacion(data: CreateAppointmentDto, user?: AuthenticatedUser) {
+    this.exigirTarjetaPropia(data, user);
     const fecha = this.parseDate(data.fecha);
     const horaInicio = this.parseDate(data.horaInicio);
     const horaFin = this.parseDate(data.horaFin);
@@ -2553,7 +2570,13 @@ export class AppointmentService {
         ),
     );
 
-    return { parte1, parte2 };
+    /* Con WISE el front necesita los datos de la transferencia de cada
+       parte (ver create()); misma razón para incluir Payment acá. */
+    const [parte1ConPago, parte2ConPago] = await Promise.all([
+      this.prisma.appointment.findUnique({ where: { id: parte1.id }, include: { Payment: true } }),
+      this.prisma.appointment.findUnique({ where: { id: parte2.id }, include: { Payment: true } }),
+    ]);
+    return { parte1: parte1ConPago, parte2: parte2ConPago };
   }
 
   /** Nota sobre el cliente que espera a ser atendido. */

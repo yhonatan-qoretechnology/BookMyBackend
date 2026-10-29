@@ -96,6 +96,12 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
         WISE_API_KEY: Joi.string().optional(),
         WISE_API_URL: Joi.string().optional(),
         WISE_PROFILE_ID: Joi.string().optional(),
+        /* Cuenta propia de Bookmy a la que el cliente transfiere cuando
+           paga por transferencia (ver WiseService.cuentaReceptora). Sin
+           estas dos, el pago queda igual en PENDIENTE pero sin datos de
+           cuenta que mostrar. */
+        BOOKMY_WISE_IBAN: Joi.string().allow('').optional(),
+        BOOKMY_WISE_TITULAR: Joi.string().allow('').optional(),
         /* "local" guarda las subidas en ./uploads aunque esten las SFTP_*
            (ver SftpStorageService.isEnabled). Sin ella, o con "sftp", se
            usa SFTP si esta configurado, como siempre. */

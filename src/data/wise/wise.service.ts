@@ -316,6 +316,19 @@ export class WiseService {
     }
   }
 
+  /**
+   * Datos de la cuenta de Bookmy a la que el cliente debe transferir cuando
+   * paga por transferencia bancaria (ver PaymentService.processWisePayment).
+   * Null si no está configurada: el pago queda PENDIENTE igual, solo que
+   * sin instrucciones que mostrar.
+   */
+  cuentaReceptora(): { iban: string; titular: string } | null {
+    const iban = this.configService.get<string>('BOOKMY_WISE_IBAN');
+    const titular = this.configService.get<string>('BOOKMY_WISE_TITULAR');
+    if (!iban || !titular) return null;
+    return { iban, titular };
+  }
+
   async listar(empresaId?: number) {
     return this.prisma.liquidacionWise.findMany({
       where: empresaId ? { empresaId } : undefined,

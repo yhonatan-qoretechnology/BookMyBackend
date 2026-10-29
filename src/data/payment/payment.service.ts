@@ -165,30 +165,53 @@ export class PaymentService {
   }
 
   /**
-   * Wise: hoy simulado igual que la tarjeta (sin pasarela real; este es el
-   * punto a cambiar cuando haya cobro real). Cobra el total y lo liquida al
-   * negocio por Wise; la liquidación es best-effort y nunca hace fallar el pago.
+   * Wise: no hay pasarela que cobre al cliente — paga por transferencia
+   * bancaria manual a la cuenta de Bookmy. El pago queda PENDING con los
+   * datos de la cuenta y una referencia; alguien de Bookmy lo confirma a
+   * mano cuando ve la transferencia llegar (confirmWiseTransfer), y ahí
+   * recién se liquida al negocio.
    */
   private async processWisePayment(payment) {
-    let paid;
-    try {
-      const data = await this.simulateBankResponse('WSE', payment.id, payment.totalAmount);
-      paid = await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          transactionId: data.transactionId,
-          bankResponse: { ...data, method: 'WISE' },
-          status: PaymentStatus.PAID,
-          paidAmount: payment.totalAmount,
+    const cuenta = this.wiseService.cuentaReceptora();
+    return this.prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        bankResponse: {
+          method: 'WISE_TRANSFERENCIA',
+          referencia: `BOOKMY-${payment.id}`,
+          monto: payment.totalAmount,
+          moneda: 'EUR',
+          cuenta,
         },
-      });
-    } catch {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: PaymentStatus.FAILED },
-      });
-      throw new BadRequestException('Error al procesar el pago con Wise');
-    }
+      },
+    });
+  }
+
+  /**
+   * Confirma a mano que la transferencia del pago WISE llegó a la cuenta de
+   * Bookmy (lo hace alguien de Bookmy mirando su propia cuenta — no hay API
+   * para leer esa llegada automáticamente). Marca el pago como PAID y recién
+   * ahí dispara la liquidación al negocio.
+   */
+  async confirmWiseTransfer(paymentId: number) {
+    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) throw new BadRequestException('El pago no existe');
+    if (payment.method !== PaymentMethod.WISE)
+      throw new BadRequestException('El pago no es por transferencia Wise');
+    if (payment.status !== PaymentStatus.PENDING)
+      throw new BadRequestException('El pago no está pendiente de transferencia');
+
+    const paid = await this.prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        status: PaymentStatus.PAID,
+        paidAmount: payment.totalAmount,
+        bankResponse: {
+          ...(payment.bankResponse as object),
+          confirmadoEn: new Date().toISOString(),
+        },
+      },
+    });
 
     await this.wiseService.liquidarPago(paid.id);
     return paid;
