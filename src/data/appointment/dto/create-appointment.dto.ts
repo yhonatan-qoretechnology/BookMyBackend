@@ -91,12 +91,22 @@ export class CreateAppointmentDto {
   paymentAmount?: number;
 
   @ApiProperty({
+    example: 12,
+    required: false,
+    description:
+      'Tarjeta ya registrada del usuario (POST /payments/cards). Con ella no hacen falta número, caducidad ni CVV: la app nunca los envía.',
+  })
+  @IsOptional()
+  @IsInt()
+  existingCardId?: number;
+
+  @ApiProperty({
     example: '4242424242424242',
     required: false,
     description:
       'Número de tarjeta, obligatorio solo cuando el pago es con tarjeta.',
   })
-  @ValidateIf((o) => o.paymentMethod === PaymentMethod.CARD)
+  @ValidateIf((o) => o.paymentMethod === PaymentMethod.CARD && !o.existingCardId)
   @IsString()
   @Matches(/^[0-9]{13,19}$/)
   cardNumber?: string;
@@ -107,7 +117,7 @@ export class CreateAppointmentDto {
     description:
       'Fecha de expiración (MM/YY), obligatoria para pagos con tarjeta.',
   })
-  @ValidateIf((o) => o.paymentMethod === PaymentMethod.CARD)
+  @ValidateIf((o) => o.paymentMethod === PaymentMethod.CARD && !o.existingCardId)
   @IsString()
   @Matches(/^(0[1-9]|1[0-2])\/[0-9]{2}$/)
   expiryDate?: string;
@@ -117,7 +127,7 @@ export class CreateAppointmentDto {
     required: false,
     description: 'CVV de la tarjeta, obligatorio para pagos con tarjeta.',
   })
-  @ValidateIf((o) => o.paymentMethod === PaymentMethod.CARD)
+  @ValidateIf((o) => o.paymentMethod === PaymentMethod.CARD && !o.existingCardId)
   @IsString()
   @Matches(/^[0-9]{3,4}$/)
   cvv?: string;

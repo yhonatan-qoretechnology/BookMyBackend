@@ -392,8 +392,9 @@ export class PaymentService {
   }
 
   async createPaymentCard(dto: CreatePaymentCardDto) {
-    const brand = dto.brand ?? this.detectCardBrand(dto.cardNumber);
-    const last4 = dto.cardNumber.slice(-4);
+    const brand =
+      dto.brand ?? (dto.cardNumber ? this.detectCardBrand(dto.cardNumber) : 'unknown');
+    const last4 = dto.last4 ?? dto.cardNumber!.slice(-4);
 
     const existing = await this.prisma.paymentCard.findFirst({
       where: {

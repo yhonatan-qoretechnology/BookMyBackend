@@ -8,6 +8,7 @@ import {
   Matches,
   Max,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreatePaymentCardDto {
@@ -16,13 +17,27 @@ export class CreatePaymentCardDto {
   userId: number;
 
   @ApiProperty({
-    example: '4242424242424242',
-    description: 'Número completo de la tarjeta para tokenización',
+    example: '4242',
+    required: false,
+    description:
+      'Últimos 4 dígitos. Es lo que manda la app: por PCI-DSS el número completo no debe viajar a este servidor.',
   })
+  @ValidateIf((o) => !o.cardNumber)
+  @IsString()
+  @Matches(/^\d{4}$/)
+  last4?: string;
+
+  @ApiProperty({
+    example: '4242424242424242',
+    required: false,
+    description:
+      'Número completo (compatibilidad). Solo se conservan los últimos 4 dígitos.',
+  })
+  @ValidateIf((o) => !o.last4)
   @IsString()
   @Length(13, 19)
   @Matches(/^\d+$/)
-  cardNumber: string;
+  cardNumber?: string;
 
   @ApiProperty({ example: 'María Gómez', description: 'Titular de la tarjeta' })
   @IsString()
