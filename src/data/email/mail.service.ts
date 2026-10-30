@@ -184,6 +184,48 @@ export class MailService {
     }
   }
 
+  /**
+   * Formularios públicos de bookmy.es (contacto y solicitud de plan),
+   * ya verificados con reCAPTCHA. Llega al buzón de CONTACT_EMAIL con
+   * reply-to al remitente para contestarle directamente.
+   */
+  async sendContacto(datos: {
+    origen: 'contacto' | 'solicitud';
+    nombre: string;
+    correo: string;
+    telefono?: string;
+    motivo?: string;
+    mensaje?: string;
+    plan?: string;
+    pais?: string;
+    tipoEmpresa?: string;
+  }) {
+    const destino = this.configService.get<string>('CONTACT_EMAIL') || 'contacto@bookmy.es';
+    const esSolicitud = datos.origen === 'solicitud';
+    const filas = [
+      { etiqueta: 'Correo', valor: datos.correo },
+      { etiqueta: 'Teléfono', valor: datos.telefono },
+      { etiqueta: 'Motivo', valor: datos.motivo },
+      { etiqueta: 'Plan', valor: datos.plan },
+      { etiqueta: 'País', valor: datos.pais },
+      { etiqueta: 'Tipo de empresa', valor: datos.tipoEmpresa },
+    ].filter((f) => f.valor);
+
+    const template = Handlebars.compile(await this.loadTemplate('contacto.hbs'));
+    await this.transporter.sendMail({
+      to: destino,
+      replyTo: datos.correo,
+      subject: esSolicitud ? 'Nueva solicitud Bookmy' : 'Nuevo mensaje de contacto Bookmy',
+      html: template({
+        titulo: esSolicitud ? 'Solicitud de plan' : 'Mensaje de contacto',
+        nombre: datos.nombre,
+        correo: datos.correo,
+        filas,
+        mensaje: datos.mensaje,
+      }),
+    });
+  }
+
   /** Aviso de pago de Bookmy CRM Pro vencido — EmpresaPlanPagoCron. */
   async sendPlanPagoVencido(params: {
     to: string;

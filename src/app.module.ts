@@ -24,6 +24,8 @@ import { CatalogoWebModule } from './data/catalogo-web/catalogo-web.module';
 import { EntityViewModule } from './data/entity-view/entity-view.module';
 import { EstadisticasModule } from './data/estadisticas/estadisticas.module';
 import { TelemetriaModule } from './data/telemetria/telemetria.module';
+import { RecaptchaModule } from './common/recaptcha/recaptcha.module';
+import { ContactoModule } from './data/contacto/contacto.module';
 import { WiseModule } from './data/wise/wise.module';
 import { GastoModule } from './data/gasto/gasto.module';
 import { HorarioSedeModule } from './data/HorarioSede/horario-sede.module';
@@ -106,6 +108,12 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
            rechaza con un mensaje claro (no se simula). */
         STRIPE_SECRET_KEY: Joi.string().allow('').optional(),
         STRIPE_WEBHOOK_SECRET: Joi.string().allow('').optional(),
+        /* reCAPTCHA v3 de los formularios públicos. Sin la clave secreta la
+           verificación se desactiva (ver RecaptchaService). */
+        RECAPTCHA_SECRET_KEY: Joi.string().allow('').optional(),
+        RECAPTCHA_MIN_SCORE: Joi.number().min(0).max(1).optional(),
+        /* Buzón que recibe los formularios de contacto de bookmy.es. */
+        CONTACT_EMAIL: Joi.string().allow('').optional(),
         /* "local" guarda las subidas en ./uploads aunque esten las SFTP_*
            (ver SftpStorageService.isEnabled). Sin ella, o con "sftp", se
            usa SFTP si esta configurado, como siempre. */
@@ -167,6 +175,8 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     EntityViewModule,
     EstadisticasModule,
     TelemetriaModule,
+    RecaptchaModule,
+    ContactoModule,
     WiseModule,
     NotificationModule,
   ],

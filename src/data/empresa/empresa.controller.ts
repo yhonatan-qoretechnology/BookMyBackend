@@ -43,6 +43,7 @@ import { EmpresaPlanPagoService } from './empresa-plan-pago.service';
 import { RegistroNegocioDto } from './dto/registro-negocio.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
 import { EmpresaService } from './empresa.service';
+import { Recaptcha } from '../../common/recaptcha/recaptcha.guard';
 import { PlanService } from './plan.service';
 import { RegistroNegocioService } from './registro-negocio.service';
 
@@ -65,6 +66,8 @@ export class EmpresaController {
   @Post('registro')
   @Public()
   @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  /* Obligatorio: este alta solo existe en la web (crear cuenta). */
+  @Recaptcha({ accion: 'registro_negocio' })
   @ApiOperation({
     summary: 'Registrar un negocio nuevo (empresa + primera sede + administrador)',
     description:

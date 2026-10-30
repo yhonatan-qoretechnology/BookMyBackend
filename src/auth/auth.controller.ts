@@ -44,6 +44,7 @@ import { Roles } from './common/decorators/roles.decorator';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CompletePasswordSetupDto } from './dto/complete-password-setup.dto';
 import { PasswordSetupService } from './services/password-setup/password-setup.service';
+import { Recaptcha } from '../common/recaptcha/recaptcha.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { BootstrapSuperAdminDto } from './dto/bootstrap-super-admin.dto';
@@ -146,6 +147,8 @@ export class AuthController {
   }
 
   @Public()
+  /* Opcional: la app móvil también registra clientes y no carga reCAPTCHA */
+  @Recaptcha({ accion: 'registro_cliente', obligatorio: false })
   @Post(['register', 'users'])
   @ApiOperation({ summary: 'Registrar un nuevo usuario con foto opcional' })
   @ApiResponse({
@@ -175,6 +178,8 @@ export class AuthController {
   @Public()
   /* fuerza bruta de contraseñas */
   @Throttle({ default: { limit: 5, ttl: 60000 } })
+  /* Opcional: el panel lo manda, la app móvil no */
+  @Recaptcha({ accion: 'login', obligatorio: false })
   @Post('login')
   async login(
     @Body() loginDto: LoginDto,
@@ -283,6 +288,7 @@ export class AuthController {
 
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Recaptcha({ accion: 'fijar_password', obligatorio: false })
   @Patch('password-setup/complete')
   @ApiOperation({
     summary: 'Fijar la contrasena con el enlace del correo',
@@ -402,6 +408,7 @@ export class AuthController {
   @Public()
   /* cada solicitud manda un correo/SMS */
   @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Recaptcha({ accion: 'recuperar_password', obligatorio: false })
   @Post('users/password/otp/request')
   @ApiOperation({
     summary: 'Solicitar un OTP por correo para iniciar cambio de contraseña',
