@@ -1,12 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsDateString,
   IsEmail,
   IsEnum,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { ClientState } from '@prisma/client';
@@ -159,4 +162,59 @@ export class ChangeClientPasswordDto {
   })
   @IsStrongPassword()
   password: string;
+}
+
+/**
+ * Alta manual de un cliente final desde el panel (POST /clients).
+ * Distinto de POST /auth/register, que es público y no sabe qué admin
+ * llama: acá el cliente queda vinculado al negocio del admin
+ * (ClienteEmpresa) y aparece en su listado sin esperar a su primera cita.
+ */
+export class CreateClientDto {
+  @ApiProperty({ example: 'Lucía Pérez' })
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(50)
+  name: string;
+
+  @ApiProperty({ example: 'lucia@correo.com' })
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({ example: '+34600111222' })
+  @IsNotEmpty()
+  @IsString()
+  phone: string;
+
+  @ApiProperty({ example: PASSWORD_EXAMPLE, description: PASSWORD_RULES_MESSAGE })
+  @IsStrongPassword()
+  password: string;
+
+  @ApiPropertyOptional({ example: 'Femenino' })
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @ApiProperty({ example: 'es' })
+  @IsNotEmpty()
+  @IsString()
+  idioma: string;
+
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  countryId: number;
+
+  @ApiPropertyOptional({ example: '1990-01-15' })
+  @IsOptional()
+  @IsDateString()
+  birthdate?: string;
+
+  @ApiPropertyOptional({
+    description: 'Solo SUPER_ADMIN: negocio al que se vincula. Los demás usan el suyo.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  empresaId?: number;
 }

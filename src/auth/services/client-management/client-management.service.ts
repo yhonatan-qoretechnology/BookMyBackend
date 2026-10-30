@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { ClientListDto, UpdateClientDto } from '../../dto/client-management.dto';
+import { ClientListDto, CreateClientDto, UpdateClientDto } from '../../dto/client-management.dto';
+import { ClientState, ClientType } from '../../dto/register.dto';
+import { AuthService } from '../../auth.service';
 import { AuthenticatedUser } from '../../types/authenticated-user.interface';
 import { HashService } from '../hash/hash.service';
 
@@ -40,7 +42,68 @@ export class ClientManagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hashService: HashService,
+    private readonly authService: AuthService,
   ) {}
+
+  /**
+   * Alta manual de un cliente desde el panel. Reutiliza el registro
+   * normal (validaciones, hash, país, correo duplicado) y además lo
+   * vincula al negocio de quien lo crea, para que aparezca en su
+   * listado sin esperar a su primera cita.
+   *
+   * La aceptación de términos y privacidad la confirma el admin en el
+   * formulario (el cliente se la da en persona).
+   */
+  async createClient(dto: CreateClientDto, user: AuthenticatedUser) {
+    let empresaId: number | null = null;
+    let sedeId: number | null = null;
+
+    if (user.role === Role.COMPANY_ADMIN) {
+      empresaId = user.empresaId ?? null;
+    } else if (user.role === Role.BRANCH_ADMIN) {
+      sedeId = user.sedeId ?? null;
+      if (sedeId) {
+        const sede = await this.prisma.sede.findUnique({
+          where: { id: sedeId },
+          select: { empresaId: true },
+        });
+        empresaId = sede?.empresaId ?? null;
+      }
+    } else if (user.role === Role.SUPER_ADMIN) {
+      empresaId = dto.empresaId ?? null;
+    }
+
+    if (user.role !== Role.SUPER_ADMIN && !empresaId) {
+      throw new ForbiddenException('Tu usuario no está asociado a ningún negocio.');
+    }
+
+    const creado = await this.authService.register({
+      name: dto.name,
+      email: dto.email,
+      phone: dto.phone,
+      password: dto.password,
+      gender: dto.gender?.trim() || 'No especificado',
+      idioma: dto.idioma,
+      countryId: dto.countryId,
+      birthdate: dto.birthdate,
+      acceptTerms: true,
+      acceptPolitics: true,
+      clientType: ClientType.people,
+      state: ClientState.enabled,
+      role: Role.CLIENT,
+    });
+    if (!creado) throw new BadRequestException('No se pudo crear el cliente.');
+
+    if (empresaId) {
+      await this.prisma.clienteEmpresa.upsert({
+        where: { userId_empresaId: { userId: creado.id, empresaId } },
+        update: {},
+        create: { userId: creado.id, empresaId, sedeId, creadoPorId: user.userId },
+      });
+    }
+
+    return this.getClientById(creado.id, user);
+  }
 
   /**
    * Forma única de la respuesta de cliente. Antes estaba repetida en
@@ -153,17 +216,27 @@ export class ClientManagementService {
        reservado: no hay otra relacion en el modelo, y es justo la que el
        panel ya usa para contar sus visitas.
        SUPER_ADMIN sigue viendo todos. */
+    /* Ademas de las citas, cuenta el alta manual desde el panel
+       (ClienteEmpresa): sin ella, el cliente recien creado no aparecia
+       hasta su primera reserva. */
     if (user.role === Role.COMPANY_ADMIN && user.empresaId) {
-      whereClause.Appointment = {
-        some: { sede: { empresaId: user.empresaId } },
-      };
+      whereClause.OR = [
+        { Appointment: { some: { sede: { empresaId: user.empresaId } } } },
+        { clientesEmpresa: { some: { empresaId: user.empresaId } } },
+      ];
     } else if (user.role === Role.BRANCH_ADMIN && user.sedeId) {
-      whereClause.Appointment = { some: { sedeId: user.sedeId } };
+      whereClause.OR = [
+        { Appointment: { some: { sedeId: user.sedeId } } },
+        { clientesEmpresa: { some: { sedeId: user.sedeId } } },
+      ];
     } else if (user.role === Role.SUPER_ADMIN && empresaId) {
       /* El superadmin si ve a todos, pero cuando crea una reserva EN
          NOMBRE de un negocio tiene que ver los de ese negocio: en el paso
          de elegir cliente le salian los de toda la plataforma. */
-      whereClause.Appointment = { some: { sede: { empresaId } } };
+      whereClause.OR = [
+        { Appointment: { some: { sede: { empresaId } } } },
+        { clientesEmpresa: { some: { empresaId } } },
+      ];
     }
 
     const [clients, total] = await Promise.all([
@@ -476,12 +549,25 @@ export class ClientManagementService {
       );
     }
 
-    const reserva = await this.prisma.appointment.findFirst({
-      where: { userId: client.id, ...alcance },
-      select: { id: true },
-    });
+    /* Pertenece si reservo alli o si ese negocio lo dio de alta a mano
+       (ClienteEmpresa), igual que en listClients. */
+    const [reserva, alta] = await Promise.all([
+      this.prisma.appointment.findFirst({
+        where: { userId: client.id, ...alcance },
+        select: { id: true },
+      }),
+      this.prisma.clienteEmpresa.findFirst({
+        where: {
+          userId: client.id,
+          ...(user.role === Role.COMPANY_ADMIN
+            ? { empresaId: user.empresaId ?? -1 }
+            : { sedeId: user.sedeId ?? -1 }),
+        },
+        select: { id: true },
+      }),
+    ]);
 
-    if (!reserva) {
+    if (!reserva && !alta) {
       throw new ForbiddenException(
         'Ese cliente no ha reservado en tu negocio.',
       );

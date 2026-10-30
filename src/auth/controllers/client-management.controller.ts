@@ -22,6 +22,7 @@ import {
   ClientListDto,
   UpdateClientDto,
   ChangeClientPasswordDto,
+  CreateClientDto,
 } from '../dto/client-management.dto';
 import { ClientManagementService } from '../services/client-management/client-management.service';
 
@@ -33,6 +34,20 @@ export class ClientManagementController {
   constructor(
     private readonly clientManagementService: ClientManagementService,
   ) {}
+
+  @Post()
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ApiOperation({
+    summary: 'Dar de alta un cliente a mano desde el panel',
+    description:
+      'Crea la cuenta (role CLIENT) y la vincula al negocio del admin, para que aparezca en su listado sin esperar a su primera cita.',
+  })
+  async createClient(
+    @Body() dto: CreateClientDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.clientManagementService.createClient(dto, user);
+  }
 
   @Post('search')
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)

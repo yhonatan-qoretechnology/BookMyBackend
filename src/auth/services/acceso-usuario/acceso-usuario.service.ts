@@ -66,6 +66,10 @@ export class AccesoUsuarioService {
           pais: geo?.country ?? null,
           region: geo?.region ?? null,
           ciudad: geo?.city ?? null,
+          /* `ll` = [latitud, longitud] del centro de la ciudad (o del país
+             si no la conoce): sirve para el mapa, no como ubicación exacta. */
+          latitud: geo?.ll?.[0] ?? null,
+          longitud: geo?.ll?.[1] ?? null,
           userAgent: input.userAgent ?? null,
           // ua-parser-js deja `device.type` sin definir para desktop (solo
           // lo completa para mobile/tablet/smarttv/etc) — se normaliza acá.
