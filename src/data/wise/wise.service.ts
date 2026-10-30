@@ -118,19 +118,58 @@ export class WiseService {
    * configurado (se guarda sin validar).
    */
   async crearDestinatario(
-    cuenta: Pick<EmpresaCuentaPago, 'metodo' | 'wiseEmail' | 'bancoTitular' | 'bancoNumero'>,
+    cuenta: Pick<
+      EmpresaCuentaPago,
+      | 'metodo'
+      | 'moneda'
+      | 'wiseEmail'
+      | 'bancoTitular'
+      | 'bancoNumero'
+      | 'bancoTipoCuenta'
+      | 'bancoCodigo'
+      | 'titularDocumentoTipo'
+      | 'titularDocumentoNumero'
+      | 'titularTelefono'
+      | 'titularDireccion'
+      | 'titularCiudad'
+      | 'titularCodigoPostal'
+    >,
     nombreEmpresa: string,
   ): Promise<string | null> {
     if (!this.isEnabled()) return null;
 
     const base = {
       profile: this.profileId,
-      currency: 'EUR',
+      currency: cuenta.moneda || 'EUR',
       accountHolderName: cuenta.bancoTitular?.trim() || nombreEmpresa,
     };
+    /* COP: tipo "colombia" de las account-requirements EUR→COP. Wise solo
+       paga a personas en COP (legalType PRIVATE) y exige documento,
+       teléfono y dirección del titular. Si Wise cambia algún campo,
+       responde 422 indicando cuál y ese motivo le llega al negocio. */
     const body =
       cuenta.metodo === MetodoCobroOnline.WISE
-        ? { ...base, type: 'email', details: { email: cuenta.wiseEmail } }
+        ? { ...base, currency: 'EUR', type: 'email', details: { email: cuenta.wiseEmail } }
+        : cuenta.moneda === 'COP'
+        ? {
+            ...base,
+            type: 'colombia',
+            details: {
+              legalType: 'PRIVATE',
+              bankCode: cuenta.bancoCodigo,
+              accountNumber: cuenta.bancoNumero,
+              accountType: cuenta.bancoTipoCuenta === 'corriente' ? 'CURRENT' : 'SAVINGS',
+              phoneNumber: cuenta.titularTelefono,
+              idDocumentType: cuenta.titularDocumentoTipo,
+              idDocumentNumber: cuenta.titularDocumentoNumero,
+              address: {
+                country: 'CO',
+                city: cuenta.titularCiudad,
+                firstLine: cuenta.titularDireccion,
+                postCode: cuenta.titularCodigoPostal || '000000',
+              },
+            },
+          }
         : {
             ...base,
             type: 'iban',
@@ -147,6 +186,38 @@ export class WiseService {
       const motivo = this.describirError(error);
       this.logger.warn(`Wise rechazó la cuenta de "${nombreEmpresa}": ${motivo}`);
       throw new BadRequestException(`Wise no aceptó la cuenta: ${motivo}`);
+    }
+  }
+
+  /**
+   * Bancos que Wise admite como destino en una moneda (hoy solo hace
+   * falta para COP), sacados de sus account-requirements en vivo para no
+   * fijar a mano unos códigos que Wise puede cambiar. Sin Wise
+   * configurado devuelve [] y el panel pide el banco como texto.
+   */
+  async bancos(moneda: string): Promise<{ codigo: string; nombre: string }[]> {
+    if (!this.isEnabled() || !/^[A-Z]{3}$/.test(moneda)) return [];
+    try {
+      type Campo = { key: string; valuesAllowed?: { key: string; name: string }[] | null };
+      type Requisito = { fields: { group: Campo[] }[] };
+      const requisitos = await this.request<Requisito[]>(
+        'get',
+        `/v1/account-requirements?source=EUR&target=${moneda}&sourceAmount=100`,
+      );
+      for (const r of requisitos) {
+        for (const f of r.fields) {
+          const campo = f.group.find((g) => g.key === 'bankCode');
+          if (campo?.valuesAllowed?.length) {
+            return campo.valuesAllowed
+              .filter((v) => v.key)
+              .map((v) => ({ codigo: v.key, nombre: v.name }));
+          }
+        }
+      }
+      return [];
+    } catch (error) {
+      this.logger.warn(`No se pudieron leer los bancos de Wise (${moneda}): ${this.describirError(error)}`);
+      return [];
     }
   }
 
@@ -181,12 +252,19 @@ export class WiseService {
       const monto = Number((payment.totalAmount * (1 - COMISION_BOOKMY)).toFixed(2));
       if (monto <= 0) return null;
 
+      /* Se liquida en la moneda en la que recibe el negocio (EUR, o COP
+         si cobra en un banco colombiano). */
+      const empresaId = payment.appointment.sede.empresaId;
+      const cuentaDestino = await this.prisma.empresaCuentaPago.findUnique({
+        where: { empresaId },
+        select: { moneda: true },
+      });
       const liquidacion = await this.prisma.liquidacionWise.create({
         data: {
-          empresaId: payment.appointment.sede.empresaId,
+          empresaId,
           paymentId: payment.id,
           monto,
-          moneda: 'EUR',
+          moneda: cuentaDestino?.moneda ?? 'EUR',
         },
       });
       return await this.enviar(liquidacion);

@@ -388,6 +388,18 @@ model EmpresaCuentaPago {
   bancoNumero String? @map("banco_numero")
   /// Solo Colombia: "ahorros" o "corriente". España no la usa (IBAN basta).
   bancoTipoCuenta String?  @map("banco_tipo_cuenta")
+  /// Moneda en la que recibe el negocio (la de su país): EUR o COP.
+  moneda          String   @default("EUR") @map("moneda") @db.VarChar(3)
+  /// Solo Colombia (COP). Wise exige estos datos del TITULAR, que debe ser
+  /// una persona física (Wise no paga a empresas en COP) y coincidir con
+  /// el titular registrado en el banco.
+  bancoCodigo            String? @map("banco_codigo")
+  titularDocumentoTipo   String? @map("titular_documento_tipo")
+  titularDocumentoNumero String? @map("titular_documento_numero")
+  titularTelefono        String? @map("titular_telefono")
+  titularDireccion       String? @map("titular_direccion")
+  titularCiudad          String? @map("titular_ciudad")
+  titularCodigoPostal    String? @map("titular_codigo_postal")
   /// Destinatario creado en Wise con estos datos: Wise valida el IBAN o
   /// el email al crearlo, y las liquidaciones se envían a este id.
   /// Null si Wise no está configurado o aún no se validó.

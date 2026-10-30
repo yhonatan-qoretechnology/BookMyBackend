@@ -282,6 +282,16 @@ export class EmpresaController {
      comprobar que sea SU empresa (o el superadmin) aunque el rol ya
      filtre acá: así una llamada directa al API no puede leer o pisar
      los datos de otro negocio solo porque también es COMPANY_ADMIN. */
+  /* Estático: va antes que las rutas ':id' para que "cuenta-pago" no se
+     tome por un id. */
+  @Get('cuenta-pago/bancos')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @ApiOperation({ summary: 'Bancos que Wise admite como destino en una moneda (p. ej. COP)' })
+  async cuentaPagoBancos(@Query('moneda') moneda = 'COP') {
+    return this.cuentaPago.bancos(moneda.toUpperCase());
+  }
+
   @Get(':id/cuenta-pago')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
