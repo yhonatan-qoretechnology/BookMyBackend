@@ -1,5 +1,6 @@
 import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
+import { AccessControlService } from '../../auth/services/access-control/access-control.service';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { EmpresaModule } from '../empresa/empresa.module';
 import { WiseModule } from '../wise/wise.module';
@@ -13,7 +14,9 @@ import { PaymentService } from './payment.service';
   // WiseModule: cada pago online cobrado se liquida al negocio.
   imports: [HttpModule, PrismaModule, EmpresaModule, WiseModule],
   controllers: [PaymentController],
-  providers: [PaymentService],
+  /* AccessControlService lo necesita RolesGuard (confirm-wise-transfer):
+     sin él, Nest no arranca. */
+  providers: [PaymentService, AccessControlService],
   exports: [PaymentService],
 })
 export class PaymentModule {}
