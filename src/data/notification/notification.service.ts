@@ -67,6 +67,23 @@ export class NotificationService {
   }
 
   /**
+   * Aviso genérico de actividad del panel (ActividadListener) o de una
+   * automatización: el mismo texto a varios usuarios. Best-effort.
+   */
+  async notificarActividad(
+    userIds: number[],
+    aviso: { tipo: string; titulo: string; cuerpo: string; datos?: Record<string, unknown> },
+  ): Promise<void> {
+    await Promise.all(
+      userIds.map((id) =>
+        this.create(id, aviso.tipo.slice(0, 50), aviso.titulo, aviso.cuerpo, aviso.datos).catch((e) =>
+          this.logger.warn(`No se pudo notificar al usuario ${id}: ${e instanceof Error ? e.message : e}`),
+        ),
+      ),
+    );
+  }
+
+  /**
    * Notifica al/los BRANCH_ADMIN de la sede donde se hizo una reserva, a
    * todos los SUPER_ADMIN de la plataforma, y al profesional asignado (si
    * ya tiene acceso vinculado — ver profesional.service.ts vincular-acceso).

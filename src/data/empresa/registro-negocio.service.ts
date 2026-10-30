@@ -16,6 +16,8 @@ import { AuthService } from '../../auth/auth.service';
 import { HashService } from '../../auth/services/hash/hash.service';
 import { RegistroNegocioDto } from './dto/registro-negocio.dto';
 import { PRO_SE_OFRECE, PlanService } from './plan.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { BOOKMY_EVENTS, EmpresaRegistradaEvento } from '../../common/events/event-names';
 
 /** Horario con el que nace una sede: de lunes a sábado. */
 const HORARIO_INICIAL = [
@@ -44,6 +46,7 @@ export class RegistroNegocioService {
     private hashService: HashService,
     private authService: AuthService,
     private planService: PlanService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async registrar(dto: RegistroNegocioDto) {
@@ -174,6 +177,13 @@ export class RegistroNegocioService {
       this.logger.log(
         `Alta de negocio: empresa=${empresaId} usuario=${usuarioId} plan=${dto.plan}`,
       );
+
+      /* Referidos y automatizaciones lo escuchan (ReferidoListener vincula
+         el código de invitación si vino). */
+      this.eventEmitter.emit(BOOKMY_EVENTS.EMPRESA_REGISTRADA, {
+        empresaId,
+        codigoReferido: dto.codigoReferido?.trim() || null,
+      } satisfies EmpresaRegistradaEvento);
 
       /* Se devuelve la sesión hecha: la web mete al dueño en su panel sin
          pedirle que vuelva a escribir la contraseña que acaba de elegir. */

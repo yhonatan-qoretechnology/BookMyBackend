@@ -39,6 +39,7 @@ import { GuardarCuentaPagoDto } from './dto/guardar-cuenta-pago.dto';
 import { EnviarKycDto } from './dto/enviar-kyc.dto';
 import { ArchivosKyc, KycService } from './kyc.service';
 import { EmpresaCuentaPagoService } from './empresa-cuenta-pago.service';
+import { UsoProService } from './uso-pro.service';
 import { EmpresaPlanPagoService } from './empresa-plan-pago.service';
 import { RegistroNegocioDto } from './dto/registro-negocio.dto';
 import { UpdateEmpresaDto } from './dto/update-empresa.dto';
@@ -57,6 +58,7 @@ export class EmpresaController {
     private readonly kyc: KycService,
     private readonly empresaPlanPago: EmpresaPlanPagoService,
     private readonly cuentaPago: EmpresaCuentaPagoService,
+    private readonly usoProService: UsoProService,
   ) {}
 
   /* ── Alta de un negocio desde la web ──────────────────────
@@ -284,6 +286,35 @@ export class EmpresaController {
      los datos de otro negocio solo porque también es COMPANY_ADMIN. */
   /* Estático: va antes que las rutas ':id' para que "cuenta-pago" no se
      tome por un id. */
+  /* ── Monitoreo de uso de Pro (SUPER_ADMIN) ──────────────── */
+  @Get('uso-pro')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Uso del panel de cada negocio con Bookmy CRM Pro (pagado o en prueba)' })
+  async usoPro() {
+    return this.usoProService.listar();
+  }
+
+  @Post('uso-pro/revisar')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Lanza ahora la revisión semanal y envía los avisos que tocan' })
+  async usoProRevisar() {
+    return this.usoProService.revisarYAvisar();
+  }
+
+  @Post(':id/uso-pro/avisar')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Envía a un negocio Pro el aviso de buen uso (o un mensaje propio)' })
+  async usoProAvisar(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { mensaje?: string },
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.usoProService.avisarEmpresa(id, user.userId, typeof body?.mensaje === 'string' ? body.mensaje.slice(0, 5000) : undefined);
+  }
+
   @Get('cuenta-pago/bancos')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)

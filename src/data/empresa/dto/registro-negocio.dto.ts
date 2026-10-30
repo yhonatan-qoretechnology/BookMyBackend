@@ -25,6 +25,11 @@ import {
  * (logo, servicios, equipo) se completa ya dentro del panel.
  */
 export class RegistroNegocioDto {
+  /** Código de invitación de otro negocio (bookmy.es/crear-cuenta?ref=…). */
+  @ApiPropertyOptional({ example: 'GLOW482' })
+  @IsOptional() @IsString() @MaxLength(20)
+  codigoReferido?: string;
+
   /* ── El negocio ─────────────────────────────────────── */
   @ApiProperty({ example: 'Glow Experience' })
   @IsString() @IsNotEmpty() @MaxLength(120)

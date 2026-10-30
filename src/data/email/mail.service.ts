@@ -226,6 +226,24 @@ export class MailService {
     });
   }
 
+  /**
+   * Correo genérico con la marca de Bookmy: automatizaciones, campañas y
+   * avisos de buen uso. `mensaje` es texto plano (los saltos de línea se
+   * respetan); Handlebars lo escapa, así que no admite HTML.
+   */
+  async sendGenerico(params: { to: string; asunto: string; titulo?: string; mensaje: string; boton?: { texto: string; url: string } }) {
+    const template = Handlebars.compile(await this.loadTemplate('generico.hbs'));
+    await this.transporter.sendMail({
+      to: params.to,
+      subject: params.asunto,
+      html: template({
+        titulo: params.titulo ?? params.asunto,
+        parrafos: params.mensaje.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean),
+        boton: params.boton,
+      }),
+    });
+  }
+
   /** Aviso de pago de Bookmy CRM Pro vencido — EmpresaPlanPagoCron. */
   async sendPlanPagoVencido(params: {
     to: string;

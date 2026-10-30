@@ -26,6 +26,9 @@ import { EstadisticasModule } from './data/estadisticas/estadisticas.module';
 import { TelemetriaModule } from './data/telemetria/telemetria.module';
 import { RecaptchaModule } from './common/recaptcha/recaptcha.module';
 import { ContactoModule } from './data/contacto/contacto.module';
+import { ActividadModule } from './data/actividad/actividad.module';
+import { ReferidoModule } from './data/referido/referido.module';
+import { AutomatizacionModule } from './data/automatizacion/automatizacion.module';
 import { WiseModule } from './data/wise/wise.module';
 import { GastoModule } from './data/gasto/gasto.module';
 import { HorarioSedeModule } from './data/HorarioSede/horario-sede.module';
@@ -114,6 +117,11 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
         RECAPTCHA_MIN_SCORE: Joi.number().min(0).max(1).optional(),
         /* Buzón que recibe los formularios de contacto de bookmy.es. */
         CONTACT_EMAIL: Joi.string().allow('').optional(),
+        /* Referidos: puntos al que invita y al invitado (por defecto 100 y 50). */
+        REFERIDO_PUNTOS: Joi.number().integer().min(0).optional(),
+        REFERIDO_PUNTOS_BIENVENIDA: Joi.number().integer().min(0).optional(),
+        /* Enlace "Abrir mi panel" de los correos de buen uso. */
+        PANEL_URL: Joi.string().allow('').optional(),
         /* "local" guarda las subidas en ./uploads aunque esten las SFTP_*
            (ver SftpStorageService.isEnabled). Sin ella, o con "sftp", se
            usa SFTP si esta configurado, como siempre. */
@@ -177,6 +185,9 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     TelemetriaModule,
     RecaptchaModule,
     ContactoModule,
+    ActividadModule,
+    ReferidoModule,
+    AutomatizacionModule,
     WiseModule,
     NotificationModule,
   ],

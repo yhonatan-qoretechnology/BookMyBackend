@@ -1,5 +1,7 @@
 // src/empresa/empresa.module.ts
 import { forwardRef, Module } from '@nestjs/common';
+import { UsoProCron } from './uso-pro.cron';
+import { UsoProService } from './uso-pro.service';
 import { AuthModule } from '../../auth/auth.module';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { MailModule } from '../email/mail.module';
@@ -31,6 +33,8 @@ import { RegistroNegocioService } from './registro-negocio.service';
     EmpresaPlanPagoService,
     EmpresaPlanPagoCron,
     EmpresaCuentaPagoService,
+    UsoProService,
+    UsoProCron,
   ],
   exports: [PlanService, PlanProGuard],
 })
