@@ -6,6 +6,7 @@ import { EmpresaModule } from '../empresa/empresa.module';
 import { WiseModule } from '../wise/wise.module';
 import { PaymentController } from './payment.controller';
 import { PaymentService } from './payment.service';
+import { StripeService } from './stripe.service';
 
 @Module({
   // EmpresaModule: de ahí salen PlanService/PlanProGuard que usan los
@@ -16,7 +17,7 @@ import { PaymentService } from './payment.service';
   controllers: [PaymentController],
   /* AccessControlService lo necesita RolesGuard (confirm-wise-transfer):
      sin él, Nest no arranca. */
-  providers: [PaymentService, AccessControlService],
+  providers: [PaymentService, StripeService, AccessControlService],
   exports: [PaymentService],
 })
 export class PaymentModule {}

@@ -1,6 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { PaymentMethod } from '@prisma/client';
-import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class CreatePaymentDto {
   @ApiProperty({
@@ -104,4 +110,14 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsNumber()
   existingCardId?: number;
+
+  @ApiProperty({
+    example: true,
+    required: false,
+    description:
+      'Pago online con la pasarela (Stripe): el pago queda PENDING y la app abre la hoja de pago. Solo con CARD.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  pagoOnline?: boolean;
 }

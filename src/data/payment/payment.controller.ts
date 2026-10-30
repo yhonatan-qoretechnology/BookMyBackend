@@ -4,12 +4,19 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Headers,
+  HttpCode,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
+  type RawBodyRequest,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { Public } from '../../auth/common/decorators/public.decorator';
 import {
   ApiCreatedResponse,
   ApiOkResponse,
@@ -75,6 +82,57 @@ export class PaymentController {
   @ApiOperation({ summary: 'Crear un pago (total o parcial)' })
   async createPayment(@Body() dto: CreatePaymentDto) {
     return this.paymentService.createPayment(dto);
+  }
+
+  /* ── Pago online con Stripe (la pasarela que cobra al cliente) ── */
+
+  @Post('stripe/webhook')
+  @Public()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Webhook de Stripe',
+    description:
+      'Stripe avisa aquí de los cobros completados. Pública, pero con la firma verificada (STRIPE_WEBHOOK_SECRET).',
+  })
+  stripeWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('stripe-signature') firma?: string,
+  ) {
+    return this.paymentService.procesarWebhookStripe(req.rawBody, firma);
+  }
+
+  @Post('stripe/:id/preparar')
+  @ApiOperation({
+    summary: 'Preparar la hoja de pago de Stripe para un pago online',
+    description:
+      'Devuelve clientSecret, customerId y ephemeralKey para la hoja de pago de la app.',
+  })
+  prepararStripe(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.prepararCobroStripe(id, user);
+  }
+
+  @Post('stripe/:id/confirmar')
+  @ApiOperation({
+    summary: 'Confirmar un pago online tras la hoja de pago',
+    description: 'Consulta a Stripe; si el cobro está hecho, marca PAID y liquida al negocio por Wise.',
+  })
+  confirmarStripe(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.confirmarCobroStripe(id, user);
+  }
+
+  @Post('stripe/:id/cancelar')
+  @ApiOperation({ summary: 'El cliente abandonó el pago online: anula el cobro y la cita' })
+  cancelarStripe(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.cancelarCobroStripe(id, user);
   }
 
   @Patch(':id/confirm')

@@ -13,7 +13,10 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   console.log('🚀 Iniciando bootstrap...');
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // rawBody: el webhook de Stripe verifica su firma sobre el cuerpo exacto.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
   console.log('✅ 1. App creada');
 
   /* Seenode pone un proxy (Traefik) delante. Sin esto `req.ip` es la IP del

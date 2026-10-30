@@ -1,18 +1,23 @@
 import { HttpService } from '@nestjs/axios';
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AppointmentStatus,
   PaymentCard as PaymentCardModel,
   PaymentMethod,
   PaymentStatus,
+  Role,
 } from '@prisma/client';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { randomUUID } from 'crypto';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { WiseService } from '../wise/wise.service';
+import { StripeService } from './stripe.service';
 import { CreatePaymentCardDto } from './dto/create-payment-card.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentItemDto } from './dto/create-payment-item.dto';
@@ -40,6 +45,7 @@ export class PaymentService {
     private prisma: PrismaService,
     private httpService: HttpService,
     private wiseService: WiseService,
+    private stripeService: StripeService,
   ) {}
 
   async createPayment(dto: CreatePaymentDto) {
@@ -87,6 +93,16 @@ export class PaymentService {
         status: PaymentStatus.PENDING,
       },
     });
+
+    // Pago online real: queda PENDING y la app abre la hoja de pago de
+    // Stripe (prepararCobroStripe). Lo marca PAID Stripe, no esta llamada.
+    if (dto.method === PaymentMethod.CARD && dto.pagoOnline) {
+      if (!this.stripeService.isEnabled())
+        throw new BadRequestException(
+          'El pago online no está disponible en este momento.',
+        );
+      return payment;
+    }
 
     if (dto.method === PaymentMethod.CARD) {
       const { cardRecord, payload } = await this.resolveCardForPayment(
@@ -345,6 +361,120 @@ export class PaymentService {
         paidAmount: payment.totalAmount,
       },
     });
+  }
+
+  /* ── Pago online con Stripe ──────────────────────────────────────── */
+
+  /** El pago tiene que ser del usuario de la sesión (o SUPER_ADMIN). */
+  private async pagoOnlineDe(paymentId: number, user: AuthenticatedUser) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { user: { select: { email: true } } },
+    });
+    if (!payment) throw new NotFoundException('El pago no existe');
+    if (user.role !== Role.SUPER_ADMIN && payment.userId !== user.userId)
+      throw new ForbiddenException('Este pago no es suyo.');
+    if (payment.method !== PaymentMethod.CARD)
+      throw new BadRequestException('Este pago no es un pago online.');
+    return payment;
+  }
+
+  /** Datos para abrir la hoja de pago de Stripe en la app. */
+  async prepararCobroStripe(paymentId: number, user: AuthenticatedUser) {
+    const payment = await this.pagoOnlineDe(paymentId, user);
+    if (payment.status !== PaymentStatus.PENDING)
+      throw new BadRequestException('Este pago ya no está pendiente.');
+
+    const cobro = await this.stripeService.prepararCobro({
+      paymentId: payment.id,
+      appointmentId: payment.appointmentId,
+      userId: payment.userId,
+      email: payment.user.email,
+      monto: payment.totalAmount,
+      intentExistente: payment.transactionId,
+    });
+    if (payment.transactionId !== cobro.paymentIntentId)
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { transactionId: cobro.paymentIntentId },
+      });
+    return cobro;
+  }
+
+  /**
+   * La app lo llama al cerrarse la hoja de pago con éxito. No se fía de la
+   * app: le pregunta a Stripe si el cobro está hecho. El webhook hace lo
+   * mismo por si la app se cierra antes de llamar.
+   */
+  async confirmarCobroStripe(paymentId: number, user: AuthenticatedUser) {
+    const payment = await this.pagoOnlineDe(paymentId, user);
+    if (payment.status === PaymentStatus.PAID) return payment;
+    if (!payment.transactionId?.startsWith('pi_'))
+      throw new BadRequestException('Este pago no tiene un cobro de Stripe.');
+    const intent = await this.stripeService.obtenerCobro(payment.transactionId);
+    if (intent.status !== 'succeeded')
+      throw new BadRequestException(
+        `El cobro aún no está completado (estado: ${intent.status}).`,
+      );
+    return this.marcarCobradoPorStripe(intent);
+  }
+
+  /** El cliente cerró la hoja sin pagar: se anula el cobro y la cita. */
+  async cancelarCobroStripe(paymentId: number, user: AuthenticatedUser) {
+    const payment = await this.pagoOnlineDe(paymentId, user);
+    if (payment.status !== PaymentStatus.PENDING) return payment;
+    if (payment.transactionId?.startsWith('pi_'))
+      await this.stripeService.anularCobro(payment.transactionId);
+    const [cancelado] = await this.prisma.$transaction([
+      this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: PaymentStatus.CANCELLED },
+      }),
+      this.prisma.appointment.update({
+        where: { id: payment.appointmentId },
+        data: {
+          estado: AppointmentStatus.CANCELLED,
+          notas: 'Cancelada: el cliente no completó el pago online',
+        },
+      }),
+    ]);
+    return cancelado;
+  }
+
+  /** Webhook de Stripe (firma verificada en StripeService). */
+  async procesarWebhookStripe(rawBody: Buffer | undefined, firma?: string) {
+    const evento = this.stripeService.leerWebhook(rawBody, firma);
+    if (evento.type === 'payment_intent.succeeded')
+      await this.marcarCobradoPorStripe(evento.data.object);
+    return { received: true };
+  }
+
+  /** Idempotente: confirmar y webhook pueden llegar los dos. Solo el
+      primero que pasa de PENDING a PAID dispara la liquidación por Wise. */
+  private async marcarCobradoPorStripe(intent: {
+    id: string;
+    amount_received: number;
+    metadata: Record<string, string>;
+    payment_method_types?: string[];
+  }) {
+    const paymentId = Number(intent.metadata?.paymentId);
+    if (!paymentId) throw new BadRequestException('Cobro de Stripe sin paymentId.');
+
+    const { count } = await this.prisma.payment.updateMany({
+      where: { id: paymentId, status: PaymentStatus.PENDING },
+      data: {
+        status: PaymentStatus.PAID,
+        paidAmount: intent.amount_received / 100,
+        transactionId: intent.id,
+        bankResponse: {
+          pasarela: 'stripe',
+          paymentIntent: intent.id,
+          metodos: intent.payment_method_types ?? [],
+        },
+      },
+    });
+    if (count > 0) await this.wiseService.liquidarPago(paymentId);
+    return this.prisma.payment.findUnique({ where: { id: paymentId } });
   }
 
   async cancelPayment(id: number) {

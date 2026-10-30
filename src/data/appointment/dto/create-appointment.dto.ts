@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { AppointmentStatus, PaymentMethod } from '@prisma/client';
 import {
   IsDateString,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNumber,
@@ -101,12 +102,25 @@ export class CreateAppointmentDto {
   existingCardId?: number;
 
   @ApiProperty({
+    example: true,
+    required: false,
+    description:
+      'Pago online con la pasarela (Stripe): el pago queda PENDING y la app abre la hoja de pago. Solo con CARD.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  pagoOnline?: boolean;
+
+  @ApiProperty({
     example: '4242424242424242',
     required: false,
     description:
       'Número de tarjeta, obligatorio solo cuando el pago es con tarjeta.',
   })
-  @ValidateIf((o) => o.paymentMethod === PaymentMethod.CARD && !o.existingCardId)
+  @ValidateIf(
+    (o) =>
+      o.paymentMethod === PaymentMethod.CARD && !o.existingCardId && !o.pagoOnline,
+  )
   @IsString()
   @Matches(/^[0-9]{13,19}$/)
   cardNumber?: string;
@@ -117,7 +131,10 @@ export class CreateAppointmentDto {
     description:
       'Fecha de expiración (MM/YY), obligatoria para pagos con tarjeta.',
   })
-  @ValidateIf((o) => o.paymentMethod === PaymentMethod.CARD && !o.existingCardId)
+  @ValidateIf(
+    (o) =>
+      o.paymentMethod === PaymentMethod.CARD && !o.existingCardId && !o.pagoOnline,
+  )
   @IsString()
   @Matches(/^(0[1-9]|1[0-2])\/[0-9]{2}$/)
   expiryDate?: string;
@@ -127,7 +144,10 @@ export class CreateAppointmentDto {
     required: false,
     description: 'CVV de la tarjeta, obligatorio para pagos con tarjeta.',
   })
-  @ValidateIf((o) => o.paymentMethod === PaymentMethod.CARD && !o.existingCardId)
+  @ValidateIf(
+    (o) =>
+      o.paymentMethod === PaymentMethod.CARD && !o.existingCardId && !o.pagoOnline,
+  )
   @IsString()
   @Matches(/^[0-9]{3,4}$/)
   cvv?: string;

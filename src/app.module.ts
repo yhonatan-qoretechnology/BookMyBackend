@@ -102,6 +102,10 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
            cuenta que mostrar. */
         BOOKMY_WISE_IBAN: Joi.string().allow('').optional(),
         BOOKMY_WISE_TITULAR: Joi.string().allow('').optional(),
+        /* Pasarela de cobro al cliente. Sin la clave, el pago online se
+           rechaza con un mensaje claro (no se simula). */
+        STRIPE_SECRET_KEY: Joi.string().allow('').optional(),
+        STRIPE_WEBHOOK_SECRET: Joi.string().allow('').optional(),
         /* "local" guarda las subidas en ./uploads aunque esten las SFTP_*
            (ver SftpStorageService.isEnabled). Sin ella, o con "sftp", se
            usa SFTP si esta configurado, como siempre. */

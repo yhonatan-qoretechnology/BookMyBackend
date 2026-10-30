@@ -1147,6 +1147,7 @@ export class AppointmentService {
         expiryDate,
         cvv,
         existingCardId,
+        pagoOnline,
         ...appointmentData
       } = data;
 
@@ -1428,6 +1429,7 @@ export class AppointmentService {
           expiryYear,
           cvv: data.cvv,
           existingCardId: data.existingCardId,
+          pagoOnline: data.pagoOnline,
           saveCard: false, // Por defecto no guardar a menos que se extienda el DTO
         });
       } catch (paymentError) {
@@ -1938,6 +1940,7 @@ export class AppointmentService {
       expiryDate: _expiryDate,
       cvv: _cvv,
       existingCardId: _existingCardId,
+      pagoOnline: _pagoOnline,
       ...campos
     } = data as UpdateAppointmentDto & Record<string, unknown>;
 
@@ -2493,6 +2496,7 @@ export class AppointmentService {
         expiryYear,
         cvv: data.cvv,
         existingCardId: data.existingCardId,
+        pagoOnline: data.pagoOnline,
         saveCard: false,
       });
     } catch (paymentError) {
@@ -2534,6 +2538,7 @@ export class AppointmentService {
           expiryYear,
           cvv: data.cvv,
           existingCardId: data.existingCardId,
+          pagoOnline: data.pagoOnline,
           saveCard: false,
         });
       } catch (paymentError) {
