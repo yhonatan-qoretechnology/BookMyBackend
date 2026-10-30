@@ -362,6 +362,11 @@ model Empresa {
   liquidacionesWise LiquidacionWise[]
   cuentaPago       EmpresaCuentaPago?
   clientesEmpresa  ClienteEmpresa[]
+  codigoReferido    CodigoReferido?
+  referidosHechos   Referido[]         @relation("ReferidosHechos")
+  referidoPor       Referido?          @relation("ReferidoPor")
+  movimientosPuntos MovimientoPuntos[]
+  avisosUsoPro      AvisoUsoPro[]
 
   @@map("empresas")
 }
@@ -1422,4 +1427,209 @@ model ClienteEmpresa {
   @@index([empresaId])
   @@index([sedeId])
   @@map("clientes_empresa")
+}
+
+// ── Actividad del panel ───────────────────────────────────────
+// Cada acción que cambia algo en el panel (crear, editar, borrar…),
+// registrada por ActividadInterceptor. Alimenta el centro de alertas,
+// el monitoreo de uso de Pro y el motor de automatizaciones. Sin claves
+// foráneas a propósito: es un registro histórico y no debe impedir
+// borrar usuarios o empresas.
+model ActividadPanel {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  rol       String   @map("rol") @db.VarChar(30)
+  empresaId Int?     @map("empresa_id")
+  sedeId    Int?     @map("sede_id")
+  /// "cliente", "cita", "servicio"… (ver RECURSOS en actividad.catalogo.ts)
+  recurso   String   @map("recurso") @db.VarChar(60)
+  /// "creado", "actualizado", "eliminado", "cancelado"…
+  accion    String   @map("accion") @db.VarChar(30)
+  recursoId String?  @map("recurso_id") @db.VarChar(40)
+  metodo    String   @map("metodo") @db.VarChar(10)
+  ruta      String   @map("ruta") @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([empresaId, createdAt])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("actividad_panel")
+}
+
+// ── Monitoreo de uso de Bookmy CRM Pro ────────────────────────
+enum TipoAvisoUso {
+  BAJO_USO // apenas usa lo que paga: consejos para sacarle partido
+  USO_INUSUAL // cancelaciones o accesos fallidos fuera de lo normal
+  MANUAL // enviado a mano por el SUPER_ADMIN
+}
+
+/// Historial de correos de "buen uso" enviados a negocios Pro. Sirve
+/// para no repetir el mismo aviso más de una vez cada 14 días.
+model AvisoUsoPro {
+  id          Int          @id @default(autoincrement())
+  empresaId   Int          @map("empresa_id")
+  tipo        TipoAvisoUso @map("tipo")
+  detalle     String?      @map("detalle")
+  enviadoA    String?      @map("enviado_a")
+  creadoPorId Int?         @map("creado_por_id")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId, tipo, createdAt])
+  @@map("avisos_uso_pro")
+}
+
+// ── Referidos ─────────────────────────────────────────────────
+// Un negocio invita a otro con su código. Cuando el invitado paga su
+// primer mes de Pro (plan-pago.pagado), los dos ganan puntos.
+enum EstadoReferido {
+  PENDIENTE // se registró con el código, aún no pagó Pro
+  RECOMPENSADO // pagó su primer mes y se entregaron los puntos
+  ANULADO
+}
+
+model CodigoReferido {
+  id        Int      @id @default(autoincrement())
+  empresaId Int      @unique @map("empresa_id")
+  codigo    String   @unique @map("codigo") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@map("codigos_referido")
+}
+
+model Referido {
+  id              Int            @id @default(autoincrement())
+  referidorId     Int            @map("referidor_id")
+  /// Un negocio solo puede haber sido referido una vez.
+  referidaId      Int            @unique @map("referida_id")
+  codigo          String         @map("codigo") @db.VarChar(20)
+  estado          EstadoReferido @default(PENDIENTE) @map("estado")
+  puntosReferidor Int            @default(0) @map("puntos_referidor")
+  puntosReferida  Int            @default(0) @map("puntos_referida")
+  recompensadoEn  DateTime?      @map("recompensado_en")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  referidor Empresa @relation("ReferidosHechos", fields: [referidorId], references: [id], onDelete: Cascade)
+  referida  Empresa @relation("ReferidoPor", fields: [referidaId], references: [id], onDelete: Cascade)
+
+  @@index([referidorId])
+  @@index([estado])
+  @@map("referidos")
+}
+
+/// Libro de puntos: el saldo de una empresa es la suma de sus movimientos.
+/// Positivos = ganados (referidos, ajustes); negativos = canjes.
+model MovimientoPuntos {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int      @map("empresa_id")
+  puntos      Int      @map("puntos")
+  motivo      String   @map("motivo")
+  referidoId  Int?     @map("referido_id")
+  creadoPorId Int?     @map("creado_por_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@map("movimientos_puntos")
+}
+
+// ── Automatizaciones ──────────────────────────────────────────
+// Reglas "cuando pase X, haz Y (tras N minutos)" y campañas de correo
+// programadas. Las dispara AutomatizacionEngine escuchando los eventos
+// de dominio (BOOKMY_EVENTS y actividad.*).
+enum AccionAutomatizacion {
+  EMAIL
+  NOTIFICACION
+}
+
+enum DestinoAutomatizacion {
+  EMPRESA // el correo / los admins del negocio del evento
+  SUPERADMINS
+}
+
+enum EstadoEjecucion {
+  PENDIENTE
+  ENVIADA
+  FALLIDA
+  OMITIDA // no había a quién enviarla
+}
+
+enum EstadoCampana {
+  BORRADOR
+  PROGRAMADA
+  ENVIANDO
+  ENVIADA
+  CANCELADA
+}
+
+enum SegmentoCampana {
+  TODAS
+  PRO
+  FREE
+  PRUEBA
+}
+
+model Automatizacion {
+  id             Int                   @id @default(autoincrement())
+  nombre         String                @map("nombre") @db.VarChar(120)
+  descripcion    String?               @map("descripcion")
+  /// Nombre del evento ("plan-pago.vencido", "actividad.cliente.creado"…)
+  evento         String                @map("evento") @db.VarChar(80)
+  retrasoMinutos Int                   @default(0) @map("retraso_minutos")
+  accion         AccionAutomatizacion  @default(EMAIL) @map("accion")
+  destino        DestinoAutomatizacion @default(EMPRESA) @map("destino")
+  asunto         String                @map("asunto") @db.VarChar(200)
+  /// Texto con variables {{empresa}}, {{fecha}}… (Handlebars)
+  mensaje        String                @map("mensaje")
+  activa         Boolean               @default(true) @map("activa")
+  creadoPorId    Int?                  @map("creado_por_id")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  ejecuciones EjecucionAutomatizacion[]
+
+  @@index([evento, activa])
+  @@map("automatizaciones")
+}
+
+model EjecucionAutomatizacion {
+  id               Int             @id @default(autoincrement())
+  automatizacionId Int             @map("automatizacion_id")
+  empresaId        Int?            @map("empresa_id")
+  payload          Json?           @map("payload")
+  estado           EstadoEjecucion @default(PENDIENTE) @map("estado")
+  programadaPara   DateTime        @map("programada_para")
+  ejecutadaEn      DateTime?       @map("ejecutada_en")
+  error            String?         @map("error")
+  createdAt        DateTime        @default(now()) @map("created_at")
+
+  automatizacion Automatizacion @relation(fields: [automatizacionId], references: [id], onDelete: Cascade)
+
+  @@index([estado, programadaPara])
+  @@index([automatizacionId])
+  @@map("ejecuciones_automatizacion")
+}
+
+model CampanaEmail {
+  id             Int             @id @default(autoincrement())
+  nombre         String          @map("nombre") @db.VarChar(120)
+  asunto         String          @map("asunto") @db.VarChar(200)
+  mensaje        String          @map("mensaje")
+  segmento       SegmentoCampana @default(TODAS) @map("segmento")
+  estado         EstadoCampana   @default(BORRADOR) @map("estado")
+  programadaPara DateTime?       @map("programada_para")
+  enviadaEn      DateTime?       @map("enviada_en")
+  destinatarios  Int             @default(0) @map("destinatarios")
+  enviados       Int             @default(0) @map("enviados")
+  fallidos       Int             @default(0) @map("fallidos")
+  creadoPorId    Int?            @map("creado_por_id")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@index([estado, programadaPara])
+  @@map("campanas_email")
 }
