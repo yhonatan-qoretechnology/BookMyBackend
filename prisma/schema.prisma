@@ -42,6 +42,7 @@ model Users {
   appointmentHistories                              AppointmentHistory[]
   kycRevisados                                      EmpresaKyc[]
   accesos                                           AccesoUsuario[]
+  clientesEmpresa                                   ClienteEmpresa[]
   solicitudesInventario                             SolicitudInventario[]
   telemetriaEventos                                 TelemetriaEvento[]
 
@@ -73,6 +74,9 @@ model AccesoUsuario {
   dispositivo      String?  @map("dispositivo")
   navegador        String?  @map("navegador")
   sistemaOperativo String?  @map("sistema_operativo")
+  /// Coordenadas aproximadas que geoip-lite da para la IP (nivel ciudad).
+  latitud          Float?   @map("latitud")
+  longitud         Float?   @map("longitud")
   createdAt        DateTime @default(now()) @map("created_at")
 
   user Users? @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -357,6 +361,7 @@ model Empresa {
   planPagos        EmpresaPlanPago[]
   liquidacionesWise LiquidacionWise[]
   cuentaPago       EmpresaCuentaPago?
+  clientesEmpresa  ClienteEmpresa[]
 
   @@map("empresas")
 }
@@ -1383,4 +1388,26 @@ model TelemetriaEvento {
   @@index([plataforma])
   @@index([pais])
   @@map("telemetria_eventos")
+}
+
+// Cliente dado de alta a mano por un negocio (POST /clients). Antes un
+// cliente solo "pertenecía" a un negocio si tenía una cita en él, así que
+// el que se creaba desde el panel no aparecía en el listado del dueño
+// hasta su primera reserva. sedeId: la sede del admin que lo creó (los
+// BRANCH_ADMIN solo ven los de su sede); null si lo creó el dueño.
+model ClienteEmpresa {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  empresaId   Int      @map("empresa_id")
+  sedeId      Int?     @map("sede_id")
+  creadoPorId Int?     @map("creado_por_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user    Users   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, empresaId])
+  @@index([empresaId])
+  @@index([sedeId])
+  @@map("clientes_empresa")
 }
