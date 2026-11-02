@@ -222,14 +222,11 @@ export class EmpresaService {
       throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
     }
 
-    if (empresa.logo) {
-      await this.safeDeleteRemoteOrLocal(empresa.logo);
-    }
-
-    await this.prisma.empresa.delete({
-      where: { id },
-    });
-    return { message: `Empresa con ID ${id} eliminada correctamente.` };
+    /* No se borra nada: "eliminar" desactiva la empresa (el mismo bloqueo
+       de bloquear()). Sus datos, sedes y facturación se conservan y solo
+       el SUPER_ADMIN puede reactivarla con desbloquear(). */
+    await this.bloquear(id, empresa.bloqueadaMotivo ?? 'Desactivada por el superadmin');
+    return { message: `Empresa con ID ${id} desactivada correctamente.` };
   }
 
   // 🔒 Bloquear una empresa (solo SUPER_ADMIN, ver guard en el controller):
