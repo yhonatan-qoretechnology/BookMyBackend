@@ -773,6 +773,18 @@ export class ProfesionalService {
       throw new NotFoundException(`Profesional con ID ${id} no encontrado.`);
     }
 
+    /* Desactivar puede cualquier admin con acceso; volver a activar a
+       alguien desactivado, solo el SUPER_ADMIN. */
+    if (
+      updateProfesionalDto.state === 'enabled' &&
+      profesional.state === 'disabled' &&
+      user?.role !== Role.SUPER_ADMIN
+    ) {
+      throw new ForbiddenException(
+        'Solo el superadmin puede volver a activar a un profesional.',
+      );
+    }
+
     return this.prisma.profesional.update({
       where: { id },
       data: updateProfesionalDto,
@@ -856,10 +868,12 @@ export class ProfesionalService {
       throw new NotFoundException(`Profesional con ID ${id} no encontrado.`);
     }
 
-    if (profesional.imagen) {
-      await this.safeDeleteRemoteOrLocal(profesional.imagen);
-    }
-    return this.prisma.profesional.delete({ where: { id } });
+    /* No se borra nada: "eliminar" desactiva. Se conservan su ficha, su
+       historial de citas y su foto, y el superadmin puede reactivarlo. */
+    return this.prisma.profesional.update({
+      where: { id },
+      data: { state: 'disabled' },
+    });
   }
 
   // 📦 Servicio para obtener los profesionales con sus servicios asociados por sede
