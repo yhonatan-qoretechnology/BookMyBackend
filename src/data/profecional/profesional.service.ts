@@ -270,6 +270,19 @@ export class ProfesionalService {
       }
     }
 
+    /* Los demás roles pasaban: un cliente creaba un profesional (con login
+       EMPLOYEE) dentro de cualquier negocio y veía sus citas y su chat. */
+    if (
+      user?.role !== Role.SUPER_ADMIN &&
+      user?.role !== Role.COMPANY_ADMIN &&
+      user?.role !== Role.BRANCH_ADMIN
+    ) {
+      if (file) {
+        await this.safeDeleteRemoteOrLocal(file.path);
+      }
+      throw new ForbiddenException('No puede crear profesionales.');
+    }
+
     let imagenPath: string | undefined;
     try {
       // 2. Si se subió un archivo, moverlo al directorio final con extensión

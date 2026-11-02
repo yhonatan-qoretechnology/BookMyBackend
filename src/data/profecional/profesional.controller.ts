@@ -53,6 +53,7 @@ export class ProfesionalController {
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: CreateProfesionalWithImageDto })
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
   @UseInterceptors(
     FileInterceptor('imagen', { dest: './uploads/profesionales/temp' }),
   )

@@ -30,6 +30,7 @@ import { EstadoPagoPlan, PlanEmpresa, Role } from '@prisma/client';
 import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
 import { Public } from '../../auth/common/decorators/public.decorator';
 import { Roles } from '../../auth/common/decorators/roles.decorator';
+import { EmpresaAccessGuard } from '../../auth/guards/empresa-access.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateEmpresaWithFileDto } from '../empresa/dto/create-empresa-with-file.dto';
@@ -89,7 +90,7 @@ export class EmpresaController {
   }
 
   @Post(':id/prueba')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, EmpresaAccessGuard)
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
   @ApiOperation({
     summary: 'Activar los 30 días de prueba de Bookmy CRM Pro',
@@ -272,7 +273,7 @@ export class EmpresaController {
   }
 
   @Get(':id/plan-pagos')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, EmpresaAccessGuard)
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
   @ApiOperation({ summary: 'Pagos de Pro de una empresa' })
   async planPagosDeEmpresa(@Param('id', ParseIntPipe) id: number) {
@@ -346,7 +347,9 @@ export class EmpresaController {
     return this.cuentaPago.guardar(id, dto, user);
   }
 
+  // Alta directa de empresas: solo Bookmy. Los negocios entran por /registro.
   @Post()
+  @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Crear una nueva empresa con logo' })
   @ApiResponse({ status: 201, description: 'Empresa creada exitosamente.' })
   @ApiBadRequestResponse({
@@ -383,6 +386,8 @@ export class EmpresaController {
   }
 
   @Patch(':id')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @UseGuards(EmpresaAccessGuard)
   @ApiOperation({
     summary: 'Actualizar una empresa por su ID, incluyendo el logo',
   })
@@ -456,6 +461,8 @@ export class EmpresaController {
   }
 
   @Patch(':id/logo')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @UseGuards(EmpresaAccessGuard)
   @ApiOperation({ summary: 'Actualizar únicamente el logo de una empresa' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({

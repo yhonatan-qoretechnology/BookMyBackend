@@ -1,3 +1,4 @@
+import { Role } from '@prisma/client';
 import {
   Body,
   Controller,
@@ -13,6 +14,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
 import { Public } from '../../auth/common/decorators/public.decorator';
 import {
   ApiBody,
@@ -35,7 +37,10 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
+  /* El catálogo de categorías es de toda la plataforma: antes cualquier
+     sesión lo editaba o borraba. */
   @Post()
+  @Roles(Role.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Crear categoría (application/json)',
   })
@@ -68,6 +73,7 @@ export class CategoryController {
   }
 
   @Post('multipart')
+  @Roles(Role.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Crear categoría con traducciones e imagen (multipart/form-data)',
   })
@@ -82,6 +88,7 @@ export class CategoryController {
   }
 
   @Post('bulk')
+  @Roles(Role.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Crear múltiples categorías (application/json)',
   })
@@ -116,6 +123,7 @@ export class CategoryController {
   }
 
   @Put(':id')
+  @Roles(Role.SUPER_ADMIN)
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('image', multerConfig)) // 👈 aquí también
   async update(
@@ -127,6 +135,7 @@ export class CategoryController {
   }
 
   @Patch(':id/image')
+  @Roles(Role.SUPER_ADMIN)
   @ApiOperation({ summary: 'Actualizar solo la imagen de una categoría' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -153,6 +162,7 @@ export class CategoryController {
   }
 
   @Delete(':id')
+  @Roles(Role.SUPER_ADMIN)
   async remove(@Param('id', ParseIntPipe) id: number) {
     return this.categoryService.remove(id);
   }

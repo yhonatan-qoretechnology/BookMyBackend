@@ -14,6 +14,8 @@ import {
   Query,
   UploadedFile,
   UploadedFiles,
+  ForbiddenException,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
@@ -29,6 +31,11 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import * as fs from 'fs';
+import { Role } from '@prisma/client';
+import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
+import { SedeAccessGuard } from '../../auth/guards/sede-access.guard';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateSedeWithImagesDto } from './dto/create-sede-with-images.dto';
 import { CreateSedeDto } from './dto/create-sede.dto';
 import { UpdateSedeDto } from './dto/update-sede.dto';
@@ -41,6 +48,7 @@ export class SedeController {
 
   // 🟢 Crear una sede con imágenes
   @Post()
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
   @ApiOperation({ summary: 'Crear una nueva sede con imágenes' })
   @ApiResponse({ status: 201, description: 'Sede creada exitosamente.' })
   @ApiBadRequestResponse({
@@ -55,8 +63,18 @@ export class SedeController {
   )
   async create(
     @Body() body: any,
+    @AuthUser() user: AuthenticatedUser,
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
+    /* Antes `empresaId` lo elegía quien llamaba: cualquiera abría sedes
+       dentro de un negocio ajeno. Un COMPANY_ADMIN solo crea en el suyo. */
+    if (user.role !== Role.SUPER_ADMIN) {
+      if (!user.empresaId) {
+        throw new ForbiddenException('No tiene una empresa asociada.');
+      }
+      body = { ...body, empresaId: user.empresaId };
+    }
+
     const parsedBody = {
       ...body,
       horario: this.parseHorario(body.horario),
@@ -192,6 +210,8 @@ export class SedeController {
 
   // 🟢 Actualizar una sede
   @Patch(':id')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @UseGuards(SedeAccessGuard)
   @ApiOperation({ summary: 'Actualizar una sede por su ID' })
   @ApiResponse({ status: 200, description: 'Sede actualizada exitosamente.' })
   @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
@@ -205,6 +225,8 @@ export class SedeController {
 
   // 🟢 Eliminar una sede
   @Delete(':id')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @UseGuards(SedeAccessGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Eliminar una sede por su ID' })
   @ApiResponse({ status: 204, description: 'Sede eliminada exitosamente.' })
@@ -215,6 +237,8 @@ export class SedeController {
 
   // 🟢 Añadir una imagen
   @Post(':id/imagen')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @UseGuards(SedeAccessGuard)
   @ApiOperation({ summary: 'Añadir una imagen a una sede existente' })
   @ApiResponse({ status: 200, description: 'Imagen añadida exitosamente.' })
   @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
@@ -250,6 +274,8 @@ export class SedeController {
 
   // 🟢 Añadir múltiples imágenes (galería)
   @Post(':id/galeria')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @UseGuards(SedeAccessGuard)
   @ApiOperation({
     summary: 'Añadir varias imágenes a una sede existente (galería)',
   })
@@ -290,6 +316,8 @@ export class SedeController {
 
   // 🟢 Subir imágenes adicionales a una sede
   @Post(':id/imagenes')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @UseGuards(SedeAccessGuard)
   @ApiOperation({ summary: 'Subir imágenes adicionales a una sede' })
   @ApiResponse({ status: 200, description: 'Imágenes añadidas exitosamente.' })
   @ApiNotFoundResponse({ description: 'Sede no encontrada.' })
@@ -328,6 +356,8 @@ export class SedeController {
 
   // 🟠 Asociar servicios a una sede
   @Post(':id/servicios')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @UseGuards(SedeAccessGuard)
   @ApiOperation({ summary: 'Asociar servicios existentes a una sede' })
   @ApiBody({
     schema: {
@@ -372,6 +402,8 @@ export class SedeController {
 
   // 🔴 Eliminar servicios asociados de una sede
   @Delete(':id/servicios')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @UseGuards(SedeAccessGuard)
   @ApiOperation({ summary: 'Eliminar servicios asociados de una sede' })
   @ApiBody({
     schema: {
@@ -404,6 +436,8 @@ export class SedeController {
 
   // Eliminar imágenes específicas de una sede
   @Delete(':id/imagenes')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @UseGuards(SedeAccessGuard)
   @ApiOperation({
     summary: 'Eliminar imágenes específicas de una sede (BD y FS)',
   })
@@ -443,6 +477,8 @@ export class SedeController {
 
   // Reemplazar una imagen específica de una sede
   @Put(':id/imagenes/:index')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @UseGuards(SedeAccessGuard)
   @ApiOperation({
     summary: 'Reemplazar una imagen específica de una sede por índice',
   })

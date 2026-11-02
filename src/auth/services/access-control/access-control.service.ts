@@ -63,7 +63,11 @@ export class AccessControlService {
           'No puede gestionar servicios fuera de su sede.',
         );
       }
+      return;
     }
+
+    /* Antes CLIENT y EMPLOYEE caían al final y pasaban. */
+    throw new ForbiddenException('No puede gestionar servicios.');
   }
 
   async ensureSedeAccessForUser(sedeId: number, user?: AuthenticatedUser) {
@@ -97,7 +101,12 @@ export class AccessControlService {
       if (user.sedeId !== sede.id) {
         throw new ForbiddenException('No puede gestionar otra sede.');
       }
+      return;
     }
+
+    /* Antes CLIENT y EMPLOYEE caían al final y pasaban: cualquier cliente
+       cambiaba horarios y días cerrados de cualquier sede. */
+    throw new ForbiddenException('No puede gestionar sedes.');
   }
 
   async ensureProfessionalAccessForUser(
