@@ -99,8 +99,13 @@ export class ChatMessageService {
    * @param dto Contact information.
    * @returns Created contact relationship.
    */
-  async createContact(dto: CreateChatContactDto) {
+  async createContact(dto: CreateChatContactDto, user: AuthenticatedUser) {
     const { ownerUserId, contactUserId } = dto;
+
+    // Cada uno gestiona su propia agenda.
+    if (user.role !== Role.SUPER_ADMIN && ownerUserId !== user.userId) {
+      throw new ForbiddenException('Solo puede añadir contactos a su agenda.');
+    }
 
     if (ownerUserId === contactUserId) {
       throw new BadRequestException('You cannot add yourself as a contact.');
@@ -209,7 +214,11 @@ export class ChatMessageService {
    * @param userId User identifier.
    * @returns Contact list.
    */
-  async getContacts(userId: number) {
+  async getContacts(userId: number, user: AuthenticatedUser) {
+    if (user.role !== Role.SUPER_ADMIN && userId !== user.userId) {
+      throw new ForbiddenException('Solo puede ver su agenda.');
+    }
+
     return this.prisma.chat_contact.findMany({
       where: {
         owner_user_id: userId,
@@ -284,6 +293,15 @@ export class ChatMessageService {
    * Save a chat message in the database.
    */
   async createMessage(dto: SendMessageDto, user: AuthenticatedUser) {
+    /* El remitente es la sesión, como ya hace el socket. Antes bastaba con
+       ser el receptor para fabricar mensajes "enviados" por otra persona. */
+    if (user.role !== Role.SUPER_ADMIN) {
+      if (dto.senderId !== user.userId) {
+        throw new ForbiddenException('Solo puede enviar mensajes como usted.');
+      }
+      dto.senderEmail = user.email;
+    }
+
     await this.accessControlService.ensureChatAccessForUser(
       dto.senderId,
       dto.receiverId,

@@ -48,8 +48,11 @@ export class ChatMessageController {
   @ApiOperation({
     summary: 'Save chat contact',
   })
-  async createContact(@Body() dto: CreateChatContactDto) {
-    return this.chatMessageService.createContact(dto);
+  async createContact(
+    @Body() dto: CreateChatContactDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.chatMessageService.createContact(dto, user);
   }
 
   /**
@@ -76,8 +79,11 @@ export class ChatMessageController {
   @ApiOperation({
     summary: 'Get chat contacts',
   })
-  async getContacts(@Param('userId', ParseIntPipe) userId: number) {
-    return this.chatMessageService.getContacts(userId);
+  async getContacts(
+    @Param('userId', ParseIntPipe) userId: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.chatMessageService.getContacts(userId, user);
   }
 
   //enviar mensajes de chat

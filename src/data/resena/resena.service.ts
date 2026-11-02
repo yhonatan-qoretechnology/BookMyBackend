@@ -1,5 +1,7 @@
+import { AccessControlService } from '../../auth/services/access-control/access-control.service';
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,9 +13,37 @@ import { UpdateResenaDto } from './dto/update-resena.dto';
 
 @Injectable()
 export class ResenaService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly accessControlService: AccessControlService,
+  ) {}
 
-  async create(createResenaDto: CreateResenaDto) {
+  /**
+   * Aprobar o borrar una reseña: el admin de su sede/empresa, o Bookmy.
+   * Antes cualquiera aprobaba y cualquier admin borraba reseñas ajenas.
+   */
+  private async exigirGestionDeResena(
+    resena: { sedeId: number | null },
+    user: AuthenticatedUser,
+  ) {
+    if (user.role === Role.SUPER_ADMIN) return;
+    if (resena.sedeId == null) {
+      throw new ForbiddenException('No puede gestionar esta reseña.');
+    }
+    await this.accessControlService.ensureSedeAccessForUser(
+      resena.sedeId,
+      user,
+    );
+  }
+
+  async create(createResenaDto: CreateResenaDto, user: AuthenticatedUser) {
+    /* El autor es la sesión y toda reseña nace pendiente: antes se podía
+       reseñar en nombre de otro y publicarla ya APROBADA. */
+    createResenaDto.usuarioId = user.userId;
+    if (user.role !== Role.SUPER_ADMIN) {
+      createResenaDto.estado = ResenaState.PENDIENTE;
+    }
+
     if (createResenaDto.tipo === ResenaType.SEDE) {
       if (createResenaDto.sedeId == null) {
         throw new BadRequestException(
@@ -171,10 +201,23 @@ export class ResenaService {
     }));
   }
 
-  async update(id: number, updateResenaDto: UpdateResenaDto) {
+  async update(
+    id: number,
+    updateResenaDto: UpdateResenaDto,
+    user: AuthenticatedUser,
+  ) {
     const resena = await this.prisma.resena.findUnique({ where: { id } });
     if (!resena) {
       throw new NotFoundException(`Reseña con ID ${id} no encontrada.`);
+    }
+
+    // La edita su autor; el estado y el autor no se tocan por aquí.
+    if (user.role !== Role.SUPER_ADMIN) {
+      if (resena.usuarioId !== user.userId) {
+        throw new ForbiddenException('Solo puede editar sus reseñas.');
+      }
+      delete updateResenaDto.estado;
+      delete updateResenaDto.usuarioId;
     }
 
     const targetType = updateResenaDto.tipo ?? resena.tipo;
@@ -234,11 +277,12 @@ export class ResenaService {
     });
   }
 
-  async approve(id: number, aprobado: boolean) {
+  async approve(id: number, aprobado: boolean, user: AuthenticatedUser) {
     const resena = await this.prisma.resena.findUnique({ where: { id } });
     if (!resena) {
       throw new NotFoundException(`Reseña con ID ${id} no encontrada.`);
     }
+    await this.exigirGestionDeResena(resena, user);
 
     return this.prisma.resena.update({
       where: { id },
@@ -249,11 +293,12 @@ export class ResenaService {
     });
   }
 
-  async remove(id: number) {
+  async remove(id: number, user: AuthenticatedUser) {
     const resena = await this.prisma.resena.findUnique({ where: { id } });
     if (!resena) {
       throw new NotFoundException(`Reseña con ID ${id} no encontrada.`);
     }
+    await this.exigirGestionDeResena(resena, user);
     return this.prisma.resena.delete({ where: { id } });
   }
 }

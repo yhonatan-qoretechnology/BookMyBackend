@@ -1,6 +1,8 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
 import { SendSmsDto } from './dto/send-sms.dto';
 import { SmsService } from './sms.service';
 
@@ -10,6 +12,9 @@ export class SmsController {
 
   /* Ya exige token (guard global), pero una cuenta comprometida podía
      vaciar el saldo de Twilio en un bucle. */
+  /* Texto libre a cualquier número con nuestra cuenta de Twilio: cualquier
+     sesión lo usaba para smishing. Ni el panel ni la app lo llaman. */
+  @Roles(Role.SUPER_ADMIN)
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('send-sms')

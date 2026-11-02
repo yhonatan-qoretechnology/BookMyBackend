@@ -2,6 +2,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   ParseIntPipe,
@@ -14,6 +15,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
+import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
+import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { UserLocationService } from './user-location.service';
 import { CreateUserLocationDto } from './dto/create-user-location.dto';
 
@@ -21,6 +25,14 @@ import { CreateUserLocationDto } from './dto/create-user-location.dto';
 @Controller('users/:userId/location')
 export class UserLocationController {
   constructor(private readonly service: UserLocationService) {}
+
+  /* La ubicación es de cada uno: antes cualquier sesión leía o pisaba la
+     latitud, longitud y dirección de cualquier usuario. */
+  private exigirPropio(userId: number, user: AuthenticatedUser) {
+    if (user.role !== Role.SUPER_ADMIN && user.userId !== userId) {
+      throw new ForbiddenException('Solo puede ver o cambiar su ubicación.');
+    }
+  }
 
   @Post()
   @ApiOperation({ summary: 'Crear/Actualizar ubicación del usuario (upsert)' })
@@ -40,7 +52,9 @@ export class UserLocationController {
   async save(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: CreateUserLocationDto,
+    @AuthUser() user: AuthenticatedUser,
   ) {
+    this.exigirPropio(userId, user);
     return this.service.save(userId, dto);
   }
 
@@ -48,7 +62,11 @@ export class UserLocationController {
   @ApiOperation({ summary: 'Obtener ubicación del usuario' })
   @ApiParam({ name: 'userId', type: Number, example: 1 })
   @ApiResponse({ status: 200, description: 'Ubicación encontrada' })
-  async get(@Param('userId', ParseIntPipe) userId: number) {
+  async get(
+    @Param('userId', ParseIntPipe) userId: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    this.exigirPropio(userId, user);
     return this.service.get(userId);
   }
 }

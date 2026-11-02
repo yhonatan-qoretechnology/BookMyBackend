@@ -44,8 +44,11 @@ export class ResenaController {
     type: CreateResenaDto,
     description: 'Datos para crear una nueva reseña',
   })
-  create(@Body() createResenaDto: CreateResenaDto) {
-    return this.resenaService.create(createResenaDto);
+  create(
+    @Body() createResenaDto: CreateResenaDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.resenaService.create(createResenaDto, user);
   }
 
   @Get()
@@ -102,11 +105,13 @@ export class ResenaController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateResenaDto: UpdateResenaDto,
+    @AuthUser() user: AuthenticatedUser,
   ) {
-    return this.resenaService.update(id, updateResenaDto);
+    return this.resenaService.update(id, updateResenaDto, user);
   }
 
   @Patch(':id/aprobar')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
   @ApiOperation({ summary: 'Aprobar o rechazar una reseña' })
   @ApiResponse({ status: 200, description: 'Estado de la reseña actualizado.' })
   @ApiNotFoundResponse({ description: 'Reseña no encontrada.' })
@@ -115,8 +120,9 @@ export class ResenaController {
   approve(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: ApproveResenaDto,
+    @AuthUser() user: AuthenticatedUser,
   ) {
-    return this.resenaService.approve(id, body.aprobado);
+    return this.resenaService.approve(id, body.aprobado, user);
   }
 
   /* El resto del controlador es publico a proposito: la app de
@@ -130,7 +136,10 @@ export class ResenaController {
   @ApiOperation({ summary: 'Eliminar una reseña por su ID' })
   @ApiResponse({ status: 204, description: 'Reseña eliminada exitosamente.' })
   @ApiNotFoundResponse({ description: 'Reseña no encontrada.' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.resenaService.remove(id);
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.resenaService.remove(id, user);
   }
 }
