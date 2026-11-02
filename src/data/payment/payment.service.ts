@@ -10,6 +10,7 @@ import {
   PaymentCard as PaymentCardModel,
   PaymentMethod,
   PaymentStatus,
+  Prisma,
   Role,
 } from '@prisma/client';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
@@ -48,11 +49,78 @@ export class PaymentService {
     private stripeService: StripeService,
   ) {}
 
-  async createPayment(dto: CreatePaymentDto) {
+  /* ── Alcance ─────────────────────────────────────────────────────
+     Antes ninguna ruta de pagos miraba quién llamaba: cualquier sesión
+     confirmaba, cancelaba o tocaba los adicionales de cualquier factura, y
+     los listados devolvían los pagos de todas las empresas. */
+
+  private esAdminDeNegocio(user: AuthenticatedUser) {
+    return (
+      user.role === Role.COMPANY_ADMIN || user.role === Role.BRANCH_ADMIN
+    );
+  }
+
+  /** Los pagos que `user` puede ver: los de su negocio, o los suyos. */
+  private alcancePagos(user: AuthenticatedUser): Prisma.PaymentWhereInput {
+    if (user.role === Role.SUPER_ADMIN) return {};
+    if (user.role === Role.COMPANY_ADMIN && user.empresaId)
+      return { appointment: { sede: { empresaId: user.empresaId } } };
+    if (user.role === Role.BRANCH_ADMIN && user.sedeId)
+      return { appointment: { sedeId: user.sedeId } };
+    return { userId: user.userId };
+  }
+
+  /**
+   * El pago, si `user` lo administra (su negocio) o, con `tambienDueno`, si
+   * es el cliente que lo hizo. Si no, 403.
+   */
+  private async pagoEnAlcance(
+    paymentId: number,
+    user: AuthenticatedUser,
+    { tambienDueno = false } = {},
+  ) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        appointment: {
+          select: { sedeId: true, sede: { select: { empresaId: true } } },
+        },
+      },
+    });
+    if (!payment) throw new NotFoundException('El pago no existe');
+
+    const cita = payment.appointment;
+    const permitido =
+      user.role === Role.SUPER_ADMIN ||
+      (user.role === Role.COMPANY_ADMIN &&
+        !!user.empresaId &&
+        cita?.sede?.empresaId === user.empresaId) ||
+      (user.role === Role.BRANCH_ADMIN &&
+        !!user.sedeId &&
+        cita?.sedeId === user.sedeId) ||
+      (tambienDueno && payment.userId === user.userId);
+
+    if (!permitido) throw new ForbiddenException('Este pago no es suyo.');
+    return payment;
+  }
+
+  /**
+   * @param importeDelServidor el llamador ya calculó `dto.amount` en el
+   *        servidor (reparto de una cita dividida), así que vale aunque
+   *        quien reserve sea un cliente.
+   */
+  async createPayment(
+    dto: CreatePaymentDto,
+    user: AuthenticatedUser | undefined,
+    { importeDelServidor = false } = {},
+  ) {
+    if (!user) throw new ForbiddenException('Hace falta una sesión.');
+
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: dto.appointmentId },
       include: {
         service: { include: { prices: true } },
+        sede: { select: { empresaId: true } },
       },
     });
 
@@ -61,12 +129,34 @@ export class PaymentService {
     if (appointment.userId !== dto.userId)
       throw new BadRequestException('La cita no pertenece al usuario indicado');
 
+    /* La cita tiene que ser del usuario de la sesión, o de un cliente del
+       negocio de quien cobra. Antes `userId` lo ponía el cliente sin más. */
+    const puedeCobrar =
+      user.role === Role.SUPER_ADMIN ||
+      appointment.userId === user.userId ||
+      (user.role === Role.COMPANY_ADMIN &&
+        !!user.empresaId &&
+        appointment.sede?.empresaId === user.empresaId) ||
+      (user.role === Role.BRANCH_ADMIN &&
+        !!user.sedeId &&
+        appointment.sedeId === user.sedeId);
+    if (!puedeCobrar) throw new ForbiddenException('Esta cita no es suya.');
+
     const priceMatch = appointment.service.prices.find(
       (price) => price.duration === appointment.duracion,
     );
 
+    /* El importe lo fija el servidor. Solo el negocio (o Bookmy) puede
+       cobrar otra cantidad; el cliente pagaba lo que él mismo escribía. */
+    const importeManual =
+      importeDelServidor ||
+      user.role === Role.SUPER_ADMIN ||
+      this.esAdminDeNegocio(user)
+        ? dto.amount
+        : undefined;
+
     const totalAmount =
-      dto.amount ??
+      importeManual ??
       priceMatch?.amount ??
       appointment.service.prices[0]?.amount ??
       0;
@@ -102,6 +192,22 @@ export class PaymentService {
           'El pago online no está disponible en este momento.',
         );
       return payment;
+    }
+
+    /* Sin pasarela, el "banco" es simulateBankResponse, que aprueba todo:
+       la reserva quedaba pagada sin cobrar nada. Fuera de desarrollo, la
+       tarjeta va solo por Stripe (pagoOnline). */
+    if (
+      dto.method === PaymentMethod.CARD &&
+      process.env.PAGOS_TARJETA_SIMULADOS !== 'true'
+    ) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: PaymentStatus.FAILED },
+      });
+      throw new BadRequestException(
+        'El pago con tarjeta se hace por el pago online.',
+      );
     }
 
     if (dto.method === PaymentMethod.CARD) {
@@ -169,7 +275,9 @@ export class PaymentService {
           paidAmount: payment.totalAmount,
         },
       });
-      await this.wiseService.liquidarPago(paid.id);
+      /* No se liquida al negocio: este cobro es simulado y no ha entrado
+         dinero. Antes se le transfería de verdad, por Wise, el 90 % de un
+         importe que el propio cliente elegía. */
       return paid;
     } catch (error) {
       await this.prisma.payment.update({
@@ -297,7 +405,8 @@ export class PaymentService {
   }
 
   /** Adicionales de una factura. */
-  async listPaymentItems(paymentId: number) {
+  async listPaymentItems(paymentId: number, user: AuthenticatedUser) {
+    await this.pagoEnAlcance(paymentId, user);
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
       include: { items: { orderBy: { id: 'asc' } } },
@@ -307,7 +416,12 @@ export class PaymentService {
   }
 
   /** Anade un concepto adicional y actualiza el total. */
-  async addPaymentItem(paymentId: number, dto: CreatePaymentItemDto) {
+  async addPaymentItem(
+    paymentId: number,
+    dto: CreatePaymentItemDto,
+    user: AuthenticatedUser,
+  ) {
+    await this.pagoEnAlcance(paymentId, user);
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
     });
@@ -336,20 +450,20 @@ export class PaymentService {
   }
 
   /** Quita un adicional y actualiza el total. */
-  async removePaymentItem(itemId: number) {
+  async removePaymentItem(itemId: number, user: AuthenticatedUser) {
     const item = await this.prisma.paymentItem.findUnique({
       where: { id: itemId },
     });
     if (!item) throw new BadRequestException('El adicional no existe');
+    await this.pagoEnAlcance(item.paymentId, user);
 
     await this.prisma.paymentItem.delete({ where: { id: itemId } });
     return this.recalcularTotal(item.paymentId);
   }
 
-  async confirmRemainingPayment(paymentId: number) {
-    const payment = await this.prisma.payment.findUnique({
-      where: { id: paymentId },
-    });
+  async confirmRemainingPayment(paymentId: number, user: AuthenticatedUser) {
+    // Lo confirma el negocio al cobrar en el local, no el cliente.
+    const payment = await this.pagoEnAlcance(paymentId, user);
 
     if (!payment || payment.status !== 'RESERVED')
       throw new BadRequestException('El pago no está reservado o no existe');
@@ -477,16 +591,17 @@ export class PaymentService {
     return this.prisma.payment.findUnique({ where: { id: paymentId } });
   }
 
-  async cancelPayment(id: number) {
+  async cancelPayment(id: number, user: AuthenticatedUser) {
+    await this.pagoEnAlcance(id, user, { tambienDueno: true });
     return this.prisma.payment.update({
       where: { id },
       data: { status: PaymentStatus.CANCELLED },
     });
   }
 
-  async listPayments(userId?: number) {
+  async listPayments(user: AuthenticatedUser, userId?: number) {
     const payments = await this.prisma.payment.findMany({
-      where: userId ? { userId } : undefined,
+      where: { AND: [this.alcancePagos(user), userId ? { userId } : {}] },
       include: this.paymentListInclude(),
       orderBy: { createdAt: 'desc' },
     });
@@ -494,13 +609,19 @@ export class PaymentService {
     return this.mapPaymentsList(payments);
   }
 
-  async filterPayments(filters: ListPaymentsFilters = {}) {
+  async filterPayments(
+    user: AuthenticatedUser,
+    filters: ListPaymentsFilters = {},
+  ) {
     const { userId, sedeId } = filters;
 
     const payments = await this.prisma.payment.findMany({
       where: {
-        ...(userId ? { userId } : {}),
-        ...(sedeId ? { appointment: { sedeId } } : {}),
+        AND: [
+          this.alcancePagos(user),
+          userId ? { userId } : {},
+          sedeId ? { appointment: { sedeId } } : {},
+        ],
       },
       include: this.paymentListInclude(),
       orderBy: { createdAt: 'desc' },

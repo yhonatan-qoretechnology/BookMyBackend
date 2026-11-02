@@ -52,8 +52,11 @@ export class PaymentController {
   @UseGuards(PlanProGuard)
   @ApiOperation({ summary: 'Adicionales de una factura' })
   @ApiOkResponse({ description: 'Lista de conceptos adicionales.' })
-  async listItems(@Param('id') id: string) {
-    return this.paymentService.listPaymentItems(Number(id));
+  async listItems(
+    @Param('id') id: string,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.listPaymentItems(Number(id), user);
   }
 
   @Post(':id/items')
@@ -65,8 +68,12 @@ export class PaymentController {
       'Suma el concepto al total de la factura. El total se recalcula en el servidor: base del servicio + adicionales.',
   })
   @ApiCreatedResponse({ description: 'Factura con el total actualizado.' })
-  async addItem(@Param('id') id: string, @Body() dto: CreatePaymentItemDto) {
-    return this.paymentService.addPaymentItem(Number(id), dto);
+  async addItem(
+    @Param('id') id: string,
+    @Body() dto: CreatePaymentItemDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.addPaymentItem(Number(id), dto, user);
   }
 
   @Delete('items/:itemId')
@@ -74,14 +81,20 @@ export class PaymentController {
   @UseGuards(PlanProGuard)
   @ApiOperation({ summary: 'Quitar un adicional de la factura' })
   @ApiOkResponse({ description: 'Factura con el total actualizado.' })
-  async removeItem(@Param('itemId') itemId: string) {
-    return this.paymentService.removePaymentItem(Number(itemId));
+  async removeItem(
+    @Param('itemId') itemId: string,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.removePaymentItem(Number(itemId), user);
   }
 
   @Post()
   @ApiOperation({ summary: 'Crear un pago (total o parcial)' })
-  async createPayment(@Body() dto: CreatePaymentDto) {
-    return this.paymentService.createPayment(dto);
+  async createPayment(
+    @Body() dto: CreatePaymentDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.createPayment(dto, user);
   }
 
   /* ── Pago online con Stripe (la pasarela que cobra al cliente) ── */
@@ -136,15 +149,22 @@ export class PaymentController {
   }
 
   @Patch(':id/confirm')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
   @ApiOperation({ summary: 'Confirmar pago restante en establecimiento' })
-  async confirmRemaining(@Param('id') id: string) {
-    return this.paymentService.confirmRemainingPayment(Number(id));
+  async confirmRemaining(
+    @Param('id') id: string,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.confirmRemainingPayment(Number(id), user);
   }
 
   @Patch(':id/cancel')
   @ApiOperation({ summary: 'Cancelar un pago' })
-  async cancelPayment(@Param('id') id: string) {
-    return this.paymentService.cancelPayment(Number(id));
+  async cancelPayment(
+    @Param('id') id: string,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.cancelPayment(Number(id), user);
   }
 
   @Patch(':id/confirm-wise-transfer')
@@ -168,8 +188,12 @@ export class PaymentController {
     required: false,
     description: 'Filtra los pagos pertenecientes a un usuario específico',
   })
-  async list(@Query('userId') userId?: string) {
+  async list(
+    @AuthUser() user: AuthenticatedUser,
+    @Query('userId') userId?: string,
+  ) {
     return this.paymentService.listPayments(
+      user,
       userId ? Number(userId) : undefined,
     );
   }
@@ -189,10 +213,11 @@ export class PaymentController {
     description: 'Filtra los pagos pertenecientes a una sede específica',
   })
   async filter(
+    @AuthUser() user: AuthenticatedUser,
     @Query('userId') userId?: string,
     @Query('sedeId') sedeId?: string,
   ) {
-    return this.paymentService.filterPayments({
+    return this.paymentService.filterPayments(user, {
       userId: userId ? Number(userId) : undefined,
       sedeId: sedeId ? Number(sedeId) : undefined,
     });

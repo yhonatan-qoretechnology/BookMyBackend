@@ -992,6 +992,8 @@ export class AppointmentService {
 
   async create(data: CreateAppointmentDto, user?: AuthenticatedUser) {
     this.exigirTarjetaPropia(data, user);
+    // Más abajo `user` pasa a ser la fila del cliente; esta es la sesión.
+    const sesion = user;
     const fecha = this.parseDate(data.fecha);
     const horaInicio = this.parseDate(data.horaInicio);
     const horaFin = this.parseDate(data.horaFin);
@@ -1431,7 +1433,7 @@ export class AppointmentService {
           existingCardId: data.existingCardId,
           pagoOnline: data.pagoOnline,
           saveCard: false, // Por defecto no guardar a menos que se extienda el DTO
-        });
+        }, sesion);
       } catch (paymentError) {
         // El pago depende de una pasarela externa poco confiable
         // (fakebank.com): si falla, la cita ya está commiteada — antes
@@ -2457,7 +2459,15 @@ export class AppointmentService {
     const horaFin2 = new Date(sugerencia.horaFin);
     const fecha2 = new Date(`${sugerencia.fecha}T00:00:00Z`);
 
-    const montoTotal = data.paymentAmount ?? matchingPrice.amount;
+    /* Un importe distinto de la tarifa solo lo fija el negocio: el cliente
+       pagaba lo que él mismo escribía en paymentAmount. */
+    const importeManualPermitido =
+      user?.role === Role.SUPER_ADMIN ||
+      user?.role === Role.COMPANY_ADMIN ||
+      user?.role === Role.BRANCH_ADMIN;
+    const montoTotal =
+      (importeManualPermitido ? data.paymentAmount : undefined) ??
+      matchingPrice.amount;
     const montoParte1 =
       Math.round(((montoTotal * minutosDisponiblesHoy) / data.duracion) * 100) / 100;
     const montoParte2 = Math.round((montoTotal - montoParte1) * 100) / 100;
@@ -2498,7 +2508,7 @@ export class AppointmentService {
         existingCardId: data.existingCardId,
         pagoOnline: data.pagoOnline,
         saveCard: false,
-      });
+      }, user, { importeDelServidor: true });
     } catch (paymentError) {
       await this.prisma.appointment.update({
         where: { id: parte1.id },
@@ -2540,7 +2550,7 @@ export class AppointmentService {
           existingCardId: data.existingCardId,
           pagoOnline: data.pagoOnline,
           saveCard: false,
-        });
+        }, user, { importeDelServidor: true });
       } catch (paymentError) {
         await this.prisma.appointment.update({
           where: { id: parte2.id },
