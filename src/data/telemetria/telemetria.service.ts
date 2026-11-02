@@ -151,4 +151,67 @@ export class TelemetriaService {
       sesiones: g._count._all,
     }));
   }
+
+  /**
+   * Serie diaria para las gráficas: pageviews, visitantes distintos y
+   * aperturas de la app, del periodo pedido y del anterior (para
+   * compararlos), más el reparto de visitas por país. Días en UTC.
+   */
+  async serie(dias = 30) {
+    const DIA = 24 * 60 * 60 * 1000;
+    const n = Math.min(Math.max(dias, 1), 365);
+    const hoy = new Date();
+    const finHoy = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate()) + DIA;
+    const inicioActual = finHoy - n * DIA;
+    const inicioPrevio = inicioActual - n * DIA;
+
+    const eventos = await this.prisma.telemetriaEvento.findMany({
+      where: { createdAt: { gte: new Date(inicioPrevio) } },
+      select: { tipo: true, sesionId: true, pais: true, createdAt: true },
+    });
+
+    const vacio = () => Array.from({ length: n }, () => 0);
+    const periodo = () => ({
+      pageviews: vacio(),
+      visitantes: vacio(),
+      appSessions: vacio(),
+      sesiones: Array.from({ length: n }, () => new Set<string>()),
+    });
+    const actual = periodo();
+    const previo = periodo();
+    const paises = new Map<string, number>();
+
+    for (const e of eventos) {
+      const t = e.createdAt.getTime();
+      const enActual = t >= inicioActual;
+      const p = enActual ? actual : previo;
+      const i = Math.floor((t - (enActual ? inicioActual : inicioPrevio)) / DIA);
+      if (i < 0 || i >= n) continue;
+      if (e.tipo === 'PAGEVIEW') {
+        p.pageviews[i]++;
+        if (e.sesionId) p.sesiones[i].add(e.sesionId);
+      } else {
+        p.appSessions[i]++;
+      }
+      if (enActual && e.pais) paises.set(e.pais, (paises.get(e.pais) ?? 0) + 1);
+    }
+
+    const cerrar = (p: ReturnType<typeof periodo>) => ({
+      pageviews: p.pageviews,
+      visitantes: p.sesiones.map((s) => s.size),
+      appSessions: p.appSessions,
+    });
+
+    return {
+      dias: Array.from({ length: n }, (_, i) =>
+        new Date(inicioActual + i * DIA).toISOString().slice(0, 10),
+      ),
+      actual: cerrar(actual),
+      previo: cerrar(previo),
+      paises: [...paises.entries()]
+        .map(([pais, eventos]) => ({ pais, eventos }))
+        .sort((a, b) => b.eventos - a.eventos)
+        .slice(0, 10),
+    };
+  }
 }

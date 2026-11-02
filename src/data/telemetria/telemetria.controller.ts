@@ -63,6 +63,14 @@ export class TelemetriaController {
     );
   }
 
+  @Get('serie')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Serie diaria (actual vs periodo anterior) y reparto por país' })
+  serie(@Query('dias') dias?: string) {
+    return this.telemetriaService.serie(dias ? parseInt(dias, 10) : undefined);
+  }
+
   @Get('distribucion-plataformas')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN)

@@ -16,6 +16,8 @@ export interface UsoEmpresaPro {
   empresaId: number;
   empresa: string;
   email: string | null;
+  /** FREE también sale: el SUPER_ADMIN ve el uso de todas las empresas. */
+  plan: 'PRO' | 'FREE';
   enPrueba: boolean;
   citas30: number;
   canceladas30: number;
@@ -52,8 +54,9 @@ export class UsoProService {
     const hace30 = new Date(ahora.getTime() - 30 * DIA);
     const hace7 = new Date(ahora.getTime() - 7 * DIA);
 
+    /* Todas las empresas, Free y Pro: el aviso automático de cada lunes
+       sigue siendo solo para Pro y prueba (ver revisarYAvisar). */
     const empresas = await this.prisma.empresa.findMany({
-      where: { OR: [{ plan: PlanEmpresa.PRO }, { trialEndsAt: { gt: ahora } }] },
       select: {
         id: true,
         nombre: true,
@@ -109,7 +112,8 @@ export class UsoProService {
           empresaId: e.id,
           empresa: e.nombre,
           email: e.email,
-          enPrueba: e.plan !== PlanEmpresa.PRO,
+          plan: e.plan === PlanEmpresa.PRO ? 'PRO' : 'FREE',
+          enPrueba: e.plan !== PlanEmpresa.PRO && !!e.trialEndsAt && e.trialEndsAt > ahora,
           citas30,
           canceladas30,
           actividad30,
@@ -216,7 +220,7 @@ export class UsoProService {
   /** Envío manual desde el panel (SUPER_ADMIN). */
   async avisarEmpresa(empresaId: number, creadoPorId: number, mensaje?: string) {
     const uso = (await this.listar()).find((u) => u.empresaId === empresaId);
-    if (!uso) throw new NotFoundException('La empresa no tiene Bookmy CRM Pro activo.');
+    if (!uso) throw new NotFoundException('La empresa no existe.');
     if (!uso.email) throw new NotFoundException('La empresa no tiene correo configurado.');
     const enviado = await this.avisar(uso, { creadoPorId, mensajeManual: mensaje?.trim() || undefined });
     return { enviado };
@@ -227,6 +231,7 @@ export class UsoProService {
     const lista = await this.listar();
     let enviados = 0;
     for (const uso of lista) {
+      if (uso.plan === 'FREE' && !uso.enPrueba) continue;
       if (uso.estado === 'ACTIVO') continue;
       const tipo = uso.estado === 'USO_INUSUAL' ? TipoAvisoUso.USO_INUSUAL : TipoAvisoUso.BAJO_USO;
       const reciente = await this.prisma.avisoUsoPro.findFirst({

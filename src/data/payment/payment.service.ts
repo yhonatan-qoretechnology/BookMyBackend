@@ -368,34 +368,22 @@ export class PaymentService {
 
   // Confirmar el pago restante en establecimiento
   /**
-   * Recalcula el total de una factura: precio base del servicio + adicionales.
+   * Actualiza el total de una factura al añadir o quitar un adicional.
    *
-   * El precio base se deriva igual que en createPayment (la tarifa del
-   * servicio para la duracion de la cita) en vez de guardarse aparte, para
-   * que no haya dos fuentes de verdad que puedan separarse.
+   * Suma (o resta) el adicional al total actual en vez de rehacerlo desde
+   * la tarifa del servicio: si el negocio cobró la base a mano (precio
+   * libre en «Nueva factura»), recalcular desde la tarifa la pisaba.
    */
-  private async recalcularTotal(paymentId: number) {
+  private async recalcularTotal(paymentId: number, delta: number) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
-      include: {
-        items: true,
-        appointment: { include: { service: { include: { prices: true } } } },
-      },
     });
     if (!payment) throw new BadRequestException('La factura no existe');
 
-    const cita = payment.appointment;
-    const tarifa = cita?.service?.prices?.find(
-      (precio) => precio.duration === cita.duracion,
-    );
-    const base = tarifa?.amount ?? cita?.service?.prices?.[0]?.amount ?? 0;
-
-    const adicionales = payment.items.reduce(
-      (suma, item) => suma + item.cantidad * item.precioUnitario,
+    const totalAmount = Math.max(
       0,
+      Number((payment.totalAmount + delta).toFixed(2)),
     );
-
-    const totalAmount = Number((base + adicionales).toFixed(2));
 
     return this.prisma.payment.update({
       where: { id: paymentId },
@@ -446,7 +434,7 @@ export class PaymentService {
       },
     });
 
-    return this.recalcularTotal(paymentId);
+    return this.recalcularTotal(paymentId, dto.cantidad * dto.precioUnitario);
   }
 
   /** Quita un adicional y actualiza el total. */
@@ -458,7 +446,10 @@ export class PaymentService {
     await this.pagoEnAlcance(item.paymentId, user);
 
     await this.prisma.paymentItem.delete({ where: { id: itemId } });
-    return this.recalcularTotal(item.paymentId);
+    return this.recalcularTotal(
+      item.paymentId,
+      -(item.cantidad * item.precioUnitario),
+    );
   }
 
   async confirmRemainingPayment(paymentId: number, user: AuthenticatedUser) {
