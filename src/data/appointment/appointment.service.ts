@@ -439,6 +439,59 @@ export class AppointmentService {
   }
 
   /**
+   * Un cliente reserva para sí mismo. Antes `userId` lo ponía él: reservaba
+   * a nombre de otro y, como tener una cita en un negocio da a sus admins
+   * poder sobre esa cuenta, abría la puerta a quitársela.
+   */
+  private async exigirReservaPropia(
+    data: CreateAppointmentDto,
+    user?: AuthenticatedUser,
+  ) {
+    if (user?.role !== Role.CLIENT || data.userId === user.userId) return;
+
+    // create() acepta también el id de UserData (ver más abajo).
+    const userData = await this.prisma.userData.findUnique({
+      where: { id: data.userId },
+      select: { userId: true },
+    });
+    if (userData?.userId !== user.userId) {
+      throw new ForbiddenException('Solo puede reservar para usted.');
+    }
+    /* create() busca primero en Users con este mismo número: si coincidiera
+       con el id de otra persona, reservaría a su nombre. */
+    data.userId = user.userId;
+  }
+
+  /**
+   * Las citas que `user` puede ver. Antes los listados no miraban quién
+   * llamaba: GET /appointments sin sedeId devolvía todas las citas de la
+   * plataforma, con nombre, email y teléfono de cada cliente.
+   */
+  private alcanceCitas(user?: AuthenticatedUser): Prisma.AppointmentWhereInput {
+    if (!user || user.role === Role.SUPER_ADMIN) return {};
+    if (user.role === Role.COMPANY_ADMIN && user.empresaId)
+      return { sede: { empresaId: user.empresaId } };
+    if (user.role === Role.BRANCH_ADMIN && user.sedeId)
+      return { sedeId: user.sedeId };
+    if (user.role === Role.EMPLOYEE && user.profesionalId)
+      return { profesionalId: user.profesionalId };
+    return { userId: user.userId };
+  }
+
+  /**
+   * El cliente dueño de la reserva, o quien puede gestionarla. Es lo que
+   * piden cancel() y reschedule(): los usa el cliente desde la app, pero
+   * antes cualquiera cancelaba o movía citas de cualquier negocio.
+   */
+  private async ensureDuenoOGestor(
+    cita: { userId: number; profesionalId: number; sedeId: number },
+    user?: AuthenticatedUser,
+  ): Promise<void> {
+    if (user && cita.userId === user.userId) return;
+    await this.ensureCanManageAppointment(cita, user);
+  }
+
+  /**
    * Solo el profesional dueño de la cita, un admin con alcance sobre esa
    * sede/empresa, o un SUPER_ADMIN pueden extender o reasignar una cita.
    * A propósito NO se aplica este chequeo a cancel()/reschedule(), que ya
@@ -991,6 +1044,7 @@ export class AppointmentService {
   }
 
   async create(data: CreateAppointmentDto, user?: AuthenticatedUser) {
+    await this.exigirReservaPropia(data, user);
     this.exigirTarjetaPropia(data, user);
     // Más abajo `user` pasa a ser la fila del cliente; esta es la sesión.
     const sesion = user;
@@ -1526,7 +1580,18 @@ export class AppointmentService {
     }
   }
 
-  async getUserServices(userId: number) {
+  async getUserServices(userId: number, sesion?: AuthenticatedUser) {
+    /* Las reservas de un cliente las ve él, o un admin. Antes cualquier
+       sesión leía las de cualquiera. */
+    if (
+      sesion &&
+      sesion.userId !== userId &&
+      sesion.role !== Role.SUPER_ADMIN &&
+      sesion.role !== Role.COMPANY_ADMIN &&
+      sesion.role !== Role.BRANCH_ADMIN
+    ) {
+      throw new ForbiddenException('No puede ver las reservas de otro usuario.');
+    }
     const user = await this.prisma.users.findUnique({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
@@ -1599,13 +1664,18 @@ export class AppointmentService {
     };
   }
 
-  async findAll(params?: { sedeId?: number; page?: number; limit?: number }) {
+  async findAll(
+    params?: { sedeId?: number; page?: number; limit?: number },
+    user?: AuthenticatedUser,
+  ) {
     const sedeId = params?.sedeId;
     const page = params?.page && params.page > 0 ? params.page : 1;
     const limit = params?.limit && params.limit > 0 ? params.limit : 50;
     const skip = (page - 1) * limit;
 
-    const where = sedeId ? { sedeId } : undefined;
+    const where: Prisma.AppointmentWhereInput = {
+      AND: [this.alcanceCitas(user), sedeId ? { sedeId } : {}],
+    };
 
     const [items, total] = await Promise.all([
       this.prisma.appointment.findMany({
@@ -1647,13 +1717,14 @@ export class AppointmentService {
     hour?: string;
     page?: number;
     limit?: number;
-  }) {
+  }, user?: AuthenticatedUser) {
     const page = params.page && params.page > 0 ? params.page : 1;
     const limit = params.limit && params.limit > 0 ? params.limit : 50;
     const skip = (page - 1) * limit;
 
     const and: any[] = [];
 
+    and.push(this.alcanceCitas(user));
     if (params.sedeId) and.push({ sedeId: params.sedeId });
     if (params.serviceId) and.push({ serviceId: params.serviceId });
 
@@ -1768,6 +1839,7 @@ export class AppointmentService {
   async getLatestBySede(
     sedeId: number,
     options?: { limit?: number; month?: number; year?: number },
+    user?: AuthenticatedUser,
   ) {
     const limit = options?.limit ?? 10;
     const month = options?.month;
@@ -1787,7 +1859,7 @@ export class AppointmentService {
 
     return this.prisma.appointment.findMany({
       where: {
-        sedeId,
+        AND: [this.alcanceCitas(user), { sedeId }],
         fecha: {
           gte: startDate,
           lt: endDate,
@@ -1806,11 +1878,14 @@ export class AppointmentService {
     });
   }
 
-  async getCalendar(options: {
-    sedeId: number;
-    fechaInicio?: string;
-    fechaFin?: string;
-  }) {
+  async getCalendar(
+    options: {
+      sedeId: number;
+      fechaInicio?: string;
+      fechaFin?: string;
+    },
+    user?: AuthenticatedUser,
+  ) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -1833,7 +1908,7 @@ export class AppointmentService {
 
     const appointments = await this.prisma.appointment.findMany({
       where: {
-        sedeId: options.sedeId,
+        AND: [this.alcanceCitas(user), { sedeId: options.sedeId }],
         fecha: { gte: startDate, lte: endDate },
       },
       include: {
@@ -1891,7 +1966,7 @@ export class AppointmentService {
     }));
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, user?: AuthenticatedUser) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
@@ -1905,6 +1980,7 @@ export class AppointmentService {
       },
     });
     if (!appointment) throw new NotFoundException('Cita no encontrada');
+    await this.ensureDuenoOGestor(appointment, user);
     return appointment;
   }
 
@@ -2304,6 +2380,7 @@ export class AppointmentService {
   }
 
   async crearConContinuacion(data: CreateAppointmentDto, user?: AuthenticatedUser) {
+    await this.exigirReservaPropia(data, user);
     this.exigirTarjetaPropia(data, user);
     const fecha = this.parseDate(data.fecha);
     const horaInicio = this.parseDate(data.horaInicio);
@@ -2595,9 +2672,14 @@ export class AppointmentService {
   }
 
   /** Nota sobre el cliente que espera a ser atendido. */
-  async setObservacionEspera(id: number, dto: ObservacionEsperaDto) {
+  async setObservacionEspera(
+    id: number,
+    dto: ObservacionEsperaDto,
+    user?: AuthenticatedUser,
+  ) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
+    await this.ensureCanManageAppointment(cita, user);
 
     const texto = dto.observacionEspera?.trim();
     return this.prisma.appointment.update({
@@ -2618,6 +2700,7 @@ export class AppointmentService {
   ) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
+    await this.ensureDuenoOGestor(cita, user);
 
     /* Huso de la sede de la cita: reprogramar valida horario, dia de la
        semana y cierres en la hora de pared del local. */
@@ -2905,6 +2988,7 @@ export class AppointmentService {
   ) {
     const cita = await this.prisma.appointment.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
+    await this.ensureDuenoOGestor(cita, user);
 
     const actualizada = await this.prisma.appointment.update({
       where: { id },
@@ -2928,7 +3012,15 @@ export class AppointmentService {
     return actualizada;
   }
 
-  async getProfesionalAppointments(profesionalId: number) {
+  async getProfesionalAppointments(
+    profesionalId: number,
+    user?: AuthenticatedUser,
+  ) {
+    // El propio profesional o un admin de su sede/empresa.
+    await this.accessControlService.ensureProfessionalAccessForUser(
+      profesionalId,
+      user,
+    );
     const profesional = await this.prisma.profesional.findUnique({
       where: { id: profesionalId },
     });

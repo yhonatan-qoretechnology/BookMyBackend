@@ -36,6 +36,8 @@ export class AppointmentController {
   constructor(private readonly appointmentService: AppointmentService) {}
 
   @Post('reservation-client')
+  /* Devuelve id, nombre y teléfono por email: solo para el personal. */
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN, Role.EMPLOYEE)
   @ApiOperation({
     summary: 'Gestionar cliente para reserva',
     description:
@@ -50,6 +52,8 @@ export class AppointmentController {
   }
 
   @Get('search-client')
+  /* Devuelve id, nombre y teléfono por email: solo para el personal. */
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN, Role.EMPLOYEE)
   @ApiOperation({
     summary: 'Buscar cliente por email para reserva',
     description:
@@ -118,15 +122,19 @@ export class AppointmentController {
     description: 'Elementos por página',
   })
   findAll(
+    @AuthUser() user: AuthenticatedUser,
     @Query('sedeId') sedeId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.appointmentService.findAll({
-      sedeId: sedeId ? Number(sedeId) : undefined,
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-    });
+    return this.appointmentService.findAll(
+      {
+        sedeId: sedeId ? Number(sedeId) : undefined,
+        page: page ? Number(page) : undefined,
+        limit: limit ? Number(limit) : undefined,
+      },
+      user,
+    );
   }
 
   @Get('filter')
@@ -160,15 +168,19 @@ export class AppointmentController {
     @Query('hour') hour?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
-    return this.appointmentService.filterAppointments({
-      sedeId: sedeId ? Number(sedeId) : undefined,
-      date,
-      serviceId: serviceId ? Number(serviceId) : undefined,
-      hour,
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-    });
+    return this.appointmentService.filterAppointments(
+      {
+        sedeId: sedeId ? Number(sedeId) : undefined,
+        date,
+        serviceId: serviceId ? Number(serviceId) : undefined,
+        hour,
+        page: page ? Number(page) : undefined,
+        limit: limit ? Number(limit) : undefined,
+      },
+      user,
+    );
   }
 
   @Get('branches/:sedeId/latest')
@@ -193,12 +205,17 @@ export class AppointmentController {
     @Query('limit') limit?: string,
     @Query('month') month?: string,
     @Query('year') year?: string,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
-    return this.appointmentService.getLatestBySede(sedeId, {
-      limit: limit ? Number(limit) : undefined,
-      month: month ? Number(month) : undefined,
-      year: year ? Number(year) : undefined,
-    });
+    return this.appointmentService.getLatestBySede(
+      sedeId,
+      {
+        limit: limit ? Number(limit) : undefined,
+        month: month ? Number(month) : undefined,
+        year: year ? Number(year) : undefined,
+      },
+      user,
+    );
   }
 
   @Get('calendar')
@@ -207,20 +224,27 @@ export class AppointmentController {
     @Query('sedeId') sedeId: string,
     @Query('fechaInicio') fechaInicio?: string,
     @Query('fechaFin') fechaFin?: string,
+    @AuthUser() user?: AuthenticatedUser,
   ) {
-    return this.appointmentService.getCalendar({
-      sedeId: Number(sedeId),
-      fechaInicio,
-      fechaFin,
-    });
+    return this.appointmentService.getCalendar(
+      {
+        sedeId: Number(sedeId),
+        fechaInicio,
+        fechaFin,
+      },
+      user,
+    );
   }
 
   @Get('users/:userId/services')
   @ApiOperation({
     summary: 'Listar servicios de un usuario separados por estado',
   })
-  getUserServices(@Param('userId', ParseIntPipe) userId: number) {
-    return this.appointmentService.getUserServices(userId);
+  getUserServices(
+    @Param('userId', ParseIntPipe) userId: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.appointmentService.getUserServices(userId, user);
   }
 
   @Get('professionals/:profesionalId/reservations')
@@ -277,14 +301,21 @@ export class AppointmentController {
   })
   async getProfesionalAppointments(
     @Param('profesionalId', ParseIntPipe) profesionalId: number,
+    @AuthUser() user: AuthenticatedUser,
   ) {
-    return this.appointmentService.getProfesionalAppointments(profesionalId);
+    return this.appointmentService.getProfesionalAppointments(
+      profesionalId,
+      user,
+    );
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Obtener una cita por ID' })
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.appointmentService.findOne(id);
+  async findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.appointmentService.findOne(id, user);
   }
 
   /* Solo quien gestiona la agenda (el panel lo usa para cambiar el estado).
@@ -372,8 +403,9 @@ export class AppointmentController {
   observacionEspera(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ObservacionEsperaDto,
+    @AuthUser() user: AuthenticatedUser,
   ) {
-    return this.appointmentService.setObservacionEspera(id, dto);
+    return this.appointmentService.setObservacionEspera(id, dto, user);
   }
 
   /* El JWT ya lo exige el guard global (APP_GUARD en app.module.ts); aquí
