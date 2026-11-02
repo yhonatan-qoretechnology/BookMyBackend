@@ -61,6 +61,9 @@ export class RecaptchaGuard implements CanActivate {
     if (!token && !opciones.obligatorio) return true;
 
     const resultado = await this.recaptcha.verificar(token, opciones.accion, req.ip);
+    /* Sin clave en producción solo se cierran las rutas donde el CAPTCHA es
+       obligatorio: un despiste de configuración no debe tumbar el login. */
+    if (resultado.motivo === 'sin-clave' && !opciones.obligatorio) return true;
     if (!resultado.ok) {
       throw new ForbiddenException({
         message: 'No pudimos comprobar que no eres un robot. Recarga la página e inténtalo de nuevo.',

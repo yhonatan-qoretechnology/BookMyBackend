@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomInt } from 'crypto';
 import * as dayjs from 'dayjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../email/mail.service';
@@ -19,18 +20,71 @@ export class OtpService {
     private mailService: MailService,
   ) {}
 
-  async sendOtp(dto: SendOtpDto) {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+  /* Fallos seguidos por email. En memoria: con una instancia basta, y un
+     reinicio solo devuelve unos pocos intentos. */
+  private readonly fallos = new Map<string, number>();
+  private static readonly MAX_FALLOS = 5;
 
-    const expiresAt = dayjs().add(5, 'minutes').toDate();
+  /**
+   * Un código nuevo invalida los anteriores. Antes valía CUALQUIER OTP sin
+   * usar del email, así que pedir muchos multiplicaba las probabilidades de
+   * acertar uno por fuerza bruta.
+   */
+  private async emitirCodigo(email: string) {
+    await this.prisma.otp.updateMany({
+      where: { email, verified: false },
+      data: { verified: true },
+    });
+    this.fallos.delete(email);
 
+    // Math.random no es criptográfico: el código se podía predecir.
+    const code = randomInt(100000, 1000000).toString();
     await this.prisma.otp.create({
       data: {
-        email: dto.email,
+        email,
         code,
-        expiresAt,
+        expiresAt: dayjs().add(5, 'minutes').toDate(),
       },
     });
+    return code;
+  }
+
+  /**
+   * El OTP vigente del email si `code` coincide. Tras MAX_FALLOS intentos
+   * fallidos se invalida y hay que pedir otro.
+   */
+  async validarCodigo(email: string, code: string) {
+    const record = await this.prisma.otp.findFirst({
+      where: { email, verified: false },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!record || new Date() > record.expiresAt) {
+      throw new BadRequestException('Código inválido o expirado');
+    }
+
+    if (record.code !== code) {
+      const fallos = (this.fallos.get(email) ?? 0) + 1;
+      if (fallos >= OtpService.MAX_FALLOS) {
+        this.fallos.delete(email);
+        await this.prisma.otp.updateMany({
+          where: { email, verified: false },
+          data: { verified: true },
+        });
+        throw new BadRequestException(
+          'Demasiados intentos. Pide un código nuevo.',
+        );
+      }
+      this.fallos.set(email, fallos);
+      throw new BadRequestException('Código inválido o expirado');
+    }
+
+    this.fallos.delete(email);
+    return record;
+  }
+
+  async sendOtp(dto: SendOtpDto) {
+    const code = await this.emitirCodigo(dto.email);
 
     //await this.smsService.sendSms(dto.phone, `Tu código OTP es ${code}`);
 
@@ -40,17 +94,7 @@ export class OtpService {
   }
 
   async sendPasswordResetOtp(dto: SendOtpDto) {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-
-    const expiresAt = dayjs().add(5, 'minutes').toDate();
-
-    await this.prisma.otp.create({
-      data: {
-        email: dto.email,
-        code,
-        expiresAt,
-      },
-    });
+    const code = await this.emitirCodigo(dto.email);
 
     await this.mailService.sendPasswordResetOtp(dto.email, code);
 
@@ -60,21 +104,7 @@ export class OtpService {
   async verifyOtp(dto: VerifyOtpDto) {
     // 1. Permite que la variable sea null.
     //    Quita la anotación de tipo explícita para que TypeScript infiera el tipo correcto.
-    const record = await this.prisma.otp.findFirst({
-      where: {
-        email: dto.email,
-        code: dto.code,
-        verified: false,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-
-    // 2. Maneja el caso en el que no se encuentre el registro.
-    if (!record || new Date() > record.expiresAt) {
-      throw new BadRequestException('Código inválido o expirado');
-    }
+    const record = await this.validarCodigo(dto.email, dto.code);
 
     // 3. Si el registro existe y es válido, actualiza el estado del OTP y del usuario.
     await this.prisma.otp.update({

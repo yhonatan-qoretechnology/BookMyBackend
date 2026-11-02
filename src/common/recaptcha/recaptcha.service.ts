@@ -50,6 +50,11 @@ export class RecaptchaService {
         this.logger.warn('RECAPTCHA_SECRET_KEY no está configurada: el CAPTCHA no se está verificando.');
         this.avisadoSinClave = true;
       }
+      /* En producción una clave que falta es un despiste de configuración, no
+         una decisión: se rechaza en vez de dejar pasar todo sin avisar. */
+      if (process.env.NODE_ENV === 'production') {
+        return { ok: false, score: null, motivo: 'sin-clave' };
+      }
       return { ok: true, score: null, motivo: 'desactivado' };
     }
     if (!token) return { ok: false, score: null, motivo: 'sin-token' };
@@ -68,7 +73,8 @@ export class RecaptchaService {
       if (!datos.success) {
         return { ok: false, score: null, motivo: (datos['error-codes'] ?? []).join(',') || 'invalido' };
       }
-      if (datos.action && datos.action !== accion) {
+      // Sin `action` el token puede venir de otro formulario: se exige.
+      if (datos.action !== accion) {
         return { ok: false, score: datos.score ?? null, motivo: `accion-distinta:${datos.action}` };
       }
       const score = datos.score ?? 0;

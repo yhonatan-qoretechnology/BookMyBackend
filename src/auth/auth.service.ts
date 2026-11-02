@@ -332,23 +332,9 @@ export class AuthService {
     }
   }
 
+  // Con límite de intentos: ver OtpService.validarCodigo.
   private async ensureOtpIsValid(email: string, code: string) {
-    const otpRecord = await this.prisma.otp.findFirst({
-      where: {
-        email,
-        code,
-        verified: false,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-
-    if (!otpRecord || otpRecord.expiresAt < new Date()) {
-      throw new BadRequestException('Código OTP inválido o expirado.');
-    }
-
-    return otpRecord;
+    return this.otpService.validarCodigo(email, code);
   }
 
   private async updatePasswordHash(userId: number, newPassword: string) {
