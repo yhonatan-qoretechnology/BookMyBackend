@@ -1107,38 +1107,6 @@ export class AuthService {
     return token;
   }
 
-  async recoveryPass(token: string, password: string) {
-    /* `decode()` NO comprueba la firma: bastaba con enviar un JWT inventado
-       cuyo cuerpo dijera {"id": <cualquiera>} para cambiarle la contraseña a
-       cualquier usuario, incluido el SUPER_ADMIN. `verifyAsync` valida firma y
-       caducidad con la misma clave con la que se emitió en `generateToken`. */
-    let data: { id?: number };
-    try {
-      data = await this.jwtService.verifyAsync<{ id?: number }>(token);
-    } catch {
-      throw new UnauthorizedException(
-        'El enlace de recuperación no es válido o ha caducado.',
-      );
-    }
-
-    const userId = data?.id;
-    if (!userId) {
-      throw new UnauthorizedException(
-        'El enlace de recuperación no es válido o ha caducado.',
-      );
-    }
-
-    /* Sin `await` la excepción de `checkUser` se perdía en una promesa
-       rechazada y la actualización seguía adelante. */
-    await this.checkUser(userId);
-    const hashedPassword = await this.hashService.hash(password);
-    await this.prisma.userAuth.update({
-      where: { id: userId },
-      data: { password: hashedPassword },
-    });
-    return { message: 'Contraseña actualizada con éxito.' };
-  }
-
   async checkUserExistence(email: string, phone: string) {
     const userData = await this.prisma.userData.findFirst({
       where: { OR: [{ email }, { phone }] },

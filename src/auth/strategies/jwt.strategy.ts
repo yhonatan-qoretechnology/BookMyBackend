@@ -34,10 +34,18 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         cookieJwtExtractor,
       ]),
       ignoreExpiration: false,
+      // Solo el algoritmo con el que firmamos: nada de "none" ni de cambios.
+      algorithms: ['HS256'],
       secretOrKey: configService.get<string>('JWT_SECRET_KEY'),
     });
   }
 
+  /*
+   * Rol, empresa, sede y estado salen de la BD, no del token. Antes se
+   * confiaba en lo que traía el payload: un usuario deshabilitado, degradado
+   * o de una empresa bloqueada seguía entrando hasta que caducase su token
+   * (1 día), y quien tuviera la clave de firma elegía su propio rol.
+   */
   async validate(payload: any): Promise<AuthenticatedUser> {
     if (!payload || isNaN(payload.id))
       throw new UnauthorizedException('Invalid token');
@@ -51,18 +59,42 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       select: {
         id: true,
         email: true,
+        role: true,
+        state: true,
+        AdminProfile: {
+          select: {
+            empresaId: true,
+            sedeId: true,
+            empresa: { select: { bloqueada: true } },
+          },
+        },
+        profesionales: {
+          select: {
+            id: true,
+            sedeId: true,
+            sede: {
+              select: { empresaId: true, empresa: { select: { bloqueada: true } } },
+            },
+          },
+        },
       },
     });
 
-    if (!user) throw new UnauthorizedException('Invalid token');
+    if (!user || user.state !== 'enabled')
+      throw new UnauthorizedException('Invalid token');
+
+    const admin = user.AdminProfile;
+    const profesional = user.profesionales;
+    if (admin?.empresa?.bloqueada || profesional?.sede?.empresa?.bloqueada)
+      throw new UnauthorizedException('Empresa bloqueada');
 
     return {
       userId: user.id,
       email: user.email,
-      role: payload.role,
-      empresaId: payload.empresaId ?? null,
-      sedeId: payload.sedeId ?? null,
-      profesionalId: payload.profesionalId ?? null,
+      role: user.role,
+      empresaId: admin?.empresaId ?? profesional?.sede?.empresaId ?? null,
+      sedeId: admin?.sedeId ?? profesional?.sedeId ?? null,
+      profesionalId: profesional?.id ?? null,
     };
   }
 }

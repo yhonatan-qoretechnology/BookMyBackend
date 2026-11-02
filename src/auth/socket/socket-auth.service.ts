@@ -84,7 +84,7 @@ export class SocketAuthService {
         empresaId?: number | null;
         sedeId?: number | null;
         profesionalId?: number | null;
-      }>(token);
+      }>(token, { algorithms: ['HS256'] });
 
       if (!payload?.id) {
         this.logger.warn(`Socket ${client.id}: token sin id`);

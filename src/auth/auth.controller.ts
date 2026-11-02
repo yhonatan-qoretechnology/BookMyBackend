@@ -3,15 +3,15 @@ import {
   Body,
   Controller,
   Get,
+  GoneException,
   HttpCode,
-  HttpException,
   HttpStatus,
   Param,
   ParseIntPipe,
   Patch,
   Post,
-  Query,
   Req,
+  Query,
   Res,
   UploadedFile,
   UseGuards,
@@ -25,7 +25,6 @@ import {
   ApiBody,
   ApiConsumes,
   ApiForbiddenResponse,
-  ApiHeader,
   ApiNotFoundResponse,
   ApiOperation,
   ApiResponse,
@@ -53,7 +52,6 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RequestPasswordOtpDto } from './dto/request-password-otp.dto';
-import { UpdatePassDto } from './dto/update-pass.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ValidatePasswordOtpDto } from './dto/validate-password-otp.dto';
 import { ValidatePhoneDto } from './dto/validate-phone.dto';
@@ -285,32 +283,23 @@ export class AuthController {
     return this.passwordSetupService.complete(dto.token, dto.password);
   }
 
+  /*
+   * Aquí vivía POST /auth/reset-password, que cambiaba la contraseña con el
+   * JWT del header `x-reset-token`. Nada emitía un token de reseteo propio:
+   * el único que valía era el de SESIÓN, así que quien robase una sesión
+   * fijaba una contraseña nueva sin saber la actual y se quedaba la cuenta
+   * para siempre. La recuperación va por OTP
+   * (/auth/users/password/otp/request + /otp/change) y el alta por
+   * /auth/password-setup. Se deja respondiendo 410 para que un cliente viejo
+   * reciba un error claro en vez de un 404.
+   */
   @Public()
   @Post('reset-password')
-  @ApiOperation({ summary: 'Restablecer la contraseña con un token' })
-  @ApiHeader({
-    name: 'x-reset-token',
-    description:
-      'Token recibido por correo electrónico para resetear contraseña',
-    required: true,
-  })
-  @ApiBody({ type: UpdatePassDto })
-  async resetPassword(@Req() req: Request, @Body() body: UpdatePassDto) {
-    const token = req.headers['x-reset-token'] as string;
-
-    if (!token) {
-      throw new HttpException(
-        'Token de reseteo no encontrado en el header',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    // La longitud y la complejidad las valida ya `UpdatePassDto` con la
-    // política común, así que aquí no se vuelve a comprobar a mano (aquel
-    // `length < 6` contradecía al resto de la aplicación).
-    const { newPassword } = body;
-
-    return this.authService.recoveryPass(token, newPassword);
+  @ApiOperation({ summary: 'Retirado: usar la recuperación por OTP' })
+  resetPassword() {
+    throw new GoneException(
+      'Este método ya no existe. Recupera la contraseña con el código por correo.',
+    );
   }
   /*
     //GET
