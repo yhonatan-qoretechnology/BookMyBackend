@@ -144,7 +144,18 @@ export class AccessControlService {
           'No puede gestionar profesionales fuera de su sede.',
         );
       }
+      return;
     }
+
+    /* Antes los demás roles caían al final y pasaban: cualquier cliente
+       borraba la disponibilidad de profesionales de cualquier negocio. */
+    if (user.role === Role.EMPLOYEE && user.profesionalId === profesional.id) {
+      return;
+    }
+
+    throw new ForbiddenException(
+      'No puede gestionar profesionales que no son suyos.',
+    );
   }
 
   /**

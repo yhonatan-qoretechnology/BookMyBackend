@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Body,
   Controller,
-  ForbiddenException,
   Get,
   HttpCode,
   HttpException,
@@ -104,24 +103,12 @@ export class AuthController {
     private readonly biometricService: BiometricService,
   ) {}
 
-  /** Solo el propio usuario o un administrador pueden tocar una cuenta. */
+  /** El propio usuario, o un administrador con ese usuario en su alcance. */
   private assertCanActOnUser(
     actor: AuthenticatedUser | undefined,
     targetUserId: number,
   ) {
-    if (!actor) {
-      throw new ForbiddenException(
-        'No se pudo recuperar el usuario autenticado.',
-      );
-    }
-
-    const isAdmin = (ADMIN_ROLES as readonly Role[]).includes(actor.role);
-
-    if (!isAdmin && actor.userId !== targetUserId) {
-      throw new ForbiddenException(
-        'No puedes acceder a los datos de otro usuario.',
-      );
-    }
+    return this.authService.assertCanActOnUser(actor, targetUserId);
   }
 
   @Get('users')
@@ -142,7 +129,7 @@ export class AuthController {
     @Param('id', ParseIntPipe) id: number,
     @AuthUser() user: AuthenticatedUser,
   ) {
-    this.assertCanActOnUser(user, id);
+    await this.assertCanActOnUser(user, id);
     return this.authService.findUserById(id, user);
   }
 
@@ -360,7 +347,7 @@ export class AuthController {
     @Body() dto: UpdateUserDto,
     @AuthUser() actor: AuthenticatedUser,
   ) {
-    this.assertCanActOnUser(actor, id);
+    await this.assertCanActOnUser(actor, id);
     return this.authService.updateUserProfile(id, dto);
   }
 
@@ -395,7 +382,7 @@ export class AuthController {
     @AuthUser() actor: AuthenticatedUser,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    this.assertCanActOnUser(actor, id);
+    await this.assertCanActOnUser(actor, id);
 
     if (!file) {
       throw new BadRequestException('Debe adjuntar una imagen.');
@@ -462,7 +449,7 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
     @AuthUser() actor: AuthenticatedUser,
   ) {
-    this.assertCanActOnUser(actor, id);
+    await this.assertCanActOnUser(actor, id);
     return this.authService.changePasswordWithCurrent(id, dto);
   }
 
@@ -483,7 +470,9 @@ export class AuthController {
   async changePasswordById(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ChangePasswordByAdminDto,
+    @AuthUser() actor: AuthenticatedUser,
   ) {
+    await this.assertCanActOnUser(actor, id);
     return this.authService.changePasswordById(id, dto);
   }
 

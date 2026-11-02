@@ -1,5 +1,8 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Role } from '@prisma/client';
+import { Roles } from '../../auth/common/decorators/roles.decorator';
 import { SendInvoiceDto } from './dto/send-invoice.dto';
 import { MailService } from './mail.service';
 
@@ -23,7 +26,14 @@ export class EmailController {
 
   // enviar pdf
 
+  /* Bastaba cualquier sesión, incluida la de un cliente recién registrado,
+     para mandar a cualquier correo una "Factura BookMy" con importes
+     inventados (phishing desde nuestro dominio), y cada llamada lanza
+     Puppeteer. Lo usa el panel: queda para administradores y con tope. */
   @Post('send-invoice')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({
     summary: 'Enviar factura PDF',
   })

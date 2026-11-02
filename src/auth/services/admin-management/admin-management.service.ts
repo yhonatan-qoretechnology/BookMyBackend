@@ -187,11 +187,13 @@ export class AdminManagementService {
 
     this.ensureAdminScopeAccess(target.AdminProfile, user);
 
+    // Nadie cambia su propio rol: era la vía para ascenderse a sí mismo.
     if (
-      user.role === Role.COMPANY_ADMIN &&
-      target.role === Role.COMPANY_ADMIN
+      dto.role !== undefined &&
+      dto.role !== target.role &&
+      user.userId === target.id
     ) {
-      // permitido (mismo alcance por empresa) - no hacer nada extra
+      throw new ForbiddenException('No puedes cambiar tu propio rol.');
     }
 
     const userDataUpdate: Prisma.UserDataUpdateInput = {};
@@ -325,6 +327,13 @@ export class AdminManagementService {
 
     if (!empresa) {
       throw new NotFoundException(`La empresa con ID ${empresaId} no existe.`);
+    }
+
+    // Un COMPANY_ADMIN solo crea administradores en su propia empresa.
+    if (user?.role !== Role.SUPER_ADMIN && user?.empresaId !== empresaId) {
+      throw new ForbiddenException(
+        'No puedes crear administradores en otra empresa.',
+      );
     }
 
     return this.createAdmin({ dto, role: Role.COMPANY_ADMIN, empresaId });

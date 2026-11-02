@@ -35,11 +35,31 @@ async function bootstrap() {
   try {
     app.useStaticAssets(join(process.cwd(), 'uploads'), {
       prefix: '/uploads/',
+      /* Se sirven desde el mismo origen que la API: un HTML o SVG subido
+         ejecutaría JS con la cookie de sesión de quien lo abra. nosniff y la
+         CSP sandbox lo dejan en archivo inerte. */
+      setHeaders: (res) => {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      },
     });
     console.log('✅ 2. Static assets configurados');
   } catch (e) {
     console.error('❌ Error en static assets:', e.message);
   }
+
+  /* Ningún FileInterceptor fija `limits`, y el registro con foto es público:
+     sin tope, cualquiera llenaba el disco. 25 MB cubre fotos, PDF y audios. */
+  const MAX_SUBIDA_BYTES = 25 * 1024 * 1024;
+  app.use((req, res, next) => {
+    const tipo = req.headers['content-type'] ?? '';
+    const largo = Number(req.headers['content-length'] ?? 0);
+    if (tipo.startsWith('multipart/') && largo > MAX_SUBIDA_BYTES) {
+      res.status(413).json({ statusCode: 413, message: 'Archivo demasiado grande.' });
+      return;
+    }
+    next();
+  });
 
   // Cookie parser
   try {

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { asegurarArchivoSeguro } from './archivo-seguro';
 
 @Injectable()
 export class SftpStorageService {
@@ -160,6 +161,13 @@ export class SftpStorageService {
     );
     const remoteFullPath = this.getRemotePathFromRelative(remoteRelativePath);
     const remoteDir = path.posix.dirname(remoteFullPath);
+
+    try {
+      asegurarArchivoSeguro(params.localPath, remoteRelativePath);
+    } catch (error) {
+      fs.unlink(params.localPath, () => undefined);
+      throw error;
+    }
 
     const client = await this.createClient();
     try {

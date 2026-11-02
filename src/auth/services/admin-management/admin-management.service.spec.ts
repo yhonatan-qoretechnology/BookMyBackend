@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { AdminManagementService } from './admin-management.service';
 
@@ -57,15 +61,19 @@ describe('AdminManagementService', () => {
       prismaMock.empresa.findUnique.mockResolvedValue({ id: 1 });
       prismaMock.users.create.mockResolvedValue({ id: 99 });
 
-      await service.createCompanyAdmin(1, {
-        email: 'admin@corp.com',
-        password: 'Admin123$',
-        phone: '+123456789',
-        firstName: 'John',
-        lastName: 'Doe',
-        countryId: 1,
-        role: Role.COMPANY_ADMIN,
-      } as any);
+      await service.createCompanyAdmin(
+        1,
+        {
+          email: 'admin@corp.com',
+          password: 'Admin123$',
+          phone: '+123456789',
+          firstName: 'John',
+          lastName: 'Doe',
+          countryId: 1,
+          role: Role.COMPANY_ADMIN,
+        } as any,
+        { userId: 1, email: 'su@corp.com', role: Role.SUPER_ADMIN },
+      );
 
       expect(prismaMock.users.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -74,6 +82,32 @@ describe('AdminManagementService', () => {
           }),
         }),
       );
+    });
+
+    it('debería impedir que un COMPANY_ADMIN cree admins en otra empresa', async () => {
+      prismaMock.empresa.findUnique.mockResolvedValue({ id: 2 });
+
+      await expect(
+        service.createCompanyAdmin(
+          2,
+          {
+            email: 'intruso@corp.com',
+            password: 'Admin123$',
+            phone: '+123456789',
+            firstName: 'John',
+            lastName: 'Doe',
+            countryId: 1,
+            role: Role.COMPANY_ADMIN,
+          } as any,
+          {
+            userId: 5,
+            email: 'admin@corp.com',
+            role: Role.COMPANY_ADMIN,
+            empresaId: 1,
+          },
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prismaMock.users.create).not.toHaveBeenCalled();
     });
   });
 

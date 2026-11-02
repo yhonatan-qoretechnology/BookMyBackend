@@ -8,6 +8,7 @@ import * as Joi from 'joi';
 import { AssistantModule } from './assistant/assistant.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
 import { ChatModule } from './chat/chat.module';
 import { AppointmentModule } from './data/appointment/appointment.module';
 import { CategoryModule } from './data/category/category.module';
@@ -197,6 +198,11 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
        olvidaba: quedaron 123 endpoints sin autenticar, 73 de ellos mutantes.
        Con esto, olvidarse significa quedar protegido, no expuesto. */
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    /* Y detrás, el de roles: un @Roles() sin RolesGuard en su controller no
+       comprobaba nada (pasó en service-sede-profesional y en
+       disponibilidad-profesional, abiertos a cualquier cliente). Va después
+       del JWT para tener ya req.user; sin @Roles() deja pasar. */
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

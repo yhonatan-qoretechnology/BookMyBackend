@@ -3,6 +3,7 @@ import { ClientState, Role } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -68,7 +69,9 @@ export class UpdateAdminUserDto {
     enum: [Role.COMPANY_ADMIN, Role.BRANCH_ADMIN],
     description: 'Rol del administrador',
   })
+  /* Con IsEnum(Role) se aceptaba SUPER_ADMIN y cualquier COMPANY_ADMIN podía
+     ascenderse a sí mismo. Aquí solo caben los dos roles de administrador. */
   @IsOptional()
-  @IsEnum(Role)
+  @IsIn([Role.COMPANY_ADMIN, Role.BRANCH_ADMIN])
   role?: Role;
 }

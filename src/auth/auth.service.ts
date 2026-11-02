@@ -803,7 +803,77 @@ export class AuthService {
       };
     }
 
-    return undefined;
+    /* Antes devolvía undefined, que para Prisma es "sin filtro": un admin
+       sin empresa o sede, o cualquier otro rol, veía a todos los usuarios. */
+    return { id: user.userId };
+  }
+
+  /**
+   * ¿Puede `actor` leer o modificar la cuenta `targetUserId`?
+   *
+   * Antes bastaba con tener un rol de administrador, sin mirar a quién: un
+   * COMPANY_ADMIN recién registrado fijaba la contraseña del SUPER_ADMIN con
+   * PATCH /auth/users/1/password/direct. Ahora:
+   *  - cada uno puede consigo mismo;
+   *  - el SUPER_ADMIN, con todos;
+   *  - un admin de empresa o sede, solo con sus clientes (han reservado allí)
+   *    y con su gente de rango inferior. Nunca con un SUPER_ADMIN ni con un
+   *    admin de otra empresa que haya reservado en la suya.
+   */
+  async assertCanActOnUser(
+    actor: AuthenticatedUser | undefined,
+    targetUserId: number,
+  ): Promise<void> {
+    if (!actor) {
+      throw new ForbiddenException(
+        'No se pudo recuperar el usuario autenticado.',
+      );
+    }
+
+    if (actor.userId === targetUserId || actor.role === Role.SUPER_ADMIN) {
+      return;
+    }
+
+    const rangoInferior: Role[] =
+      actor.role === Role.COMPANY_ADMIN
+        ? [Role.BRANCH_ADMIN, Role.EMPLOYEE]
+        : actor.role === Role.BRANCH_ADMIN
+          ? [Role.EMPLOYEE]
+          : [];
+
+    const permitido =
+      (actor.role === Role.COMPANY_ADMIN && actor.empresaId) ||
+      (actor.role === Role.BRANCH_ADMIN && actor.sedeId)
+        ? await this.prisma.users.count({
+            where: {
+              id: targetUserId,
+              OR: [
+                {
+                  role: Role.CLIENT,
+                  Appointment: {
+                    some:
+                      actor.role === Role.COMPANY_ADMIN
+                        ? { sede: { empresaId: actor.empresaId! } }
+                        : { sedeId: actor.sedeId! },
+                  },
+                },
+                {
+                  role: { in: rangoInferior },
+                  AdminProfile:
+                    actor.role === Role.COMPANY_ADMIN
+                      ? { empresaId: actor.empresaId! }
+                      : { sedeId: actor.sedeId! },
+                },
+              ],
+            },
+          })
+        : 0;
+
+    if (!permitido) {
+      throw new ForbiddenException(
+        'No puedes acceder a los datos de otro usuario.',
+      );
+    }
   }
 
   async findAllUsers(user?: AuthenticatedUser) {
