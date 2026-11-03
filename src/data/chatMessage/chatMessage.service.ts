@@ -49,11 +49,15 @@ export class ChatMessageService {
    * @returns User information.
    */
   /**
-   * Busca con quién chatear a partir de un correo COMPLETO, sea de quien
-   * sea: un cliente, un especialista, el administrador de una sede o el de
-   * una empresa (su correo de acceso) o el correo de la propia empresa,
-   * que lleva a su administrador. Las sedes no tienen correo propio: el
-   * suyo es el de su administrador.
+   * Busca con quién chatear a partir de un correo COMPLETO, en todos los
+   * sitios donde la base guarda un correo de persona, por este orden:
+   *  1. el de acceso de cualquier usuario (cliente, especialista,
+   *     administrador de sede o de empresa);
+   *  2. el de sus datos personales (UserData), por si no coincide;
+   *  3. el correo real de un especialista (Profesional.emailPersonal: su
+   *     correo de acceso es sintético);
+   *  4. el de una empresa, que lleva a su administrador.
+   * Las sedes no tienen correo propio: el suyo es el de su administrador.
    *
    * Es exacta a propósito: así nadie puede recorrer los usuarios de la
    * plataforma a base de búsquedas parciales.
@@ -91,11 +95,28 @@ export class ChatMessageService {
       },
     } as const;
 
+    const igual = { equals: email, mode: 'insensitive' as const };
+
     const usuario = await this.prisma.users.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
+      where: {
+        OR: [{ email: igual }, { UserData: { email: igual } }],
+      },
       select,
     });
     if (usuario) return usuario;
+
+    /* Correo real de un especialista */
+    const profesional = await this.prisma.profesional.findFirst({
+      where: { emailPersonal: igual, user_id: { not: null } },
+      select: { user_id: true },
+    });
+    if (profesional?.user_id) {
+      const especialista = await this.prisma.users.findUnique({
+        where: { id: profesional.user_id },
+        select,
+      });
+      if (especialista) return especialista;
+    }
 
     /* El correo de una empresa: se habla con su administrador */
     const empresa = await this.prisma.empresa.findFirst({
