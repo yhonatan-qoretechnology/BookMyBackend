@@ -194,6 +194,28 @@ export class PaymentService {
       return payment;
     }
 
+    /* Tarjeta registrada por el negocio (o por Bookmy) desde el panel: es
+       un cobro con su propio datáfono, en el local. El dinero ya entró y
+       no pasa por Stripe, así que queda pagado. Antes caía en el bloque de
+       abajo y la factura salía FAILED. */
+    if (
+      dto.method === PaymentMethod.CARD &&
+      (user.role === Role.SUPER_ADMIN || this.esAdminDeNegocio(user))
+    ) {
+      return this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: PaymentStatus.PAID,
+          paidAmount: payment.totalAmount,
+          bankResponse: {
+            method: 'DATAFONO',
+            registradoPor: user.userId,
+            registradoEn: new Date().toISOString(),
+          },
+        },
+      });
+    }
+
     /* Sin pasarela, el "banco" es simulateBankResponse, que aprueba todo:
        la reserva quedaba pagada sin cobrar nada. Fuera de desarrollo, la
        tarjeta va solo por Stripe (pagoOnline). */
