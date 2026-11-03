@@ -48,12 +48,20 @@ export class ChatMessageService {
    * @param query Search user DTO.
    * @returns User information.
    */
+  /**
+   * Busca a una persona por su correo COMPLETO para abrir un chat con ella,
+   * sea del negocio que sea. Es exacta a propósito: así nadie puede
+   * recorrer los usuarios de la plataforma a base de búsquedas parciales.
+   */
   async findUserByEmail(query: SearchUserDto) {
-    const { email } = query;
+    const email = query.email?.trim().toLowerCase();
+    if (!email) {
+      throw new BadRequestException('Indica el correo de la persona.');
+    }
 
-    return this.prisma.users.findUnique({
+    return this.prisma.users.findFirst({
       where: {
-        email,
+        email: { equals: email, mode: 'insensitive' },
       },
       select: {
         id: true,
@@ -76,10 +84,11 @@ export class ChatMessageService {
             },
           },
         },
+        /* Sin el teléfono: basta el correo para dar con alguien, y no
+           tiene por qué ver su número quien solo quiere escribirle. */
         UserData: {
           select: {
             name: true,
-            phone: true,
           },
         },
       },

@@ -12,6 +12,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { AuthUser } from 'src/auth/common/decorators/auth-user.decorator';
@@ -37,8 +38,10 @@ export class ChatMessageController {
    * Search users for chat contacts.
    */
   @Get('users')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @ApiOperation({
-    summary: 'Search users available for chat',
+    summary: 'Find a user by their exact email to start a chat',
   })
   async findUserByEmail(@Query() query: SearchUserDto) {
     return this.chatMessageService.findUserByEmail(query);
