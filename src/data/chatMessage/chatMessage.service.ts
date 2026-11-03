@@ -49,9 +49,14 @@ export class ChatMessageService {
    * @returns User information.
    */
   /**
-   * Busca a una persona por su correo COMPLETO para abrir un chat con ella,
-   * sea del negocio que sea. Es exacta a propósito: así nadie puede
-   * recorrer los usuarios de la plataforma a base de búsquedas parciales.
+   * Busca con quién chatear a partir de un correo COMPLETO, sea de quien
+   * sea: un cliente, un especialista, el administrador de una sede o el de
+   * una empresa (su correo de acceso) o el correo de la propia empresa,
+   * que lleva a su administrador. Las sedes no tienen correo propio: el
+   * suyo es el de su administrador.
+   *
+   * Es exacta a propósito: así nadie puede recorrer los usuarios de la
+   * plataforma a base de búsquedas parciales.
    */
   async findUserByEmail(query: SearchUserDto) {
     const email = query.email?.trim().toLowerCase();
@@ -59,40 +64,57 @@ export class ChatMessageService {
       throw new BadRequestException('Indica el correo de la persona.');
     }
 
-    return this.prisma.users.findFirst({
-      where: {
-        email: { equals: email, mode: 'insensitive' },
-      },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        fotoPerfil: true,
-
-        UserStatus: {
-          select: {
-            id: true,
-            code: true,
-
-            UserStatusTranslation: {
-              where: {
-                language: 'es',
-              },
-              select: {
-                name: true,
-              },
-            },
-          },
-        },
-        /* Sin el teléfono: basta el correo para dar con alguien, y no
-           tiene por qué ver su número quien solo quiere escribirle. */
-        UserData: {
-          select: {
-            name: true,
+    const select = {
+      id: true,
+      email: true,
+      role: true,
+      fotoPerfil: true,
+      UserStatus: {
+        select: {
+          id: true,
+          code: true,
+          UserStatusTranslation: {
+            where: { language: 'es' },
+            select: { name: true },
           },
         },
       },
+      /* Sin el teléfono: basta el correo para dar con alguien, y no
+         tiene por qué ver su número quien solo quiere escribirle. */
+      UserData: { select: { name: true } },
+      /* De qué empresa o sede es, para enseñarlo junto al nombre */
+      AdminProfile: {
+        select: {
+          empresa: { select: { nombre: true } },
+          sede: { select: { nombre: true } },
+        },
+      },
+    } as const;
+
+    const usuario = await this.prisma.users.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select,
     });
+    if (usuario) return usuario;
+
+    /* El correo de una empresa: se habla con su administrador */
+    const empresa = await this.prisma.empresa.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true, nombre: true },
+    });
+    if (!empresa) return null;
+
+    const admin = await this.prisma.adminProfile.findFirst({
+      where: { empresaId: empresa.id, sedeId: null },
+      select: { userId: true },
+    });
+    if (!admin) return null;
+
+    const responsable = await this.prisma.users.findUnique({
+      where: { id: admin.userId },
+      select,
+    });
+    return responsable ? { ...responsable, empresaBuscada: empresa.nombre } : null;
   }
 
   /**
