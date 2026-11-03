@@ -104,10 +104,18 @@ export class ChatMessageService {
     });
     if (!empresa) return null;
 
-    const admin = await this.prisma.adminProfile.findFirst({
-      where: { empresaId: empresa.id, sedeId: null },
-      select: { userId: true },
-    });
+    /* Su administrador de empresa; si no tiene, el de alguna de sus sedes
+       (hay empresas cuyo único administrador quedó asignado a una sede) */
+    const admin =
+      (await this.prisma.adminProfile.findFirst({
+        where: { empresaId: empresa.id, user: { role: Role.COMPANY_ADMIN } },
+        select: { userId: true },
+      })) ??
+      (await this.prisma.adminProfile.findFirst({
+        where: { OR: [{ empresaId: empresa.id }, { sede: { empresaId: empresa.id } }] },
+        orderBy: { id: 'asc' },
+        select: { userId: true },
+      }));
     if (!admin) return null;
 
     const responsable = await this.prisma.users.findUnique({
