@@ -25,6 +25,7 @@ import {
 import { chatAudioFileFilter, chatFileFilter } from './chat-file.filter';
 import { ChatMessageService } from './chatMessage.service';
 import { ChatGateway } from './chat.gateway';
+import { ChatGatewayService } from './chat.gateway.service';
 import { CreateChatContactDto } from './dto/create-chat-contact.dto';
 import { MarkMessageReadDto } from './dto/mark-message-read.dto';
 import { SearchUserDto } from './dto/search-chat-user.dto';
@@ -36,6 +37,7 @@ export class ChatMessageController {
   constructor(
     private readonly chatMessageService: ChatMessageService,
     private readonly chatGateway: ChatGateway,
+    private readonly chatGatewayService: ChatGatewayService,
   ) {}
 
   /**
@@ -90,7 +92,12 @@ export class ChatMessageController {
     @Param('userId', ParseIntPipe) userId: number,
     @AuthUser() user: AuthenticatedUser,
   ) {
-    return this.chatMessageService.getContacts(userId, user);
+    const contactos = await this.chatMessageService.getContacts(userId, user);
+    /* Presencia: quién tiene ahora mismo el chat abierto */
+    return contactos.map((c) => ({
+      ...c,
+      online: this.chatGatewayService.isOnline(c.contact_user_id),
+    }));
   }
 
   //enviar mensajes de chat

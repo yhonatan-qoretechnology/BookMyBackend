@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -48,4 +49,15 @@ export class CreateGastoDto {
   @IsOptional()
   @IsString()
   ticketUrl?: string;
+
+  @ApiPropertyOptional({ example: 'Distribuciones Belleza SL', description: 'A quién se le compró' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  proveedor?: string;
+
+  @ApiPropertyOptional({ example: 'PAGADO', enum: ['PAGADO', 'PENDIENTE'] })
+  @IsOptional()
+  @IsIn(['PAGADO', 'PENDIENTE'])
+  estado?: 'PAGADO' | 'PENDIENTE';
 }

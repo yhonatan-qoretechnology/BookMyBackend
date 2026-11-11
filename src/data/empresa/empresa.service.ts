@@ -18,8 +18,8 @@ export class EmpresaService {
     private readonly sftpStorage: SftpStorageService,
   ) {}
 
-  private moveLogoToFinalPath(file: Express.Multer.File) {
-    const uploadDirAbs = path.join(process.cwd(), 'uploads', 'logos');
+  private moveLogoToFinalPath(file: Express.Multer.File, carpeta = 'logos') {
+    const uploadDirAbs = path.join(process.cwd(), 'uploads', carpeta);
     if (!fs.existsSync(uploadDirAbs)) {
       fs.mkdirSync(uploadDirAbs, { recursive: true });
     }
@@ -36,14 +36,14 @@ export class EmpresaService {
       fs.renameSync(tempAbsPath, finalAbsPath);
     }
 
-    return path.join('uploads', 'logos', finalFileName).replace(/\\/g, '/');
+    return path.join('uploads', carpeta, finalFileName).replace(/\\/g, '/');
   }
 
-  private async storeLogo(file: Express.Multer.File) {
+  private async storeLogo(file: Express.Multer.File, carpeta = 'logos') {
     const ext = path.extname(file.originalname) || '';
     const finalFileName = `${file.filename}${ext}`;
     const relativePath = path
-      .join('uploads', 'logos', finalFileName)
+      .join('uploads', carpeta, finalFileName)
       .replace(/\\/g, '/');
 
     if (this.sftpStorage.isEnabled()) {
@@ -55,7 +55,7 @@ export class EmpresaService {
       return relativePath;
     }
 
-    return this.moveLogoToFinalPath(file);
+    return this.moveLogoToFinalPath(file, carpeta);
   }
 
   private safeDeleteIfExists(filePath: string) {
@@ -262,6 +262,41 @@ export class EmpresaService {
         bloqueadaMotivo: null,
       },
     });
+  }
+
+  /** Portada del negocio (uploads/banners). Sustituye y borra la anterior. */
+  async updateBanner(id: number, file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Debes adjuntar una imagen de portada.');
+    }
+    const empresa = await this.prisma.empresa.findUnique({ where: { id } });
+    if (!empresa) {
+      this.safeDeleteIfExists(file.path);
+      throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
+    }
+    const nueva = await this.storeLogo(file, 'banners');
+    try {
+      const updated = await this.prisma.empresa.update({
+        where: { id },
+        data: { banner: nueva },
+      });
+      if (empresa.banner && empresa.banner !== nueva) {
+        await this.safeDeleteRemoteOrLocal(empresa.banner);
+      }
+      return updated;
+    } catch (error) {
+      await this.safeDeleteRemoteOrLocal(nueva);
+      throw error;
+    }
+  }
+
+  /** Quita la portada. */
+  async removeBanner(id: number) {
+    const empresa = await this.prisma.empresa.findUnique({ where: { id } });
+    if (!empresa) throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
+    const updated = await this.prisma.empresa.update({ where: { id }, data: { banner: null } });
+    if (empresa.banner) await this.safeDeleteRemoteOrLocal(empresa.banner);
+    return updated;
   }
 
   async updateLogo(id: number, file: Express.Multer.File) {

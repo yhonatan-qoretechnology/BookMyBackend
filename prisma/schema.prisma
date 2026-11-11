@@ -345,6 +345,8 @@ model Empresa {
    */
   nit              String?          @map("nit")
   logo             String?          @map("logo_url")
+  /// Portada del negocio (imagen ancha) que se ve en la app
+  banner           String?          @map("banner_url")
   descripcion      String?          @map("descripcion")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
@@ -863,6 +865,10 @@ model Gasto {
   total       Float
   fecha       DateTime
   ticketUrl   String?
+  /// A quién se le compró (opcional)
+  proveedor   String?        @db.VarChar(160)
+  /// PAGADO | PENDIENTE (si aún se le debe al proveedor)
+  estado      String         @default("PAGADO") @db.VarChar(20)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   categoriaId Int

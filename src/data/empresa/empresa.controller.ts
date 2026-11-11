@@ -488,4 +488,32 @@ export class EmpresaController {
   ) {
     return this.empresaService.updateLogo(id, file);
   }
+
+  @Patch(':id/banner')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @UseGuards(EmpresaAccessGuard)
+  @ApiOperation({ summary: 'Actualizar la portada (banner) de una empresa' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { banner: { type: 'string', format: 'binary' } },
+      required: ['banner'],
+    },
+  })
+  @UseInterceptors(FileInterceptor('banner', { dest: './uploads/banners' }))
+  async updateBanner(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.empresaService.updateBanner(id, file);
+  }
+
+  @Delete(':id/banner')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @UseGuards(EmpresaAccessGuard)
+  @ApiOperation({ summary: 'Quitar la portada (banner) de una empresa' })
+  async removeBanner(@Param('id', ParseIntPipe) id: number) {
+    return this.empresaService.removeBanner(id);
+  }
 }

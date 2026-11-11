@@ -4,7 +4,8 @@ import { ConnectedUser } from './interface/connected-user.interface';
 /**
  * Chat gateway service.
  *
- * Stores connected users in memory.
+ * Stores connected users in memory. Un usuario puede tener varias
+ * pestañas (varios sockets): sigue «en línea» hasta que cierra la última.
  */
 @Injectable()
 export class ChatGatewayService {
@@ -12,6 +13,8 @@ export class ChatGatewayService {
    * Connected users.
    */
   private readonly connectedUsers = new Map<number, ConnectedUser>();
+  /** userId → sockets abiertos */
+  private readonly sockets = new Map<number, Set<string>>();
 
   /**
    * Register a connected user.
@@ -20,6 +23,9 @@ export class ChatGatewayService {
    */
   addUser(user: ConnectedUser): void {
     this.connectedUsers.set(user.userId, user);
+    const abiertos = this.sockets.get(user.userId) ?? new Set<string>();
+    abiertos.add(user.socketId);
+    this.sockets.set(user.userId, abiertos);
   }
 
   /**
@@ -27,13 +33,22 @@ export class ChatGatewayService {
    *
    * @param socketId Socket identifier.
    */
-  removeUser(socketId: string): void {
-    for (const [userId, user] of this.connectedUsers.entries()) {
-      if (user.socketId === socketId) {
+  removeUser(socketId: string): number | null {
+    for (const [userId, abiertos] of this.sockets.entries()) {
+      if (!abiertos.delete(socketId)) continue;
+      if (abiertos.size === 0) {
+        this.sockets.delete(userId);
         this.connectedUsers.delete(userId);
-        break;
+      } else {
+        /* Los avisos siguen llegando a una pestaña que sigue abierta */
+        const user = this.connectedUsers.get(userId);
+        if (user && user.socketId === socketId) {
+          this.connectedUsers.set(userId, { ...user, socketId: [...abiertos][0] });
+        }
       }
+      return userId;
     }
+    return null;
   }
 
   /**
@@ -62,6 +77,6 @@ export class ChatGatewayService {
    * @returns True if connected.
    */
   isOnline(userId: number): boolean {
-    return this.connectedUsers.has(userId);
+    return (this.sockets.get(userId)?.size ?? 0) > 0;
   }
 }

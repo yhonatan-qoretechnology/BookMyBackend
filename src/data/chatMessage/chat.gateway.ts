@@ -74,7 +74,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * Client disconnected.
    */
   handleDisconnect(client: Socket) {
-    this.gatewayService.removeUser(client.id);
+    const userId = this.gatewayService.removeUser(client.id);
+    /* Sigue conectado si le queda otra pestaña abierta */
+    if (userId != null && !this.gatewayService.isOnline(userId)) {
+      this.server.emit(CHAT_EVENTS.USER_OFFLINE, { userId });
+    }
 
     this.logger.log(`Socket disconnected: ${client.id}`);
   }
@@ -91,7 +95,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = auth?.userId ?? dto.userId;
     const email = auth?.email || dto.email;
 
+    const yaEstaba = this.gatewayService.isOnline(userId);
     this.gatewayService.addUser({ socketId: client.id, userId, email });
+    /* Presencia: el resto ve «En línea» al momento */
+    if (!yaEstaba) client.broadcast.emit(CHAT_EVENTS.USER_ONLINE, { userId });
 
     this.logger.log(`User ${userId} connected with socket ${client.id}`);
 

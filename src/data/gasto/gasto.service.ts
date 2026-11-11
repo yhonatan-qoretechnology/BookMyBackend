@@ -120,6 +120,8 @@ export class GastoService {
           categoriaId: dto.categoriaId,
           sedeId: dto.sedeId,
           ticketUrl: dto.ticketUrl,
+          proveedor: dto.proveedor?.trim() || null,
+          ...(dto.estado && { estado: dto.estado }),
           userId: user.userId,
         },
         include: this.gastoInclude(),
@@ -162,6 +164,8 @@ export class GastoService {
             categoriaId: dto.categoriaId,
           }),
           ...(dto.ticketUrl !== undefined && { ticketUrl: dto.ticketUrl }),
+          ...(dto.proveedor !== undefined && { proveedor: dto.proveedor.trim() || null }),
+          ...(dto.estado !== undefined && { estado: dto.estado }),
         },
         include: this.gastoInclude(),
       });
