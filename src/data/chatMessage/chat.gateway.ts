@@ -185,4 +185,31 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       data: updatedMessage,
     };
   }
+
+  /**
+   * Avisa por socket de un mensaje guardado por REST (POST
+   * /ChatMessage/messages, que es como envían el panel y los adjuntos de
+   * la app). Sin esto, quien lo recibe solo lo veía al recargar o con el
+   * sondeo.
+   */
+  notificarMensaje(message: { sender_id: number; receiver_id: number }) {
+    for (const userId of [message.receiver_id, message.sender_id]) {
+      const conectado = this.gatewayService.getUser(userId);
+      if (conectado) {
+        this.server.to(conectado.socketId).emit(CHAT_EVENTS.RECEIVE_MESSAGE, message);
+      }
+    }
+  }
+
+  /** Avisa al remitente de que su mensaje se leyó (lectura por REST). */
+  notificarLeido(message: { id: number; sender_id: number; read_at: Date | null }, readerId: number) {
+    const remitente = this.gatewayService.getUser(message.sender_id);
+    if (remitente) {
+      this.server.to(remitente.socketId).emit(CHAT_EVENTS.MESSAGE_READ, {
+        chatId: message.id,
+        readerId,
+        readAt: message.read_at,
+      });
+    }
+  }
 }

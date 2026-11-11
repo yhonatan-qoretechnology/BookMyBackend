@@ -24,6 +24,7 @@ import {
 } from './chat-file.constants';
 import { chatAudioFileFilter, chatFileFilter } from './chat-file.filter';
 import { ChatMessageService } from './chatMessage.service';
+import { ChatGateway } from './chat.gateway';
 import { CreateChatContactDto } from './dto/create-chat-contact.dto';
 import { MarkMessageReadDto } from './dto/mark-message-read.dto';
 import { SearchUserDto } from './dto/search-chat-user.dto';
@@ -32,7 +33,10 @@ import { SendMessageDto } from './dto/send-message.dto';
 @ApiTags('ChatMessage')
 @Controller('ChatMessage')
 export class ChatMessageController {
-  constructor(private readonly chatMessageService: ChatMessageService) {}
+  constructor(
+    private readonly chatMessageService: ChatMessageService,
+    private readonly chatGateway: ChatGateway,
+  ) {}
 
   /**
    * Search users for chat contacts.
@@ -117,7 +121,9 @@ export class ChatMessageController {
     @Body() dto: SendMessageDto,
     @AuthUser() user: AuthenticatedUser,
   ) {
-    return this.chatMessageService.createMessage(dto, user);
+    const saved = await this.chatMessageService.createMessage(dto, user);
+    this.chatGateway.notificarMensaje(saved);
+    return saved;
   }
 
   @Post('messages/read')
@@ -129,7 +135,31 @@ export class ChatMessageController {
     @Body() dto: MarkMessageReadDto,
     @AuthUser() user: AuthenticatedUser,
   ) {
-    return this.chatMessageService.markMessageAsRead(dto, user);
+    const leido = await this.chatMessageService.markMessageAsRead(dto, user);
+    this.chatGateway.notificarLeido(leido, user.userId);
+    return leido;
+  }
+
+  /* El panel marca leída la conversación entera al abrirla. Antes mandaba
+     { userId, contactId } a messages/read, que exige el id de cada
+     mensaje, así que nunca se marcaba nada. */
+  @Post('conversations/:contactId/read')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Marcar como leídos los mensajes recibidos de un contacto',
+  })
+  async markConversationAsRead(
+    @Param('contactId', ParseIntPipe) contactId: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    const r = await this.chatMessageService.markConversationAsRead(contactId, user);
+    for (const id of r.ids) {
+      this.chatGateway.notificarLeido(
+        { id, sender_id: contactId, read_at: r.readAt ?? null },
+        user.userId,
+      );
+    }
+    return { count: r.count };
   }
 
   /**

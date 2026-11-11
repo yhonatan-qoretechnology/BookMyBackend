@@ -416,6 +416,26 @@ export class ChatMessageService {
   }
 
   /**
+   * Marca como leídos todos los mensajes que `contactId` le mandó a quien
+   * tiene la sesión. Es lo que hace el panel al abrir una conversación;
+   * devuelve los ids marcados para avisar al remitente.
+   */
+  async markConversationAsRead(contactId: number, user: AuthenticatedUser) {
+    const pendientes = await this.prisma.chat.findMany({
+      where: { sender_id: contactId, receiver_id: user.userId, is_read: false },
+      select: { id: true },
+    });
+    if (pendientes.length === 0) return { count: 0, ids: [] as number[] };
+    const ids = pendientes.map((m) => m.id);
+    const readAt = new Date();
+    await this.prisma.chat.updateMany({
+      where: { id: { in: ids } },
+      data: { is_read: true, read_at: readAt },
+    });
+    return { count: ids.length, ids, readAt };
+  }
+
+  /**
    * Move a chat attachment to its final storage location (SFTP or local
    * `uploads/<uploadDir>`) and return its public URL, applying image
    * compression when applicable. Shared by storeChatFile and
