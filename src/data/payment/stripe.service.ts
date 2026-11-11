@@ -43,8 +43,13 @@ export class StripeService {
   }
 
   /** Cliente de Stripe del usuario: ahí quedan guardadas sus tarjetas.
-      Se busca por metadata para no necesitar una columna nueva en Users. */
-  private async clienteDe(userId: number, email: string) {
+      Primero el id guardado en Users; si no hay, se busca por metadata
+      (clientes creados antes de la columna) y si no, se crea. */
+  private async clienteDe(userId: number, email: string, guardado?: string | null) {
+    if (guardado) {
+      const cliente = await this.stripe.customers.retrieve(guardado);
+      if (!cliente.deleted) return cliente;
+    }
     const encontrados = await this.stripe.customers.search({
       query: `metadata['bookmyUserId']:'${userId}'`,
       limit: 1,
@@ -68,8 +73,13 @@ export class StripeService {
     email: string;
     monto: number;
     intentExistente?: string | null;
+    customerIdGuardado?: string | null;
   }) {
-    const cliente = await this.clienteDe(params.userId, params.email);
+    const cliente = await this.clienteDe(
+      params.userId,
+      params.email,
+      params.customerIdGuardado,
+    );
 
     let intent: Stripe.PaymentIntent | null = null;
     if (params.intentExistente?.startsWith('pi_')) {
@@ -100,7 +110,25 @@ export class StripeService {
       );
     }
 
-    // La clave efímera deja a la app ver y guardar las tarjetas del cliente.
+    /* La sesión de cliente deja a la hoja de pago mostrar las tarjetas
+       guardadas y ofrecer "Guardar para futuras compras". Con la clave
+       efímera sola, las tarjetas se guardaban pero la hoja no las volvía a
+       mostrar (allow_redisplay quedaba "unspecified"). */
+    const sesion = await this.stripe.customerSessions.create({
+      customer: cliente.id,
+      components: {
+        mobile_payment_element: {
+          enabled: true,
+          features: {
+            payment_method_save: 'enabled',
+            payment_method_redisplay: 'enabled',
+            payment_method_remove: 'enabled',
+            payment_method_allow_redisplay_filters: ['always', 'limited', 'unspecified'],
+          },
+        },
+      },
+    });
+    // La clave efímera queda para las versiones de la app anteriores.
     const clave = await this.stripe.ephemeralKeys.create(
       { customer: cliente.id },
       { apiVersion: '2026-08-26.dahlia' },
@@ -110,12 +138,52 @@ export class StripeService {
       paymentIntentId: intent.id,
       clientSecret: intent.client_secret,
       customerId: cliente.id,
+      customerSessionClientSecret: sesion.client_secret,
       ephemeralKey: clave.secret,
     };
   }
 
+  /** El cobro con su cargo (tarjeta, recibo, resultado del banco). */
   obtenerCobro(paymentIntentId: string) {
-    return this.stripe.paymentIntents.retrieve(paymentIntentId);
+    return this.stripe.paymentIntents.retrieve(paymentIntentId, {
+      expand: ['latest_charge'],
+    });
+  }
+
+  /** Lo que conviene tener a mano ante una reclamación, sin ir a Stripe. */
+  resumenDelCobro(intent: Stripe.PaymentIntent) {
+    const cargo =
+      intent.latest_charge && typeof intent.latest_charge === 'object'
+        ? intent.latest_charge
+        : null;
+    const tarjeta = cargo?.payment_method_details?.card;
+    return {
+      pasarela: 'stripe',
+      paymentIntent: intent.id,
+      cargo: cargo?.id ?? (intent.latest_charge as string | null) ?? null,
+      cliente: typeof intent.customer === 'string' ? intent.customer : intent.customer?.id ?? null,
+      importe: intent.amount_received / 100,
+      moneda: intent.currency,
+      metodo: cargo?.payment_method_details?.type ?? null,
+      tarjeta: tarjeta
+        ? {
+            marca: tarjeta.brand,
+            ultimos4: tarjeta.last4,
+            caduca: `${tarjeta.exp_month}/${tarjeta.exp_year}`,
+            pais: tarjeta.country,
+            wallet: tarjeta.wallet?.type ?? null,
+          }
+        : null,
+      recibo: cargo?.receipt_url ?? null,
+      resultadoBanco: cargo?.outcome
+        ? {
+            estado: cargo.outcome.network_status,
+            motivo: cargo.outcome.reason,
+            riesgo: cargo.outcome.risk_level,
+          }
+        : null,
+      cobradoEn: new Date((cargo?.created ?? intent.created) * 1000).toISOString(),
+    };
   }
 
   /** Anula un cobro que el cliente abandonó. Best-effort. */

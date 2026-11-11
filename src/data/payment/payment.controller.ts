@@ -105,7 +105,7 @@ export class PaymentController {
   @ApiOperation({
     summary: 'Webhook de Stripe',
     description:
-      'Stripe avisa aquí de los cobros completados. Pública, pero con la firma verificada (STRIPE_WEBHOOK_SECRET).',
+      'Stripe avisa aquí de cobros, fallos, reembolsos y disputas. Pública, pero con la firma verificada (STRIPE_WEBHOOK_SECRET).',
   })
   stripeWebhook(
     @Req() req: RawBodyRequest<Request>,
@@ -118,7 +118,7 @@ export class PaymentController {
   @ApiOperation({
     summary: 'Preparar la hoja de pago de Stripe para un pago online',
     description:
-      'Devuelve clientSecret, customerId y ephemeralKey para la hoja de pago de la app.',
+      'Devuelve clientSecret, customerId y customerSessionClientSecret (tarjetas guardadas) para la hoja de pago de la app. ephemeralKey queda para versiones antiguas.',
   })
   prepararStripe(
     @Param('id', ParseIntPipe) id: number,
@@ -146,6 +146,19 @@ export class PaymentController {
     @AuthUser() user: AuthenticatedUser,
   ) {
     return this.paymentService.cancelarCobroStripe(id, user);
+  }
+
+  @Get(':id/eventos')
+  @ApiOperation({
+    summary: 'Historial de un pago',
+    description:
+      'Cada paso del pago (preparado, cobrado, fallido, reembolso, disputa, liquidación Wise...) con la respuesta completa de Stripe o Wise. Para reclamaciones. Solo Bookmy y el negocio del pago.',
+  })
+  eventos(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.eventosDelPago(id, user);
   }
 
   @Patch(':id/confirm')

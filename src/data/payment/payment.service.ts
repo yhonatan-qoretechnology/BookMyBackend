@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -16,6 +17,8 @@ import {
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { randomUUID } from 'crypto';
 import { firstValueFrom } from 'rxjs';
+// stripe es CommonJS (`export =`): ver stripe.service.ts.
+import Stripe = require('stripe');
 import { PrismaService } from 'src/prisma/prisma.service';
 import { WiseService } from '../wise/wise.service';
 import { StripeService } from './stripe.service';
@@ -40,8 +43,34 @@ type CardPaymentPayload = {
   cardBrand?: string;
 };
 
+/** Copia apta para el historial: sin client_secret ni otras claves. */
+function sinSecretos(datos: unknown): Prisma.InputJsonValue {
+  return JSON.parse(
+    JSON.stringify(datos, (clave, valor) => (/secret/i.test(clave) ? undefined : valor)),
+  );
+}
+
+/** Lo útil de un error de Stripe (tipo, código, motivo del banco). */
+function errorDeStripe(error: unknown) {
+  const e = error as { message?: string; type?: string; code?: string; decline_code?: string; statusCode?: number };
+  return {
+    mensaje: e.message,
+    tipo: e.type,
+    codigo: e.code,
+    motivoBanco: e.decline_code,
+    http: e.statusCode,
+  };
+}
+
+/** Stripe da a veces el id y a veces el objeto expandido. */
+function idDe(ref: string | { id: string } | null | undefined) {
+  return typeof ref === 'string' ? ref : ref?.id;
+}
+
 @Injectable()
 export class PaymentService {
+  private readonly logger = new Logger(PaymentService.name);
+
   constructor(
     private prisma: PrismaService,
     private httpService: HttpService,
@@ -191,6 +220,11 @@ export class PaymentService {
         throw new BadRequestException(
           'El pago online no está disponible en este momento.',
         );
+      await this.registrarEvento(payment.id, 'creado', 'app', {
+        importe: payment.totalAmount,
+        citaId: payment.appointmentId,
+        usuarioId: payment.userId,
+      });
       return payment;
     }
 
@@ -496,7 +530,7 @@ export class PaymentService {
   private async pagoOnlineDe(paymentId: number, user: AuthenticatedUser) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
-      include: { user: { select: { email: true } } },
+      include: { user: { select: { email: true, stripeCustomerId: true } } },
     });
     if (!payment) throw new NotFoundException('El pago no existe');
     if (user.role !== Role.SUPER_ADMIN && payment.userId !== user.userId)
@@ -512,19 +546,38 @@ export class PaymentService {
     if (payment.status !== PaymentStatus.PENDING)
       throw new BadRequestException('Este pago ya no está pendiente.');
 
-    const cobro = await this.stripeService.prepararCobro({
-      paymentId: payment.id,
-      appointmentId: payment.appointmentId,
-      userId: payment.userId,
-      email: payment.user.email,
-      monto: payment.totalAmount,
-      intentExistente: payment.transactionId,
-    });
+    let cobro: Awaited<ReturnType<StripeService['prepararCobro']>>;
+    try {
+      cobro = await this.stripeService.prepararCobro({
+        paymentId: payment.id,
+        appointmentId: payment.appointmentId,
+        userId: payment.userId,
+        email: payment.user.email,
+        monto: payment.totalAmount,
+        intentExistente: payment.transactionId,
+        customerIdGuardado: payment.user.stripeCustomerId,
+      });
+    } catch (error) {
+      await this.registrarEvento(payment.id, 'error_preparar', 'stripe', errorDeStripe(error));
+      throw error;
+    }
+
     if (payment.transactionId !== cobro.paymentIntentId)
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: { transactionId: cobro.paymentIntentId },
       });
+    // Así el próximo pago encuentra sus tarjetas guardadas al momento.
+    if (payment.user.stripeCustomerId !== cobro.customerId)
+      await this.prisma.users.update({
+        where: { id: payment.userId },
+        data: { stripeCustomerId: cobro.customerId },
+      });
+    await this.registrarEvento(payment.id, 'preparado', 'app', {
+      paymentIntent: cobro.paymentIntentId,
+      cliente: cobro.customerId,
+      reintento: payment.transactionId === cobro.paymentIntentId,
+    });
     return cobro;
   }
 
@@ -539,11 +592,16 @@ export class PaymentService {
     if (!payment.transactionId?.startsWith('pi_'))
       throw new BadRequestException('Este pago no tiene un cobro de Stripe.');
     const intent = await this.stripeService.obtenerCobro(payment.transactionId);
-    if (intent.status !== 'succeeded')
+    if (intent.status !== 'succeeded') {
+      await this.registrarEvento(payment.id, 'confirmacion_sin_cobro', 'app', {
+        estado: intent.status,
+        errorBanco: intent.last_payment_error ?? null,
+      });
       throw new BadRequestException(
         `El cobro aún no está completado (estado: ${intent.status}).`,
       );
-    return this.marcarCobradoPorStripe(intent);
+    }
+    return this.marcarCobradoPorStripe(payment.id, intent);
   }
 
   /** El cliente cerró la hoja sin pagar: se anula el cobro y la cita. */
@@ -565,43 +623,239 @@ export class PaymentService {
         },
       }),
     ]);
+    await this.registrarEvento(payment.id, 'cancelado', 'app', {
+      paymentIntent: payment.transactionId,
+    });
     return cancelado;
   }
 
-  /** Webhook de Stripe (firma verificada en StripeService). */
+  /**
+   * Webhook de Stripe (firma verificada en StripeService). Todo evento queda
+   * guardado tal cual en el historial; Stripe reintenta los avisos y el id
+   * del evento evita procesar dos veces el mismo.
+   */
   async procesarWebhookStripe(rawBody: Buffer | undefined, firma?: string) {
     const evento = this.stripeService.leerWebhook(rawBody, firma);
-    if (evento.type === 'payment_intent.succeeded')
-      await this.marcarCobradoPorStripe(evento.data.object);
+    const yaVisto = await this.prisma.paymentEvent.findUnique({
+      where: { stripeEventId: evento.id },
+      select: { id: true },
+    });
+    if (yaVisto) return { received: true };
+
+    let paymentId: number | null;
+    try {
+      paymentId = await this.aplicarEventoStripe(evento);
+    } catch (error) {
+      // Sin el id del evento: así el reintento de Stripe vuelve a probar.
+      await this.registrarEvento(null, 'error_webhook', 'stripe', {
+        evento: evento.id,
+        tipo: evento.type,
+        error: (error as Error).message,
+      });
+      throw error;
+    }
+    await this.registrarEvento(paymentId, evento.type, 'stripe', evento, evento.id);
     return { received: true };
+  }
+
+  /** Aplica el evento al pago y devuelve su id (null si no es de Bookmy). */
+  private async aplicarEventoStripe(evento: Stripe.Event): Promise<number | null> {
+    switch (evento.type) {
+      case 'payment_intent.succeeded': {
+        const intent = evento.data.object;
+        const paymentId = await this.pagoDeCobro(intent.id, intent.metadata);
+        if (paymentId) await this.marcarCobradoPorStripe(paymentId, intent.id);
+        return paymentId;
+      }
+
+      // El pago sigue PENDING: el cliente puede reintentar desde la app. El
+      // motivo del banco (fondos, tarjeta caducada...) queda en el evento.
+      case 'payment_intent.payment_failed':
+      case 'payment_intent.canceled': {
+        const intent = evento.data.object;
+        return this.pagoDeCobro(intent.id, intent.metadata);
+      }
+
+      case 'charge.refunded': {
+        const cargo = evento.data.object;
+        const paymentId = await this.pagoDeCobro(idDe(cargo.payment_intent), cargo.metadata);
+        if (!paymentId) return null;
+        await this.prisma.payment.update({
+          where: { id: paymentId },
+          data: {
+            paidAmount: (cargo.amount_captured - cargo.amount_refunded) / 100,
+            // Reembolso parcial: sigue pagado, con el importe que queda.
+            ...(cargo.refunded && { status: PaymentStatus.REFUNDED }),
+          },
+        });
+        await this.avisarSiYaLiquidado(paymentId, 'Reembolso');
+        return paymentId;
+      }
+
+      case 'charge.dispute.created': {
+        const disputa = evento.data.object;
+        const paymentId = await this.pagoDeCobro(idDe(disputa.payment_intent));
+        if (!paymentId) return null;
+        await this.prisma.payment.update({
+          where: { id: paymentId },
+          data: { status: PaymentStatus.DISPUTED },
+        });
+        this.logger.error(
+          `Disputa ${disputa.id} abierta sobre el pago ${paymentId} (${disputa.reason}). ` +
+            'Hay que responderla en el panel de Stripe antes de la fecha límite.',
+        );
+        await this.avisarSiYaLiquidado(paymentId, 'Disputa');
+        return paymentId;
+      }
+
+      case 'charge.dispute.closed': {
+        const disputa = evento.data.object;
+        const paymentId = await this.pagoDeCobro(idDe(disputa.payment_intent));
+        // Ganada: el dinero vuelve. Perdida: queda DISPUTED (dinero perdido).
+        if (paymentId && disputa.status === 'won')
+          await this.prisma.payment.update({
+            where: { id: paymentId },
+            data: { status: PaymentStatus.PAID },
+          });
+        return paymentId;
+      }
+
+      default: {
+        // Cualquier otro aviso se guarda igual, ligado a su pago si se puede.
+        const objeto = evento.data.object as {
+          object?: string;
+          id?: string;
+          payment_intent?: string | { id: string } | null;
+          metadata?: Record<string, string> | null;
+        };
+        const intentId =
+          objeto.object === 'payment_intent' ? objeto.id : idDe(objeto.payment_intent);
+        return this.pagoDeCobro(intentId, objeto.metadata);
+      }
+    }
+  }
+
+  /** El pago de Bookmy de un cobro de Stripe: por la metadata que le pusimos
+      al crearlo o, si no la trae (disputas), por el id del cobro. */
+  private async pagoDeCobro(
+    intentId: string | null | undefined,
+    metadata?: Record<string, string> | null,
+  ) {
+    const id = Number(metadata?.paymentId);
+    if (id) return id;
+    if (!intentId) return null;
+    const pago = await this.prisma.payment.findFirst({
+      where: { transactionId: intentId },
+      select: { id: true },
+    });
+    return pago?.id ?? null;
+  }
+
+  /** Si el dinero ya se envió al negocio por Wise, Bookmy lo ha devuelto (o
+      se lo retienen) sin tenerlo: hay que reclamárselo al negocio. */
+  private async avisarSiYaLiquidado(paymentId: number, motivo: string) {
+    const liquidacion = await this.prisma.liquidacionWise.findUnique({
+      where: { paymentId },
+      select: { id: true, estado: true, empresaId: true, monto: true },
+    });
+    if (!liquidacion) return;
+    this.logger.warn(
+      `${motivo} del pago ${paymentId}, que ya tiene la liquidación Wise ${liquidacion.id} ` +
+        `(${liquidacion.estado}, ${liquidacion.monto} EUR, empresa ${liquidacion.empresaId}).`,
+    );
+    await this.registrarEvento(paymentId, 'aviso_ya_liquidado', 'sistema', {
+      motivo,
+      liquidacion,
+    });
   }
 
   /** Idempotente: confirmar y webhook pueden llegar los dos. Solo el
       primero que pasa de PENDING a PAID dispara la liquidación por Wise. */
-  private async marcarCobradoPorStripe(intent: {
-    id: string;
-    amount_received: number;
-    metadata: Record<string, string>;
-    payment_method_types?: string[];
-  }) {
-    const paymentId = Number(intent.metadata?.paymentId);
-    if (!paymentId) throw new BadRequestException('Cobro de Stripe sin paymentId.');
+  private async marcarCobradoPorStripe(
+    paymentId: number,
+    cobro: string | Stripe.PaymentIntent,
+  ) {
+    // Se vuelve a pedir con el cargo expandido para guardar tarjeta y recibo.
+    const intent =
+      typeof cobro === 'string' || typeof cobro.latest_charge !== 'object'
+        ? await this.stripeService.obtenerCobro(typeof cobro === 'string' ? cobro : cobro.id)
+        : cobro;
+    const resumen = this.stripeService.resumenDelCobro(intent);
 
     const { count } = await this.prisma.payment.updateMany({
       where: { id: paymentId, status: PaymentStatus.PENDING },
       data: {
         status: PaymentStatus.PAID,
-        paidAmount: intent.amount_received / 100,
+        paidAmount: resumen.importe,
         transactionId: intent.id,
-        bankResponse: {
-          pasarela: 'stripe',
-          paymentIntent: intent.id,
-          metodos: intent.payment_method_types ?? [],
-        },
+        bankResponse: resumen,
       },
     });
-    if (count > 0) await this.wiseService.liquidarPago(paymentId);
+    if (count > 0) {
+      await this.registrarEvento(paymentId, 'cobrado', 'stripe', resumen);
+      try {
+        const liquidacion = await this.wiseService.liquidarPago(paymentId);
+        await this.registrarEvento(
+          paymentId,
+          'liquidacion',
+          'wise',
+          liquidacion
+            ? {
+                liquidacionId: liquidacion.id,
+                estado: liquidacion.estado,
+                monto: liquidacion.monto,
+                transferencia: liquidacion.wiseTransferId,
+              }
+            : { estado: 'sin_liquidacion' },
+        );
+      } catch (error) {
+        // El cobro ya está hecho: no se deshace por un fallo de Wise.
+        await this.registrarEvento(paymentId, 'error_liquidacion', 'wise', {
+          error: (error as Error).message,
+        });
+      }
+    }
     return this.prisma.payment.findUnique({ where: { id: paymentId } });
+  }
+
+  /** Historial de un pago, del más antiguo al más reciente. */
+  async eventosDelPago(paymentId: number, user: AuthenticatedUser) {
+    await this.pagoEnAlcance(paymentId, user);
+    return this.prisma.paymentEvent.findMany({
+      where: { paymentId },
+      orderBy: { id: 'asc' },
+    });
+  }
+
+  /** Guarda un paso del pago. Nunca rompe el cobro: si falla, solo queda en
+      el log. Un evento de Stripe repetido se ignora (stripeEventId único). */
+  private async registrarEvento(
+    paymentId: number | null,
+    tipo: string,
+    origen: 'app' | 'stripe' | 'wise' | 'sistema',
+    datos?: unknown,
+    stripeEventId?: string,
+  ) {
+    try {
+      await this.prisma.paymentEvent.create({
+        data: {
+          paymentId,
+          tipo: tipo.slice(0, 40),
+          origen,
+          stripeEventId,
+          ...(datos !== undefined && { datos: sinSecretos(datos) }),
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      )
+        return;
+      this.logger.error(
+        `No se pudo guardar el evento ${tipo} del pago ${paymentId}: ${(error as Error).message}`,
+      );
+    }
   }
 
   async cancelPayment(id: number, user: AuthenticatedUser) {

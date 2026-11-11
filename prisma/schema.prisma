@@ -19,6 +19,8 @@ model Users {
   updatedAt                                        DateTime                @updatedAt @map("updated_at")
   fotoPerfil                                       String?                 @map("foto_perfil")
   role                                             Role                    @default(CLIENT) @map("role")
+  /// Cliente de Stripe del usuario: ahí quedan sus tarjetas guardadas.
+  stripeCustomerId                                 String?                 @unique @map("stripe_customer_id")
   status_id                                        Int?                    @default(7)
   Appointment                                      Appointment[]
   AdminProfile                                     AdminProfile?
@@ -820,11 +822,37 @@ model Payment {
   service        Service       @relation(fields: [serviceId], references: [id])
   user           Users         @relation(fields: [userId], references: [id])
   liquidacionWise LiquidacionWise?
+  events          PaymentEvent[]
 
   @@index([userId])
   @@index([serviceId])
   @@index([cardId])
   @@map("payments")
+}
+
+/**
+ * Historial de un pago: cada paso queda guardado con la respuesta completa
+ * de Stripe o de Wise, para reclamaciones, disputas y para saber en qué
+ * punto se quedó el dinero. Solo se añaden filas, nunca se editan.
+ */
+model PaymentEvent {
+  id            Int      @id @default(autoincrement())
+  /// Null si llega un webhook de un cobro que no es de ningún pago.
+  paymentId     Int?     @map("payment_id")
+  payment       Payment? @relation(fields: [paymentId], references: [id])
+  /// creado, preparado, confirmado, cancelado, cobrado, fallido,
+  /// reembolsado, disputa_abierta, disputa_cerrada, liquidacion, error...
+  tipo          String   @db.VarChar(40)
+  /// app, stripe, wise o sistema.
+  origen        String   @db.VarChar(20)
+  /// Id del evento de Stripe: Stripe reintenta los webhooks y así un mismo
+  /// aviso no se procesa dos veces.
+  stripeEventId String?  @unique @map("stripe_event_id")
+  datos         Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([paymentId])
+  @@map("payment_events")
 }
 
 model PaymentCard {
@@ -1040,6 +1068,10 @@ enum PaymentStatus {
   PAID
   FAILED
   CANCELLED
+  /// Devuelto al cliente desde Stripe.
+  REFUNDED
+  /// El cliente reclamó el cobro a su banco; el dinero queda retenido.
+  DISPUTED
 }
 
 /**
