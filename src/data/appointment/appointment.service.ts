@@ -1597,10 +1597,20 @@ export class AppointmentService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
+    /* Un admin de negocio solo ve las citas del cliente en SU negocio
+       (o en su sede): el mismo cliente puede reservar en otros. */
+    const alcance: Prisma.AppointmentWhereInput =
+      sesion?.role === Role.COMPANY_ADMIN && sesion.userId !== userId
+        ? { sede: { empresaId: sesion.empresaId ?? -1 } }
+        : sesion?.role === Role.BRANCH_ADMIN && sesion.userId !== userId
+          ? { sedeId: sesion.sedeId ?? -1 }
+          : {};
+
     const [pendingAppointments, completedAppointments] = await Promise.all([
       this.prisma.appointment.findMany({
         where: {
           userId,
+          ...alcance,
           estado: {
             in: [AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED],
           },
@@ -1629,6 +1639,7 @@ export class AppointmentService {
       this.prisma.appointment.findMany({
         where: {
           userId,
+          ...alcance,
           estado: AppointmentStatus.COMPLETED,
         },
         orderBy: { fecha: 'desc' },
