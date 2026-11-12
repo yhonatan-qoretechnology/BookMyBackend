@@ -12,6 +12,7 @@ const loadPuppeteer = new Function(
 ) as () => Promise<typeof import('puppeteer')>;
 
 import { SendInvoiceDto } from './dto/send-invoice.dto';
+import { SendInvoicePdfDto } from './dto/send-invoice-pdf.dto';
 import { MAIL_TRANSPORTER } from './mail.constants';
 
 @Injectable()
@@ -308,8 +309,10 @@ export class MailService {
     const finalHtml = template(data);
 
     const puppeteer = await loadPuppeteer();
+    /* En contenedor (root, sin /dev/shm grande) Chrome no arranca sin esto */
     const browser = await puppeteer.launch({
       headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
 
     const page = await browser.newPage();
@@ -333,6 +336,30 @@ export class MailService {
     await browser.close();
 
     return Buffer.from(pdf);
+  }
+
+  /** Envía el PDF que ya generó el panel (sin Puppeteer). */
+  async sendInvoicePdfEmail(data: SendInvoicePdfDto, pdf: Buffer) {
+    const esc = (v: string) =>
+      v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+    const negocio = data.negocio?.trim() || 'BookMy';
+    const numero = data.numero?.trim();
+    const saludo = data.clientName?.trim() ? `Hola ${esc(data.clientName.trim())},` : 'Hola,';
+    await this.transporter.sendMail({
+      to: data.email,
+      subject: `Factura${numero ? ` ${numero}` : ''} · ${negocio}`,
+      html: `
+        <p>${saludo}</p>
+        <p>Gracias por tu visita a <strong>${esc(negocio)}</strong>. Adjuntamos tu factura en PDF.</p>
+      `,
+      attachments: [
+        {
+          filename: `factura${numero ? `-${numero.replace(/[^\w-]/g, '')}` : ''}.pdf`,
+          content: pdf,
+          contentType: 'application/pdf',
+        },
+      ],
+    });
   }
 
   // 🔥 ENVIAR FACTURA PDF

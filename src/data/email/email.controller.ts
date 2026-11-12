@@ -1,9 +1,20 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Post,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { memoryStorage } from 'multer';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import { Roles } from '../../auth/common/decorators/roles.decorator';
 import { SendInvoiceDto } from './dto/send-invoice.dto';
+import { SendInvoicePdfDto } from './dto/send-invoice-pdf.dto';
 import { MailService } from './mail.service';
 
 @ApiTags('Email')
@@ -43,5 +54,47 @@ export class EmailController {
     return {
       message: 'Factura enviada correctamente',
     };
+  }
+
+  /* El panel ya genera el PDF de la factura (el mismo que se descarga):
+     aquí solo se adjunta. Sin Puppeteer, que no arranca en el contenedor. */
+  @Post('send-invoice-pdf')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @ApiOperation({ summary: 'Enviar por correo el PDF de factura generado por el panel' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        pdf: { type: 'string', format: 'binary' },
+        email: { type: 'string' },
+        clientName: { type: 'string' },
+        negocio: { type: 'string' },
+        numero: { type: 'string' },
+      },
+      required: ['pdf', 'email'],
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('pdf', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async sendInvoicePdf(
+    @Body() dto: SendInvoicePdfDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Falta el PDF de la factura.');
+    }
+    /* Solo un PDF de verdad (cabecera %PDF), nada de adjuntar cualquier cosa */
+    if (file.buffer.subarray(0, 4).toString('latin1') !== '%PDF') {
+      throw new BadRequestException('El archivo no es un PDF.');
+    }
+    await this.mailService.sendInvoicePdfEmail(dto, file.buffer);
+    return { message: 'Factura enviada correctamente' };
   }
 }
