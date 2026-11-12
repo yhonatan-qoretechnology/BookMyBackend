@@ -353,15 +353,40 @@ export class PaymentService {
    */
   private async processWisePayment(payment) {
     const cuenta = this.wiseService.cuentaReceptora();
-    return this.prisma.payment.update({
+    const datos = {
+      method: 'WISE_TRANSFERENCIA',
+      referencia: `BOOKMY-${payment.id}`,
+      monto: payment.totalAmount,
+      moneda: 'EUR',
+      cuenta,
+    };
+    const pendiente = await this.prisma.payment.update({
       where: { id: payment.id },
-      data: {
-        bankResponse: {
-          method: 'WISE_TRANSFERENCIA',
-          referencia: `BOOKMY-${payment.id}`,
-          monto: payment.totalAmount,
-          moneda: 'EUR',
-          cuenta,
+      data: { bankResponse: datos },
+    });
+    await this.registrarEvento(payment.id, 'creado', 'app', datos);
+    return pendiente;
+  }
+
+  /** Transferencias Wise que esperan a que Bookmy confirme su llegada. */
+  async transferenciasWisePendientes() {
+    return this.prisma.payment.findMany({
+      where: { method: PaymentMethod.WISE, status: PaymentStatus.PENDING },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        totalAmount: true,
+        bankResponse: true,
+        createdAt: true,
+        user: { select: { id: true, email: true } },
+        appointment: {
+          select: {
+            id: true,
+            horaInicio: true,
+            notas: true,
+            estado: true,
+            sede: { select: { id: true, nombre: true, empresa: { select: { id: true, nombre: true } } } },
+          },
         },
       },
     });
@@ -373,7 +398,7 @@ export class PaymentService {
    * para leer esa llegada automáticamente). Marca el pago como PAID y recién
    * ahí dispara la liquidación al negocio.
    */
-  async confirmWiseTransfer(paymentId: number) {
+  async confirmWiseTransfer(paymentId: number, user: AuthenticatedUser) {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new BadRequestException('El pago no existe');
     if (payment.method !== PaymentMethod.WISE)
@@ -381,20 +406,27 @@ export class PaymentService {
     if (payment.status !== PaymentStatus.PENDING)
       throw new BadRequestException('El pago no está pendiente de transferencia');
 
-    const paid = await this.prisma.payment.update({
-      where: { id: paymentId },
+    const confirmacion = {
+      confirmadoEn: new Date().toISOString(),
+      confirmadoPor: user.userId,
+    };
+    // Solo una confirmación gana el paso PENDING → PAID (doble clic, dos admins).
+    const { count } = await this.prisma.payment.updateMany({
+      where: { id: paymentId, status: PaymentStatus.PENDING },
       data: {
         status: PaymentStatus.PAID,
         paidAmount: payment.totalAmount,
-        bankResponse: {
-          ...(payment.bankResponse as object),
-          confirmadoEn: new Date().toISOString(),
-        },
+        bankResponse: { ...(payment.bankResponse as object), ...confirmacion },
       },
     });
-
-    await this.wiseService.liquidarPago(paid.id);
-    return paid;
+    if (count > 0) {
+      await this.registrarEvento(paymentId, 'transferencia_confirmada', 'sistema', {
+        ...confirmacion,
+        importe: payment.totalAmount,
+      });
+      await this.liquidarYRegistrar(paymentId);
+    }
+    return this.prisma.payment.findUnique({ where: { id: paymentId } });
   }
 
   // 💵 Pago parcial en establecimiento
@@ -793,29 +825,34 @@ export class PaymentService {
     });
     if (count > 0) {
       await this.registrarEvento(paymentId, 'cobrado', 'stripe', resumen);
-      try {
-        const liquidacion = await this.wiseService.liquidarPago(paymentId);
-        await this.registrarEvento(
-          paymentId,
-          'liquidacion',
-          'wise',
-          liquidacion
-            ? {
-                liquidacionId: liquidacion.id,
-                estado: liquidacion.estado,
-                monto: liquidacion.monto,
-                transferencia: liquidacion.wiseTransferId,
-              }
-            : { estado: 'sin_liquidacion' },
-        );
-      } catch (error) {
-        // El cobro ya está hecho: no se deshace por un fallo de Wise.
-        await this.registrarEvento(paymentId, 'error_liquidacion', 'wise', {
-          error: (error as Error).message,
-        });
-      }
+      await this.liquidarYRegistrar(paymentId);
     }
     return this.prisma.payment.findUnique({ where: { id: paymentId } });
+  }
+
+  /** Envía al negocio lo cobrado (Wise) y deja el resultado en el historial. */
+  private async liquidarYRegistrar(paymentId: number) {
+    try {
+      const liquidacion = await this.wiseService.liquidarPago(paymentId);
+      await this.registrarEvento(
+        paymentId,
+        'liquidacion',
+        'wise',
+        liquidacion
+          ? {
+              liquidacionId: liquidacion.id,
+              estado: liquidacion.estado,
+              monto: liquidacion.monto,
+              transferencia: liquidacion.wiseTransferId,
+            }
+          : { estado: 'sin_liquidacion' },
+      );
+    } catch (error) {
+      // El cobro ya está hecho: no se deshace por un fallo de Wise.
+      await this.registrarEvento(paymentId, 'error_liquidacion', 'wise', {
+        error: (error as Error).message,
+      });
+    }
   }
 
   /** Historial de un pago, del más antiguo al más reciente. */

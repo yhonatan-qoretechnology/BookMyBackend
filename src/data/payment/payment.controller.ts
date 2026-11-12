@@ -188,8 +188,23 @@ export class PaymentController {
     description:
       'Solo Bookmy puede ver su propia cuenta Wise, así que esto se confirma a mano. Marca el pago PAID y liquida al negocio.',
   })
-  async confirmWiseTransfer(@Param('id') id: string) {
-    return this.paymentService.confirmWiseTransfer(Number(id));
+  async confirmWiseTransfer(
+    @Param('id') id: string,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.confirmWiseTransfer(Number(id), user);
+  }
+
+  @Get('wise/pendientes')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Transferencias Wise pendientes de confirmar',
+    description:
+      'Pagos de clientes por transferencia a la cuenta Wise de Bookmy que aún no se han confirmado. Se cotejan con la referencia BOOKMY-<id> en Wise.',
+  })
+  async wisePendientes() {
+    return this.paymentService.transferenciasWisePendientes();
   }
 
   @Get()
