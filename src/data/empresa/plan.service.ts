@@ -39,9 +39,25 @@ export interface EstadoPlan {
   pruebaCaducada: boolean;
   /** true si todavía puede pedir los 30 días. */
   puedeProbar: boolean;
+  /** Pro regalado por referidos: hasta cuándo (ISO) o null. */
+  proGratisHasta: string | null;
+  /** Días de Pro regalado que quedan (0 si no hay). */
+  diasProGratis: number;
+  /** Meses ganados por referidos que cubrirán las próximas cuotas de Pro. */
+  mesesProCredito: number;
 }
 
-type EmpresaPlan = Pick<Empresa, 'plan' | 'trialEndsAt' | 'trialUsed'>;
+type EmpresaPlan = Pick<Empresa, 'plan' | 'trialEndsAt' | 'trialUsed'> &
+  Partial<Pick<Empresa, 'proGratisHasta' | 'mesesProCredito'>>;
+
+/** Campos que hace falta leer para calcular el plan. */
+const SELECT_PLAN = {
+  plan: true,
+  trialEndsAt: true,
+  trialUsed: true,
+  proGratisHasta: true,
+  mesesProCredito: true,
+} as const;
 
 /**
  * Plan de un negocio y su prueba.
@@ -63,11 +79,14 @@ export class PlanService {
     const diasDePrueba = enPrueba
       ? Math.ceil((fin!.getTime() - ahora.getTime()) / 86_400_000)
       : 0;
+    /* Meses de Pro ganados invitando a otros negocios */
+    const gratis = empresa.proGratisHasta ? new Date(empresa.proGratisHasta) : null;
+    const conProGratis = !!gratis && gratis.getTime() > ahora.getTime();
 
     return {
       plan: empresa.plan,
       planEfectivo:
-        empresa.plan === PlanEmpresa.PRO || enPrueba
+        empresa.plan === PlanEmpresa.PRO || enPrueba || conProGratis
           ? PlanEmpresa.PRO
           : PlanEmpresa.FREE,
       trialEndsAt: fin ? fin.toISOString() : null,
@@ -75,7 +94,10 @@ export class PlanService {
       diasDePrueba,
       pruebaCaducada: !!fin && !enPrueba && empresa.plan === PlanEmpresa.FREE,
       puedeProbar:
-        PRO_SE_OFRECE && !empresa.trialUsed && empresa.plan === PlanEmpresa.FREE,
+        PRO_SE_OFRECE && !empresa.trialUsed && empresa.plan === PlanEmpresa.FREE && !conProGratis,
+      proGratisHasta: conProGratis ? gratis!.toISOString() : null,
+      diasProGratis: conProGratis ? Math.ceil((gratis!.getTime() - ahora.getTime()) / 86_400_000) : 0,
+      mesesProCredito: empresa.mesesProCredito ?? 0,
     };
   }
 
@@ -83,7 +105,7 @@ export class PlanService {
   async estadoDe(empresaId: number): Promise<EstadoPlan> {
     const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
-      select: { plan: true, trialEndsAt: true, trialUsed: true },
+      select: SELECT_PLAN,
     });
     if (!empresa) throw new NotFoundException('La empresa no existe.');
     return this.estado(empresa);
@@ -115,7 +137,7 @@ export class PlanService {
 
     const empresa = await this.prisma.empresa.findUnique({
       where: { id: empresaId },
-      select: { plan: true, trialEndsAt: true, trialUsed: true },
+      select: SELECT_PLAN,
     });
     if (!empresa) throw new NotFoundException('La empresa no existe.');
 
@@ -132,7 +154,7 @@ export class PlanService {
       // trialAvisoEnviado en false: si ya usó una prueba anterior y el
       // cron ya le había avisado, esta prueba nueva vuelve a poder avisar.
       data: { trialEndsAt: this.finDePrueba(), trialUsed: true, trialAvisoEnviado: false },
-      select: { plan: true, trialEndsAt: true, trialUsed: true },
+      select: SELECT_PLAN,
     });
     return this.estado(actualizada);
   }
@@ -149,13 +171,27 @@ export class PlanService {
     });
     if (!empresa) throw new NotFoundException('La empresa no existe.');
 
+    const actual = await this.prisma.empresa.findUnique({
+      where: { id: empresaId },
+      select: { mesesProCredito: true, proGratisHasta: true },
+    });
+    /* Deja de pagar Pro con meses ganados sin usar: se convierten en Pro
+       gratis desde hoy (o desde que acabe el que ya tenga). */
+    const convertir = plan === PlanEmpresa.FREE && (actual?.mesesProCredito ?? 0) > 0;
+    let proGratisHasta: Date | undefined;
+    if (convertir) {
+      const base = actual?.proGratisHasta && actual.proGratisHasta > new Date() ? new Date(actual.proGratisHasta) : new Date();
+      base.setDate(base.getDate() + 30 * (actual!.mesesProCredito));
+      proGratisHasta = base;
+    }
     const actualizada = await this.prisma.empresa.update({
       where: { id: empresaId },
       data: {
         plan,
         ...(plan === PlanEmpresa.PRO ? { trialEndsAt: null } : {}),
+        ...(convertir && { mesesProCredito: 0, proGratisHasta }),
       },
-      select: { plan: true, trialEndsAt: true, trialUsed: true },
+      select: SELECT_PLAN,
     });
     return this.estado(actualizada);
   }

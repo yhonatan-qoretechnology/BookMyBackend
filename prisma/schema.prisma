@@ -47,6 +47,10 @@ model Users {
   clientesEmpresa                                   ClienteEmpresa[]
   solicitudesInventario                             SolicitudInventario[]
   telemetriaEventos                                 TelemetriaEvento[]
+  codigosReferidoCliente                            CodigoReferidoCliente[]
+  referidosClienteHechos                            ReferidoCliente[]       @relation("ReferidoClienteReferidor")
+  referidoClientePor                                ReferidoCliente[]       @relation("ReferidoClienteInvitado")
+  cuponesCliente                                    CuponCliente[]
 
   @@index([email])
   @@map("users")
@@ -316,6 +320,10 @@ model Empresa {
   plan        PlanEmpresa @default(FREE)
   trialEndsAt DateTime?   @map("trial_ends_at")
   trialUsed   Boolean     @default(false) @map("trial_used")
+  /// Pro regalado por referidos (si no paga Pro): vale hasta esta fecha.
+  proGratisHasta  DateTime? @map("pro_gratis_hasta")
+  /// Meses de Pro ganados que aún no se usaron (si ya paga Pro, cubren cuotas).
+  mesesProCredito Int       @default(0) @map("meses_pro_credito")
   /// Para no repetir el correo de "tu prueba acaba pronto" cada día que
   /// pasa el cron de EmpresaPlanPagoCron. Se resetea en activarPrueba().
   trialAvisoEnviado Boolean @default(false) @map("trial_aviso_enviado")
@@ -372,6 +380,11 @@ model Empresa {
   referidosHechos   Referido[]         @relation("ReferidosHechos")
   referidoPor       Referido?          @relation("ReferidoPor")
   movimientosPuntos MovimientoPuntos[]
+  recompensasReferido      RecompensaReferido[]
+  programaReferidosCliente ProgramaReferidosCliente?
+  codigosReferidoCliente   CodigoReferidoCliente[]
+  referidosCliente         ReferidoCliente[]
+  cuponesCliente           CuponCliente[]
   avisosUsoPro      AvisoUsoPro[]
 
   @@map("empresas")
@@ -444,6 +457,8 @@ model EmpresaPlanPago {
   estado    EstadoPagoPlan @default(PENDIENTE) @map("estado")
   /// Evita reenviar el correo de "vencido" cada día que pasa el cron.
   notificado  Boolean  @default(false) @map("notificado")
+  /// Cuota pagada con un mes de Pro ganado por referidos (no cuenta como pago real).
+  cubiertoPorReferidos Boolean @default(false) @map("cubierto_por_referidos")
   creadoPorId Int?     @map("creado_por_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -1549,6 +1564,8 @@ model CodigoReferido {
   id        Int      @id @default(autoincrement())
   empresaId Int      @unique @map("empresa_id")
   codigo    String   @unique @map("codigo") @db.VarChar(20)
+  /// Veces que se abrió el enlace de invitación
+  visitas   Int      @default(0) @map("visitas")
   createdAt DateTime @default(now()) @map("created_at")
 
   empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
@@ -1565,6 +1582,9 @@ model Referido {
   estado          EstadoReferido @default(PENDIENTE) @map("estado")
   puntosReferidor Int            @default(0) @map("puntos_referidor")
   puntosReferida  Int            @default(0) @map("puntos_referida")
+  /// Meses de Pro entregados a cada uno al recompensar
+  mesesReferidor  Int            @default(0) @map("meses_referidor")
+  mesesReferida   Int            @default(0) @map("meses_referida")
   recompensadoEn  DateTime?      @map("recompensado_en")
   createdAt       DateTime       @default(now()) @map("created_at")
 
@@ -1734,4 +1754,136 @@ model CampanaCliente {
   @@index([empresaId])
   @@index([estado, programadaPara])
   @@map("campanas_clientes")
+}
+
+// ── Referidos 2.0 ─────────────────────────────────────────────
+// Negocio → negocio: meses de Pro gratis (con niveles). Cliente → cliente:
+// cada negocio activa su programa y premia con cupones de descuento.
+
+/// Cada mes de Pro ganado (por un referido o por subir de nivel).
+model RecompensaReferido {
+  id         Int      @id @default(autoincrement())
+  empresaId  Int      @map("empresa_id")
+  /// REFERIDO | BIENVENIDA | NIVEL | MANUAL
+  tipo       String   @db.VarChar(20)
+  meses      Int
+  motivo     String   @db.VarChar(200)
+  /// CREDITO (cubre cuotas de Pro) | PRO_GRATIS (amplía proGratisHasta)
+  aplicadaComo String @map("aplicada_como") @db.VarChar(12)
+  referidoId Int?     @map("referido_id")
+  creadoPorId Int?    @map("creado_por_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@map("recompensas_referido")
+}
+
+enum TipoDescuento {
+  PORCENTAJE
+  MONTO
+}
+
+enum EstadoReferidoCliente {
+  PENDIENTE   // el invitado aún no ha completado su primera cita
+  COMPLETADO  // completó su primera cita: quien invitó recibe su cupón
+  ANULADO
+}
+
+enum EstadoCupon {
+  DISPONIBLE
+  USADO
+  VENCIDO
+  ANULADO
+}
+
+/// Programa de referidos de un negocio para sus clientes.
+model ProgramaReferidosCliente {
+  id               Int           @id @default(autoincrement())
+  empresaId        Int           @unique @map("empresa_id")
+  activo           Boolean       @default(false)
+  /// Premio para quien invita (al completar el invitado su primera cita)
+  tipoReferidor    TipoDescuento @default(PORCENTAJE) @map("tipo_referidor")
+  valorReferidor   Float         @default(15) @map("valor_referidor")
+  /// Regalo de bienvenida para el invitado (en su primera cita)
+  tipoInvitado     TipoDescuento @default(PORCENTAJE) @map("tipo_invitado")
+  valorInvitado    Float         @default(10) @map("valor_invitado")
+  /// Días que dura un cupón desde que se emite
+  vigenciaDias     Int           @default(90) @map("vigencia_dias")
+  /// Máximo de premios por cliente (0 = sin límite)
+  maxPorCliente    Int           @default(0) @map("max_por_cliente")
+  mensaje          String?       @db.VarChar(500)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@map("programas_referidos_cliente")
+}
+
+/// Código personal de un cliente en un negocio («ANA-7K3»).
+model CodigoReferidoCliente {
+  id        Int      @id @default(autoincrement())
+  empresaId Int      @map("empresa_id")
+  userId    Int      @map("user_id")
+  codigo    String   @unique @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  empresa Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  user    Users   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([empresaId, userId])
+  @@map("codigos_referido_cliente")
+}
+
+/// Un cliente que llegó al negocio invitado por otro.
+model ReferidoCliente {
+  id             Int                   @id @default(autoincrement())
+  empresaId      Int                   @map("empresa_id")
+  referidorId    Int                   @map("referidor_id")
+  invitadoId     Int                   @map("invitado_id")
+  codigo         String                @db.VarChar(20)
+  estado         EstadoReferidoCliente @default(PENDIENTE)
+  completadoEn   DateTime?             @map("completado_en")
+  creadoPorId    Int?                  @map("creado_por_id")
+  createdAt      DateTime              @default(now()) @map("created_at")
+
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  referidor Users   @relation("ReferidoClienteReferidor", fields: [referidorId], references: [id], onDelete: Cascade)
+  invitado  Users   @relation("ReferidoClienteInvitado", fields: [invitadoId], references: [id], onDelete: Cascade)
+  cupones   CuponCliente[]
+
+  /// Un cliente solo puede llegar invitado una vez a cada negocio
+  @@unique([empresaId, invitadoId])
+  @@index([empresaId, estado])
+  @@map("referidos_cliente")
+}
+
+/// Cupón de descuento de un cliente en un negocio.
+model CuponCliente {
+  id         Int           @id @default(autoincrement())
+  empresaId  Int           @map("empresa_id")
+  userId     Int           @map("user_id")
+  codigo     String        @unique @db.VarChar(20)
+  tipo       TipoDescuento
+  valor      Float
+  /// BIENVENIDA | PREMIO
+  motivo     String        @db.VarChar(20)
+  referidoId Int?          @map("referido_id")
+  estado     EstadoCupon   @default(DISPONIBLE)
+  venceEn    DateTime?     @map("vence_en")
+  usadoEn    DateTime?     @map("usado_en")
+  /// Ticket en el que se usó
+  paymentId  Int?          @map("payment_id")
+  descuento  Float?        @map("descuento")
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  empresa  Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  user     Users            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referido ReferidoCliente? @relation(fields: [referidoId], references: [id], onDelete: SetNull)
+
+  @@index([empresaId, estado])
+  @@index([userId])
+  @@map("cupones_cliente")
 }

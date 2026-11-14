@@ -23,6 +23,30 @@ export class EmpresaPlanPagoService {
     const empresa = await this.prisma.empresa.findUnique({ where: { id: empresaId } });
     if (!empresa) throw new NotFoundException('La empresa no existe.');
 
+    /* Si tiene meses de Pro ganados por referidos, esta cuota la cubre uno:
+       queda pagada sin cobrar. Solo una petición gasta cada mes. */
+    if (empresa.mesesProCredito > 0) {
+      const cubierta = await this.prisma.$transaction(async (tx) => {
+        const { count } = await tx.empresa.updateMany({
+          where: { id: empresaId, mesesProCredito: { gt: 0 } },
+          data: { mesesProCredito: { decrement: 1 } },
+        });
+        if (count === 0) return null;
+        return tx.empresaPlanPago.create({
+          data: {
+            empresaId,
+            monto: dto.monto,
+            vence: new Date(dto.vence),
+            creadoPorId,
+            estado: EstadoPagoPlan.PAGADO,
+            pagadoEn: new Date(),
+            cubiertoPorReferidos: true,
+          },
+        });
+      });
+      if (cubierta) return cubierta;
+    }
+
     return this.prisma.empresaPlanPago.create({
       data: {
         empresaId,

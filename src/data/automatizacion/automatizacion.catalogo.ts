@@ -8,7 +8,7 @@ export interface EventoAutomatizable {
 }
 
 /** Variables que se pueden usar en el asunto y el mensaje. */
-export const VARIABLES = ['empresa', 'email', 'fecha', 'motivo', 'puntos', 'recurso', 'accion', 'recursoId'];
+export const VARIABLES = ['empresa', 'email', 'fecha', 'motivo', 'puntos', 'meses', 'recurso', 'accion', 'recursoId'];
 
 /**
  * Eventos que pueden disparar una automatización. Los de actividad se
@@ -22,7 +22,7 @@ export function eventosAutomatizables(): EventoAutomatizable[] {
     { evento: BOOKMY_EVENTS.PLAN_PAGO_VENCIDO, etiqueta: 'Un pago de Pro vence', grupo: 'Plan Pro' },
     { evento: BOOKMY_EVENTS.USO_PRO_BAJO, etiqueta: 'Un negocio Pro apenas usa el panel', grupo: 'Plan Pro' },
     { evento: BOOKMY_EVENTS.USO_PRO_INUSUAL, etiqueta: 'Un negocio Pro tiene un uso inusual', grupo: 'Plan Pro' },
-    { evento: BOOKMY_EVENTS.REFERIDO_RECOMPENSADO, etiqueta: 'Un negocio gana puntos por un referido', grupo: 'Referidos' },
+    { evento: BOOKMY_EVENTS.REFERIDO_RECOMPENSADO, etiqueta: 'Un negocio gana meses de Pro por un referido', grupo: 'Referidos' },
     { evento: BOOKMY_EVENTS.INVENTARIO_CAMBIADO, etiqueta: 'Cambia el inventario de un negocio', grupo: 'Inventario' },
   ];
   const acciones: [string, string][] = [
