@@ -30,6 +30,7 @@ export class SearchService {
       }),
       this.prisma.service.findMany({
         where: {
+          interno: false,
           translations: {
             some: {
               language: lang,

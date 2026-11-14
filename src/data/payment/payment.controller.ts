@@ -33,6 +33,7 @@ import { ModuloPro, PlanProGuard } from '../empresa/plan-pro.guard';
 import { CreatePaymentCardDto } from './dto/create-payment-card.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentItemDto } from './dto/create-payment-item.dto';
+import { CreateCobroOtroDto } from './dto/create-cobro-otro.dto';
 import { PaymentCardResponseDto } from './dto/payment-card-response.dto';
 import { UpdatePaymentCardDto } from './dto/update-payment-card.dto';
 import { PaymentService } from './payment.service';
@@ -159,6 +160,38 @@ export class PaymentController {
     @AuthUser() user: AuthenticatedUser,
   ) {
     return this.paymentService.eventosDelPago(id, user);
+  }
+
+  @Post('otro')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ModuloPro('La facturación')
+  @UseGuards(PlanProGuard)
+  @ApiOperation({
+    summary: 'Cobro de «Otro servicio»',
+    description:
+      'Concepto y precio escritos a mano (lo que no está en el catálogo). Crea la cita ya hecha y el ticket pagado.',
+  })
+  async cobroOtro(
+    @Body() dto: CreateCobroOtroDto,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.cobroOtro(dto, user);
+  }
+
+  @Patch(':id/facturar')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ModuloPro('La facturación')
+  @UseGuards(PlanProGuard)
+  @ApiOperation({
+    summary: 'Pasar un ticket a factura',
+    description:
+      'Le asigna el siguiente número de factura del negocio. Las facturas son las que van a la DIAN; los tickets no.',
+  })
+  async facturar(
+    @Param('id', ParseIntPipe) id: number,
+    @AuthUser() user: AuthenticatedUser,
+  ) {
+    return this.paymentService.facturar(id, user);
   }
 
   @Patch(':id/confirm')

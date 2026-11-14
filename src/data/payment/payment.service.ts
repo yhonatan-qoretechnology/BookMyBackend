@@ -25,6 +25,7 @@ import { StripeService } from './stripe.service';
 import { CreatePaymentCardDto } from './dto/create-payment-card.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentItemDto } from './dto/create-payment-item.dto';
+import { CreateCobroOtroDto } from './dto/create-cobro-otro.dto';
 import { UpdatePaymentCardDto } from './dto/update-payment-card.dto';
 
 type ListPaymentsFilters = {
@@ -895,6 +896,180 @@ export class PaymentService {
     }
   }
 
+  /* ── Tickets y facturas ──────────────────────────────────────────
+     Todo cobro nace como TICKET (no va a la DIAN). «Pasar a factura» le
+     da el siguiente consecutivo del negocio; no tiene vuelta atrás. */
+  async facturar(paymentId: number, user: AuthenticatedUser) {
+    const payment = await this.pagoEnAlcance(paymentId, user);
+    if (payment.tipoDocumento === 'FACTURA') return payment;
+    if (
+      payment.status === PaymentStatus.CANCELLED ||
+      payment.status === PaymentStatus.FAILED
+    ) {
+      throw new BadRequestException(
+        'Un ticket cancelado o fallido no se puede pasar a factura.',
+      );
+    }
+    const empresaId = payment.appointment?.sede?.empresaId;
+    if (!empresaId) {
+      throw new BadRequestException('El ticket no pertenece a ningún negocio.');
+    }
+
+    /* Dos personas facturando a la vez: el índice único (empresa, número)
+       rechaza al segundo y se reintenta con el número siguiente. */
+    for (let intento = 0; intento < 5; intento++) {
+      try {
+        const actualizado = await this.prisma.$transaction(async (tx) => {
+          const max = await tx.payment.aggregate({
+            where: { facturaEmpresaId: empresaId },
+            _max: { numeroFactura: true },
+          });
+          return tx.payment.update({
+            where: { id: paymentId },
+            data: {
+              tipoDocumento: 'FACTURA',
+              numeroFactura: (max._max.numeroFactura ?? 0) + 1,
+              facturaEmpresaId: empresaId,
+              facturadaEn: new Date(),
+            },
+          });
+        });
+        await this.registrarEvento(paymentId, 'facturado', 'app', {
+          numeroFactura: actualizado.numeroFactura,
+          por: user.userId,
+        });
+        return actualizado;
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        )
+          continue;
+        throw error;
+      }
+    }
+    throw new BadRequestException(
+      'No se pudo asignar el número de factura. Inténtalo de nuevo.',
+    );
+  }
+
+  /** Servicio comodín «Otro servicio» (interno: no se lista en ningún lado). */
+  private async servicioOtro() {
+    const existente = await this.prisma.service.findFirst({
+      where: { interno: true },
+      select: { id: true },
+    });
+    if (existente) return existente.id;
+    const categoria = await this.prisma.category.findFirst({
+      orderBy: { id: 'asc' },
+      select: { id: true },
+    });
+    if (!categoria) {
+      throw new BadRequestException('No hay categorías de servicio creadas.');
+    }
+    const creado = await this.prisma.service.create({
+      data: {
+        categoryId: categoria.id,
+        interno: true,
+        imagenes: [],
+        translations: {
+          create: [
+            { language: 'es', name: 'Otro servicio', description: 'Concepto libre' },
+            { language: 'en', name: 'Other service', description: 'Free concept' },
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    return creado.id;
+  }
+
+  /**
+   * Cobro de algo que no está en el catálogo: crea la cita (ya hecha) con el
+   * servicio comodín y el ticket pagado, con el concepto escrito a mano.
+   */
+  async cobroOtro(dto: CreateCobroOtroDto, user: AuthenticatedUser) {
+    if (user.role !== Role.SUPER_ADMIN && !this.esAdminDeNegocio(user)) {
+      throw new ForbiddenException('Solo el negocio puede registrar cobros.');
+    }
+    const sede = await this.prisma.sede.findUnique({
+      where: { id: dto.sedeId },
+      select: { id: true, empresaId: true },
+    });
+    if (!sede) throw new NotFoundException('La sede no existe.');
+    const enAlcance =
+      user.role === Role.SUPER_ADMIN ||
+      (user.role === Role.COMPANY_ADMIN && sede.empresaId === user.empresaId) ||
+      (user.role === Role.BRANCH_ADMIN && sede.id === user.sedeId);
+    if (!enAlcance) throw new ForbiddenException('Esta sede no es suya.');
+
+    const [profesional, cliente] = await Promise.all([
+      this.prisma.profesional.findUnique({
+        where: { id: dto.profesionalId },
+        select: { sedeId: true },
+      }),
+      this.prisma.users.findUnique({
+        where: { id: dto.userId },
+        select: { id: true },
+      }),
+    ]);
+    if (!profesional || profesional.sedeId !== sede.id) {
+      throw new BadRequestException('El especialista no es de esa sede.');
+    }
+    if (!cliente) throw new NotFoundException('El cliente no existe.');
+
+    const serviceId = await this.servicioOtro();
+    const duracion = dto.duracion ?? 30;
+    const inicio = new Date(`${dto.fecha}T${dto.hora}:00.000Z`);
+    if (Number.isNaN(inicio.getTime())) {
+      throw new BadRequestException('Fecha u hora no válidas.');
+    }
+    const fin = new Date(inicio.getTime() + duracion * 60000);
+    const concepto = dto.concepto.trim();
+    const precio = Number(dto.precio.toFixed(2));
+
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const cita = await tx.appointment.create({
+        data: {
+          fecha: inicio,
+          horaInicio: inicio,
+          horaFin: fin,
+          duracion,
+          estado: 'COMPLETED',
+          notas: concepto,
+          sedeId: sede.id,
+          serviceId,
+          profesionalId: dto.profesionalId,
+          userId: cliente.id,
+        },
+      });
+      return tx.payment.create({
+        data: {
+          appointmentId: cita.id,
+          userId: cliente.id,
+          serviceId,
+          method: dto.metodo as PaymentMethod,
+          status: PaymentStatus.PAID,
+          totalAmount: precio,
+          paidAmount: precio,
+          ...(dto.metodo === 'CARD' && {
+            bankResponse: {
+              method: 'DATAFONO',
+              registradoPor: user.userId,
+              registradoEn: new Date().toISOString(),
+            },
+          }),
+        },
+      });
+    });
+    await this.registrarEvento(payment.id, 'creado', 'app', {
+      otroServicio: concepto,
+      precio,
+      por: user.userId,
+    });
+    return payment;
+  }
+
   async cancelPayment(id: number, user: AuthenticatedUser) {
     await this.pagoEnAlcance(id, user, { tambienDueno: true });
     return this.prisma.payment.update({
@@ -957,6 +1132,8 @@ export class PaymentService {
         select: {
           id: true,
           translations: true,
+          /* «Otro servicio»: el panel pinta el concepto (notas de la cita) */
+          interno: true,
         },
       },
     };

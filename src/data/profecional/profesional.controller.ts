@@ -35,6 +35,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { AuthenticatedUser } from '../../auth/types/authenticated-user.interface';
 import { CreateProfesionalWithImageDto } from './dto/create-profesional-with-image.dto';
 import { CreateProfesionalDto } from './dto/create-profesional.dto';
+import { DesactivarProfesionalDto } from './dto/desactivar-profesional.dto';
 import { LinkProfesionalAccessDto } from './dto/link-profesional-access.dto';
 import { UpdateProfesionalAccessDto } from './dto/update-profesional-access.dto';
 import { UpdateProfesionalDto } from './dto/update-profesional.dto';
@@ -119,6 +120,48 @@ export class ProfesionalController {
     @AuthUser() user?: AuthenticatedUser,
   ) {
     return this.profesionalService.update(id, updateProfesionalDto, user);
+  }
+
+  @Patch(':id/desactivar')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN, Role.BRANCH_ADMIN)
+  @ApiOperation({
+    summary: 'Desactivar un profesional con motivo',
+    description:
+      'Motivo (INCAPACIDAD, VACACIONES, RETIRO, OTRO) y comentario obligatorios; «soporte» opcional (foto o PDF, máx. 10 MB).',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        motivo: { type: 'string', enum: ['INCAPACIDAD', 'VACACIONES', 'RETIRO', 'OTRO'] },
+        comentario: { type: 'string' },
+        soporte: { type: 'string', format: 'binary' },
+      },
+      required: ['motivo', 'comentario'],
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('soporte', {
+      dest: './uploads/profesionales/temp',
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  async desactivar(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: DesactivarProfesionalDto,
+    @UploadedFile() file?: Express.Multer.File,
+    @AuthUser() user?: AuthenticatedUser,
+  ) {
+    if (file) {
+      const permitidos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      if (!permitidos.includes(file.mimetype)) {
+        fs.unlink(file.path, () => undefined);
+        throw new BadRequestException('El soporte debe ser una foto (JPG, PNG, WEBP) o un PDF.');
+      }
+    }
+    return this.profesionalService.desactivar(id, user, dto, file);
   }
 
   @Patch(':id/imagen')

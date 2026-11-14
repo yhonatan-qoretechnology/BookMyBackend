@@ -595,7 +595,8 @@ export class ServiceService {
   // 🔵 Listar todos los servicios (con traducción según idioma)
   async findAll(language: string = 'es', user?: AuthenticatedUser) {
     const services = await this.prisma.service.findMany({
-      where: this.alcanceDeServicios(user),
+      /* «Otro servicio» (interno) no es del catálogo */
+      where: { ...this.alcanceDeServicios(user), interno: false },
       include: {
         translations: {
           where: { language },
@@ -659,7 +660,7 @@ export class ServiceService {
   // 🔹 Listar servicios por categoría con idioma filtrado
   async findByCategory(categoryId: number, language: string = 'es') {
     const services = await this.prisma.service.findMany({
-      where: { categoryId },
+      where: { categoryId, interno: false },
       include: {
         translations: {
           where: { language },

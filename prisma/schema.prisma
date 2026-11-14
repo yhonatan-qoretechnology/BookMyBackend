@@ -366,6 +366,8 @@ model Empresa {
   liquidacionesWise LiquidacionWise[]
   cuentaPago       EmpresaCuentaPago?
   clientesEmpresa  ClienteEmpresa[]
+  filtrosClientes  FiltroCliente[]
+  campanasClientes CampanaCliente[]
   codigoReferido    CodigoReferido?
   referidosHechos   Referido[]         @relation("ReferidosHechos")
   referidoPor       Referido?          @relation("ReferidoPor")
@@ -579,6 +581,12 @@ model Profesional {
   /// Ruta relativa del PDF/doc de la hoja de vida, igual que `imagen`
   /// (SFTP o disco local — ver ProfesionalService.storeProfesionalImage).
   hojaVidaUrl               String?                     @map("hoja_de_vida_url")
+  /// Por qué se desactivó: INCAPACIDAD | VACACIONES | RETIRO | OTRO
+  motivoInactivo            String?                     @map("motivo_inactivo") @db.VarChar(20)
+  comentarioInactivo        String?                     @map("comentario_inactivo")
+  /// Foto o PDF de soporte (p. ej. el certificado de incapacidad)
+  soporteInactivoUrl        String?                     @map("soporte_inactivo_url")
+  inactivoDesde             DateTime?                   @map("inactivo_desde")
   phone                     String                      @unique @map("phone") @db.VarChar(20)
   state                     ClientState                 @default(enabled) @map("state")
   createdAt                 DateTime                    @default(now())
@@ -642,6 +650,9 @@ model Service {
   updatedAt              DateTime                 @updatedAt
   categoryId             Int
   imagenes               String[]
+  /// Servicio comodín («Otro servicio») para cobrar lo que no está en el
+  /// catálogo: no se lista en la app ni en el panel.
+  interno                Boolean                  @default(false)
   Appointment            Appointment[]
   prices                 Price[]
   translations           ServiceTranslation[]
@@ -822,11 +833,18 @@ model Payment {
   service        Service       @relation(fields: [serviceId], references: [id])
   user           Users         @relation(fields: [userId], references: [id])
   liquidacionWise LiquidacionWise?
+  /// TICKET (no va a la DIAN) | FACTURA (consecutivo propio del negocio)
+  tipoDocumento     String    @default("TICKET") @map("tipo_documento") @db.VarChar(10)
+  /// Consecutivo de factura dentro del negocio (F-000001…)
+  numeroFactura     Int?      @map("numero_factura")
+  facturaEmpresaId  Int?      @map("factura_empresa_id")
+  facturadaEn       DateTime? @map("facturada_en")
   events          PaymentEvent[]
 
   @@index([userId])
   @@index([serviceId])
   @@index([cardId])
+  @@unique([facturaEmpresaId, numeroFactura])
   @@map("payments")
 }
 
@@ -1670,4 +1688,50 @@ model CampanaEmail {
 
   @@index([estado, programadaPara])
   @@map("campanas_email")
+}
+
+/// Filtro de clientes que guarda un negocio (edad, cumpleaños, ciudad…)
+/// para enviarle campañas. Los criterios se evalúan al momento de usarlo.
+model FiltroCliente {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int      @map("empresa_id")
+  nombre      String   @db.VarChar(120)
+  criterios   Json     @map("criterios")
+  creadoPorId Int?     @map("creado_por_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  empresa  Empresa          @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  campanas CampanaCliente[]
+
+  @@index([empresaId])
+  @@map("filtros_clientes")
+}
+
+/// Campaña de un negocio a sus clientes (correo o WhatsApp) sobre un filtro guardado.
+model CampanaCliente {
+  id             Int           @id @default(autoincrement())
+  empresaId      Int           @map("empresa_id")
+  filtroId       Int?          @map("filtro_id")
+  nombre         String        @db.VarChar(120)
+  /// EMAIL | WHATSAPP
+  canal          String        @db.VarChar(10)
+  asunto         String?       @db.VarChar(200)
+  mensaje        String
+  estado         EstadoCampana @default(BORRADOR)
+  programadaPara DateTime?     @map("programada_para")
+  enviadaEn      DateTime?     @map("enviada_en")
+  destinatarios  Int           @default(0)
+  enviados       Int           @default(0)
+  fallidos       Int           @default(0)
+  creadoPorId    Int?          @map("creado_por_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  empresa Empresa        @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  filtro  FiltroCliente? @relation(fields: [filtroId], references: [id], onDelete: SetNull)
+
+  @@index([empresaId])
+  @@index([estado, programadaPara])
+  @@map("campanas_clientes")
 }

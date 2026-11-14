@@ -96,6 +96,70 @@ export class ProfesionalService {
     return relativePath;
   }
 
+  /** Soporte de la desactivación (foto o PDF), en su propia subcarpeta. */
+  private async storeSoporte(file: Express.Multer.File) {
+    const ext = path.extname(file.originalname) || '';
+    const finalFileName = `${file.filename}${ext}`;
+    const relativePath = path
+      .join('uploads', 'profesionales', 'soportes', finalFileName)
+      .replace(/\\/g, '/');
+    if (this.sftpStorage.isEnabled()) {
+      await this.sftpStorage.uploadLocalFile({
+        localPath: file.path,
+        remoteRelativePath: relativePath,
+        deleteLocalAfter: true,
+      });
+      return relativePath;
+    }
+    const dir = path.join(process.cwd(), 'uploads', 'profesionales', 'soportes');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const finalAbsPath = path.join(dir, finalFileName);
+    const tempAbsPath = path.isAbsolute(file.path)
+      ? file.path
+      : path.join(process.cwd(), file.path);
+    if (tempAbsPath !== finalAbsPath) fs.renameSync(tempAbsPath, finalAbsPath);
+    return relativePath;
+  }
+
+  /**
+   * Desactiva con motivo y comentario obligatorios y, opcional, el soporte
+   * (p. ej. la foto del certificado de incapacidad).
+   */
+  async desactivar(
+    id: number,
+    user: AuthenticatedUser | undefined,
+    datos: { motivo: string; comentario: string },
+    file?: Express.Multer.File,
+  ) {
+    await this.accessControlService.ensureProfessionalAccessForUser(id, user);
+    const profesional = await this.prisma.profesional.findUnique({ where: { id } });
+    if (!profesional) {
+      if (file) await this.safeDeleteRemoteOrLocal(file.path);
+      throw new NotFoundException(`Profesional con ID ${id} no encontrado.`);
+    }
+    const soporte = file ? await this.storeSoporte(file) : null;
+    try {
+      const actualizado = await this.prisma.profesional.update({
+        where: { id },
+        data: {
+          state: ClientState.disabled,
+          motivoInactivo: datos.motivo,
+          comentarioInactivo: datos.comentario.trim(),
+          inactivoDesde: new Date(),
+          /* Sin archivo nuevo se conserva el anterior solo si sigue inactivo */
+          soporteInactivoUrl: soporte ?? null,
+        },
+      });
+      if (profesional.soporteInactivoUrl && profesional.soporteInactivoUrl !== soporte) {
+        await this.safeDeleteRemoteOrLocal(profesional.soporteInactivoUrl);
+      }
+      return actualizado;
+    } catch (error) {
+      if (soporte) await this.safeDeleteRemoteOrLocal(soporte);
+      throw error;
+    }
+  }
+
   private async safeDeleteRemoteOrLocal(filePath: string) {
     if (!filePath) return;
     if (this.sftpStorage.isEnabled()) {
@@ -785,10 +849,25 @@ export class ProfesionalService {
       );
     }
 
-    return this.prisma.profesional.update({
+    /* Al volver a activarlo, el motivo de la baja deja de aplicar */
+    const reactivando =
+      updateProfesionalDto.state === 'enabled' && profesional.state === 'disabled';
+    const actualizado = await this.prisma.profesional.update({
       where: { id },
-      data: updateProfesionalDto,
+      data: {
+        ...updateProfesionalDto,
+        ...(reactivando && {
+          motivoInactivo: null,
+          comentarioInactivo: null,
+          inactivoDesde: null,
+          soporteInactivoUrl: null,
+        }),
+      },
     });
+    if (reactivando && profesional.soporteInactivoUrl) {
+      await this.safeDeleteRemoteOrLocal(profesional.soporteInactivoUrl);
+    }
+    return actualizado;
   }
 
   async updateImage(
