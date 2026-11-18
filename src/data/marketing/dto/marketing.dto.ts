@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsIn,
@@ -120,6 +122,10 @@ export class GuardarCampanaDto {
   @ApiProperty({ example: '¡Hola {{nombre}}! Esta semana tienes 20 % en {{negocio}}. Reserva aquí: {{enlace_reserva}}' })
   @IsString() @MinLength(5) @MaxLength(1000)
   mensaje: string;
+
+  @ApiPropertyOptional({ description: 'Hasta 2 imágenes como data URL (JPG, PNG o WEBP; máx. 100 KB cada una)' })
+  @IsOptional() @IsArray() @ArrayMaxSize(2) @IsString({ each: true })
+  imagenes?: string[];
 
   @ApiPropertyOptional({ description: 'Enviar en esta fecha; sin ella se envía al momento' })
   @IsOptional() @IsDateString()

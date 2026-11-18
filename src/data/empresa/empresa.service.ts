@@ -290,6 +290,20 @@ export class EmpresaService {
     }
   }
 
+  /** Colores del panel del negocio. `null` vuelve a los de Bookmy. */
+  async updateTema(id: number, color: string | null) {
+    if (color !== null && !/^#[0-9a-fA-F]{6}$/.test(color)) {
+      throw new BadRequestException('El color debe ser un hexadecimal como #0d9d6d.');
+    }
+    const empresa = await this.prisma.empresa.findUnique({ where: { id }, select: { id: true } });
+    if (!empresa) throw new NotFoundException(`Empresa con ID ${id} no encontrada.`);
+    return this.prisma.empresa.update({
+      where: { id },
+      data: { temaPanel: color ? { color: color.toLowerCase() } : Prisma.DbNull },
+      select: { id: true, temaPanel: true },
+    });
+  }
+
   /** Quita la portada. */
   async removeBanner(id: number) {
     const empresa = await this.prisma.empresa.findUnique({ where: { id } });

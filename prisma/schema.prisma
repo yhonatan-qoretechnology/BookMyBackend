@@ -357,6 +357,8 @@ model Empresa {
   logo             String?          @map("logo_url")
   /// Portada del negocio (imagen ancha) que se ve en la app
   banner           String?          @map("banner_url")
+  /// Colores del panel elegidos por el negocio: { color: "#0d9d6d" }
+  temaPanel        Json?            @map("tema_panel")
   descripcion      String?          @map("descripcion")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
@@ -1738,6 +1740,8 @@ model CampanaCliente {
   canal          String        @db.VarChar(10)
   asunto         String?       @db.VarChar(200)
   mensaje        String
+  /// Hasta 2 imágenes (data URL, máx. 100 KB cada una)
+  imagenes       Json?
   estado         EstadoCampana @default(BORRADOR)
   programadaPara DateTime?     @map("programada_para")
   enviadaEn      DateTime?     @map("enviada_en")

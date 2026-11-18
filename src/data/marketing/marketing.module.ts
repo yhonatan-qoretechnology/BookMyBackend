@@ -3,12 +3,12 @@ import { AccessControlService } from '../../auth/services/access-control/access-
 import { PrismaModule } from '../../prisma/prisma.module';
 import { MailModule } from '../email/mail.module';
 import { EmpresaModule } from '../empresa/empresa.module';
-import { MarketingController } from './marketing.controller';
+import { MarketingController, MarketingPublicoController } from './marketing.controller';
 import { MarketingService } from './marketing.service';
 
 @Module({
   imports: [PrismaModule, MailModule, EmpresaModule],
-  controllers: [MarketingController],
+  controllers: [MarketingController, MarketingPublicoController],
   /* RolesGuard necesita AccessControlService en el módulo */
   providers: [MarketingService, AccessControlService],
 })

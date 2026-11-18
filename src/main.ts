@@ -17,6 +17,9 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });
+  /* Las campañas llevan hasta 2 imágenes de 100 KB en base64: el límite
+     por defecto de Express (100 KB) las rechazaba. */
+  app.useBodyParser('json', { limit: '1mb' });
   console.log('✅ 1. App creada');
 
   /* Seenode pone un proxy (Traefik) delante. Sin esto `req.ip` es la IP del

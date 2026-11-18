@@ -489,6 +489,17 @@ export class EmpresaController {
     return this.empresaService.updateLogo(id, file);
   }
 
+  @Patch(':id/tema')
+  @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
+  @UseGuards(EmpresaAccessGuard)
+  @ApiOperation({ summary: 'Colores del panel del negocio ({ color: "#0d9d6d" } o { color: null })' })
+  async updateTema(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { color?: string | null },
+  ) {
+    return this.empresaService.updateTema(id, body?.color ?? null);
+  }
+
   @Patch(':id/banner')
   @Roles(Role.SUPER_ADMIN, Role.COMPANY_ADMIN)
   @UseGuards(EmpresaAccessGuard)

@@ -232,7 +232,14 @@ export class MailService {
    * avisos de buen uso. `mensaje` es texto plano (los saltos de línea se
    * respetan); Handlebars lo escapa, así que no admite HTML.
    */
-  async sendGenerico(params: { to: string; asunto: string; titulo?: string; mensaje: string; boton?: { texto: string; url: string } }) {
+  async sendGenerico(params: {
+    to: string;
+    asunto: string;
+    titulo?: string;
+    mensaje: string;
+    boton?: { texto: string; url: string };
+    adjuntos?: { filename: string; content: Buffer; contentType: string }[];
+  }) {
     const template = Handlebars.compile(await this.loadTemplate('generico.hbs'));
     await this.transporter.sendMail({
       to: params.to,
@@ -242,6 +249,7 @@ export class MailService {
         parrafos: params.mensaje.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean),
         boton: params.boton,
       }),
+      ...(params.adjuntos?.length && { attachments: params.adjuntos }),
     });
   }
 

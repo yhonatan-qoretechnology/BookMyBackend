@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Res,
   Delete,
   Get,
   Param,
@@ -11,6 +12,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
+import { Public } from '../../auth/common/decorators/public.decorator';
 import { Role } from '@prisma/client';
 import { AuthUser } from '../../auth/common/decorators/auth-user.decorator';
 import { Roles } from '../../auth/common/decorators/roles.decorator';
@@ -117,5 +120,28 @@ export class MarketingController {
     @Query('empresaId') empresaId?: string,
   ) {
     return this.service.cancelar(user, id, empresaQ(empresaId));
+  }
+}
+
+/* Sin guardas de rol: Twilio (WhatsApp) descarga la imagen sin sesión */
+@ApiTags('Marketing (filtros y campañas)')
+@Controller('marketing')
+export class MarketingPublicoController {
+  constructor(private readonly service: MarketingService) {}
+
+  /* Pública: Twilio (WhatsApp) descarga así las imágenes de la campaña */
+  @Public()
+  @Get('campanas/:id/imagen/:n')
+  @ApiOperation({ summary: 'Imagen adjunta de una campaña (pública, para WhatsApp)' })
+  async imagen(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('n', ParseIntPipe) n: number,
+    @Res() res: Response,
+  ) {
+    const img = await this.service.imagen(id, n);
+    res.setHeader('Content-Type', img.mime);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.send(img.buffer);
   }
 }

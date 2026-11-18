@@ -33,6 +33,22 @@ interface Alcance {
 }
 
 const DIA_MS = 86_400_000;
+const MAX_IMAGEN_BYTES = 100 * 1024;
+
+/** Valida las imágenes (data URL de JPG/PNG/WEBP, máx. 100 KB) y devuelve sus datos. */
+function imagenesValidas(lista?: string[]) {
+  const out: { mime: string; buffer: Buffer; dataUrl: string }[] = [];
+  for (const [i, url] of (lista ?? []).slice(0, 2).entries()) {
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(url || '');
+    if (!m) throw new BadRequestException(`La imagen ${i + 1} debe ser JPG, PNG o WEBP.`);
+    const buffer = Buffer.from(m[2], 'base64');
+    if (buffer.length > MAX_IMAGEN_BYTES) {
+      throw new BadRequestException(`La imagen ${i + 1} pesa ${Math.ceil(buffer.length / 1024)} KB: el límite es 100 KB.`);
+    }
+    out.push({ mime: m[1], buffer, dataUrl: url });
+  }
+  return out;
+}
 
 /**
  * Filtros de clientes guardados y campañas de cada negocio (correo o
@@ -308,6 +324,7 @@ export class MarketingService {
     if (dto.canal === 'EMAIL' && !dto.asunto?.trim()) {
       throw new BadRequestException('El correo necesita un asunto.');
     }
+    const imagenes = imagenesValidas(dto.imagenes);
     const programada = dto.programadaPara ? new Date(dto.programadaPara) : null;
     const futura = !!programada && programada.getTime() > Date.now() + 30_000;
     const estado = dto.borrador
@@ -324,6 +341,7 @@ export class MarketingService {
         canal: dto.canal,
         asunto: dto.asunto?.trim() || null,
         mensaje: dto.mensaje,
+        ...(imagenes.length && { imagenes: imagenes.map((x) => x.dataUrl) }),
         estado,
         programadaPara: futura ? programada : null,
         creadoPorId: user.userId,
@@ -368,6 +386,15 @@ export class MarketingService {
     return { ok: true };
   }
 
+  /** Pública: imagen de una campaña (WhatsApp la descarga por URL). */
+  async imagen(id: number, n: number) {
+    const c = await this.prisma.campanaCliente.findUnique({ where: { id }, select: { imagenes: true } });
+    const url = ((c?.imagenes as string[] | null) ?? [])[n];
+    const m = url ? /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(url) : null;
+    if (!m) throw new NotFoundException('La imagen no existe.');
+    return { mime: m[1], buffer: Buffer.from(m[2], 'base64') };
+  }
+
   /** Las programadas cuya hora ya llegó. */
   @Cron(CronExpression.EVERY_MINUTE)
   async procesarProgramadas() {
@@ -405,6 +432,11 @@ export class MarketingService {
     );
     const destinos = lista.filter((x) => (c.canal === 'EMAIL' ? x.email : x.telefono));
     const negocio = c.empresa.nombre;
+    const imagenes = imagenesValidas((c.imagenes as string[] | null) ?? []);
+    const ext = (mime: string) => (mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg');
+    /* WhatsApp necesita una URL pública para cada imagen */
+    const apiBase = (this.config.get<string>('API_PUBLIC_URL') || 'https://api.bookmy.es').replace(/\/$/, '');
+    const mediaUrl = imagenes.map((_, i) => `${apiBase}/marketing/campanas/${c.id}/imagen/${i}`);
     const enlace = `${(this.config.get<string>('APP_URL') || 'https://bookmy.es').replace(/\/$/, '')}`;
     let enviados = 0;
     let fallidos = 0;
@@ -419,12 +451,18 @@ export class MarketingService {
             titulo: negocio,
             mensaje: texto,
             boton: { texto: 'Reservar', url: enlace },
+            adjuntos: imagenes.map((img, i) => ({
+              filename: `imagen-${i + 1}.${ext(img.mime)}`,
+              content: img.buffer,
+              contentType: img.mime,
+            })),
           });
         } else if (this.twilio) {
           await this.twilio.messages.create({
             from: `whatsapp:${this.whatsappFrom}`,
             to: `whatsapp:${d.telefono}`,
             body: texto,
+            ...(mediaUrl.length && { mediaUrl }),
           });
         } else {
           throw new Error('WhatsApp sin configurar');
