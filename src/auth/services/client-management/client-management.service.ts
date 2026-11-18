@@ -37,6 +37,18 @@ type ClientWithRelations = Prisma.UsersGetPayload<{
   include: typeof CLIENT_INCLUDE;
 }>;
 
+/** Hijos válidos: con nombre; fecha YYYY-MM-DD y género solo si vienen. */
+function limpiarHijos(lista?: { nombre?: string; fechaNacimiento?: string; genero?: string }[]) {
+  if (!lista) return undefined;
+  return lista
+    .map((h) => ({
+      nombre: (h.nombre ?? '').trim().slice(0, 80),
+      ...(h.fechaNacimiento && { fechaNacimiento: h.fechaNacimiento.slice(0, 10) }),
+      ...(h.genero && { genero: h.genero }),
+    }))
+    .filter((h) => h.nombre);
+}
+
 @Injectable()
 export class ClientManagementService {
   constructor(
@@ -95,11 +107,14 @@ export class ClientManagementService {
     if (!creado) throw new BadRequestException('No se pudo crear el cliente.');
 
     /* Datos para campañas que el registro normal no recoge */
-    if (dto.hijos !== undefined || dto.fechasEspeciales?.length) {
+    const hijosDetalle = limpiarHijos(dto.hijosDetalle);
+    if (dto.hijos !== undefined || dto.fechasEspeciales?.length || hijosDetalle) {
       await this.prisma.userData.update({
         where: { userId: creado.id },
         data: {
           ...(dto.hijos !== undefined && { hijos: dto.hijos }),
+          /* Con la lista de hijos, el número sale de ella */
+          ...(hijosDetalle && { hijosDetalle, hijos: hijosDetalle.length }),
           ...(dto.fechasEspeciales?.length && { fechasEspeciales: [...new Set(dto.fechasEspeciales)] }),
         },
       });
@@ -137,6 +152,7 @@ export class ClientManagementService {
             gender: client.UserData.gender,
             birthdate: client.UserData.birthdate,
             hijos: client.UserData.hijos,
+            hijosDetalle: client.UserData.hijosDetalle,
             fechasEspeciales: client.UserData.fechasEspeciales,
             /** Vive en `user_data`, no en `user_locations` */
             direccion: client.UserData.direccion,
@@ -324,6 +340,11 @@ export class ClientManagementService {
         : null;
     }
     if (updateClientDto.hijos !== undefined) userDataUpdate.hijos = updateClientDto.hijos;
+    if (updateClientDto.hijosDetalle !== undefined) {
+      const lista = limpiarHijos(updateClientDto.hijosDetalle) ?? [];
+      userDataUpdate.hijosDetalle = lista;
+      userDataUpdate.hijos = lista.length;
+    }
     if (updateClientDto.fechasEspeciales !== undefined) {
       userDataUpdate.fechasEspeciales = { set: [...new Set(updateClientDto.fechasEspeciales)] };
     }

@@ -18,8 +18,26 @@ import {
   PASSWORD_EXAMPLE,
   PASSWORD_RULES_MESSAGE,
 } from '../common/validators/password.decorator';
-import { IsArray as IsArrayFE, IsIn as IsInFE, Max as MaxFE, Min as MinFE } from 'class-validator';
+import { ArrayMaxSize as ArrayMaxSizeFE, IsArray as IsArrayFE, IsIn as IsInFE, Max as MaxFE, Min as MinFE, ValidateNested as ValidateNestedFE } from 'class-validator';
 import { Type as TypeFE } from 'class-transformer';
+
+/** Un hijo del cliente (para campañas: cumpleaños infantiles, Día del Niño…). */
+export class HijoDto {
+  @ApiPropertyOptional({ example: 'Lucía' })
+  @IsString()
+  @MaxLength(80)
+  nombre: string;
+
+  @ApiPropertyOptional({ example: '2018-04-12' })
+  @IsOptional()
+  @IsDateString()
+  fechaNacimiento?: string;
+
+  @ApiPropertyOptional({ example: 'female', enum: ['female', 'male', 'other'] })
+  @IsOptional()
+  @IsInFE(['female', 'male', 'other'])
+  genero?: string;
+}
 
 /** Fechas especiales que puede celebrar un cliente (para campañas). */
 export const FECHAS_ESPECIALES = ['NAVIDAD', 'ANO_NUEVO', 'SAN_VALENTIN', 'AMOR_AMISTAD', 'DIA_MUJER', 'DIA_MADRE', 'DIA_PADRE', 'DIA_NINO', 'HALLOWEEN', 'BLACK_FRIDAY', 'VUELTA_COLE', 'ANIVERSARIO'];
@@ -158,6 +176,14 @@ export class UpdateClientDto {
   @IsInFE(FECHAS_ESPECIALES, { each: true })
   fechasEspeciales?: string[];
 
+  @ApiPropertyOptional({ type: [HijoDto], description: 'Datos de cada hijo' })
+  @IsOptional()
+  @IsArrayFE()
+  @ArrayMaxSizeFE(20)
+  @ValidateNestedFE({ each: true })
+  @TypeFE(() => HijoDto)
+  hijosDetalle?: HijoDto[];
+
 
   @ApiPropertyOptional({ example: 1, description: 'ID del país' })
   @IsOptional()
@@ -244,6 +270,14 @@ export class CreateClientDto {
   @IsArrayFE()
   @IsInFE(FECHAS_ESPECIALES, { each: true })
   fechasEspeciales?: string[];
+
+  @ApiPropertyOptional({ type: [HijoDto], description: 'Datos de cada hijo' })
+  @IsOptional()
+  @IsArrayFE()
+  @ArrayMaxSizeFE(20)
+  @ValidateNestedFE({ each: true })
+  @TypeFE(() => HijoDto)
+  hijosDetalle?: HijoDto[];
 
   @ApiPropertyOptional({
     description: 'Solo SUPER_ADMIN: negocio al que se vincula. Los demás usan el suyo.',

@@ -73,6 +73,10 @@ export class CriteriosFiltroDto {
   @IsOptional() @IsBoolean()
   conHijos?: boolean;
 
+  @ApiPropertyOptional({ example: 0, description: 'Algún hijo cumple años en este mes (1-12); 0 = el mes en curso' })
+  @IsOptional() @IsInt() @Min(0) @Max(12)
+  cumpleHijoMes?: number;
+
   @ApiPropertyOptional({ example: 'DIA_MADRE', description: 'Celebra esta fecha especial' })
   @IsOptional() @IsString() @MaxLength(30)
   fechaEspecial?: string;

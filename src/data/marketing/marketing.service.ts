@@ -155,7 +155,7 @@ export class MarketingService {
           select: {
             name: true, email: true, phone: true, gender: true, birthdate: true,
             idioma: true, direccion: true, country: { select: { dialingCode: true } },
-            hijos: true, fechasEspeciales: true,
+            hijos: true, fechasEspeciales: true, hijosDetalle: true,
           },
         },
         UserLocation: { select: { city: true, region: true } },
@@ -193,6 +193,11 @@ export class MarketingService {
       if (c.conHijos === true && !((d?.hijos ?? 0) > 0)) continue;
       if (c.conHijos === false && (d?.hijos ?? 0) > 0) continue;
       if (c.fechaEspecial && !(d?.fechasEspeciales ?? []).includes(c.fechaEspecial)) continue;
+      if (c.cumpleHijoMes != null) {
+        const mes = c.cumpleHijoMes === 0 ? hoy.getMonth() + 1 : c.cumpleHijoMes;
+        const hijos = (Array.isArray(d?.hijosDetalle) ? d!.hijosDetalle : []) as { fechaNacimiento?: string }[];
+        if (!hijos.some((h) => h.fechaNacimiento && Number(h.fechaNacimiento.slice(5, 7)) === mes)) continue;
+      }
       if (c.reservasMin != null && st.reservas < c.reservasMin) continue;
       if (c.sinVisitaDias) {
         if (st.ultima && hoy.getTime() - st.ultima.getTime() < c.sinVisitaDias * DIA_MS) continue;
