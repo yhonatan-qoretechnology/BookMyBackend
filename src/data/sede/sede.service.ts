@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -136,6 +137,33 @@ export class SedeService {
     });
   }
 
+  /**
+   * Bookmy CRM Pro incluye N sedes (config_membresia.sedes_incluidas, 10 por
+   * defecto) más las extra compradas. En Free no se limita aquí.
+   */
+  private async exigirSedeDisponible(empresa: {
+    id: number;
+    plan: string;
+    trialEndsAt: Date | null;
+    proGratisHasta: Date | null;
+    proPagadoHasta: Date | null;
+    sedesExtra: number;
+  }) {
+    const ahora = new Date();
+    const pro =
+      empresa.plan === 'PRO' ||
+      [empresa.trialEndsAt, empresa.proGratisHasta, empresa.proPagadoHasta].some((f) => !!f && f > ahora);
+    if (!pro) return;
+    const config = await this.prisma.configMembresia.findUnique({ where: { id: 1 } });
+    const limite = (config?.sedesIncluidas ?? 10) + (empresa.sedesExtra ?? 0);
+    const usadas = await this.prisma.sede.count({ where: { empresaId: empresa.id } });
+    if (usadas >= limite) {
+      throw new ForbiddenException(
+        `Has llegado al límite de ${limite} sedes de tu plan. Amplía sedes desde «Plan» para crear más.`,
+      );
+    }
+  }
+
   // 🔹 Crear una nueva sede
   async create(createSedeDto: CreateSedeDto, files?: Express.Multer.File[]) {
     try {
@@ -147,6 +175,8 @@ export class SedeService {
           `Empresa con ID ${createSedeDto.empresaId} no encontrada.`,
         );
       }
+
+      await this.exigirSedeDisponible(empresa);
 
       const nombreNormalizado = createSedeDto.nombre.trim();
       const duplicada = await this.findDuplicateSedeName(

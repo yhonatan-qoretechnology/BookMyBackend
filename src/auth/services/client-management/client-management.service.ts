@@ -94,6 +94,17 @@ export class ClientManagementService {
     });
     if (!creado) throw new BadRequestException('No se pudo crear el cliente.');
 
+    /* Datos para campañas que el registro normal no recoge */
+    if (dto.hijos !== undefined || dto.fechasEspeciales?.length) {
+      await this.prisma.userData.update({
+        where: { userId: creado.id },
+        data: {
+          ...(dto.hijos !== undefined && { hijos: dto.hijos }),
+          ...(dto.fechasEspeciales?.length && { fechasEspeciales: [...new Set(dto.fechasEspeciales)] }),
+        },
+      });
+    }
+
     if (empresaId) {
       await this.prisma.clienteEmpresa.upsert({
         where: { userId_empresaId: { userId: creado.id, empresaId } },
@@ -125,6 +136,8 @@ export class ClientManagementService {
             idioma: client.UserData.idioma,
             gender: client.UserData.gender,
             birthdate: client.UserData.birthdate,
+            hijos: client.UserData.hijos,
+            fechasEspeciales: client.UserData.fechasEspeciales,
             /** Vive en `user_data`, no en `user_locations` */
             direccion: client.UserData.direccion,
             countryId: client.UserData.countryId,
@@ -309,6 +322,10 @@ export class ClientManagementService {
       userDataUpdate.birthdate = updateClientDto.birthdate
         ? new Date(updateClientDto.birthdate)
         : null;
+    }
+    if (updateClientDto.hijos !== undefined) userDataUpdate.hijos = updateClientDto.hijos;
+    if (updateClientDto.fechasEspeciales !== undefined) {
+      userDataUpdate.fechasEspeciales = { set: [...new Set(updateClientDto.fechasEspeciales)] };
     }
     if (email) userDataUpdate.email = email;
 

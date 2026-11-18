@@ -69,6 +69,14 @@ export class CriteriosFiltroDto {
   @IsOptional() @IsInt()
   servicioId?: number;
 
+  @ApiPropertyOptional({ description: 'true = con hijos; false = sin hijos' })
+  @IsOptional() @IsBoolean()
+  conHijos?: boolean;
+
+  @ApiPropertyOptional({ example: 'DIA_MADRE', description: 'Celebra esta fecha especial' })
+  @IsOptional() @IsString() @MaxLength(30)
+  fechaEspecial?: string;
+
   @ApiPropertyOptional({ example: 30, description: 'Clientes nuevos: se unieron en los últimos X días' })
   @IsOptional() @IsInt() @Min(1) @Max(3650)
   nuevosDias?: number;

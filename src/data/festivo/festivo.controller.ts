@@ -76,6 +76,14 @@ export class FestivoController {
     return this.festivoService.sincronizarAnio(anio, pais);
   }
 
+  @Post('sincronizar-todos')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Sincroniza el año en todos los países que usan los negocios (solo SUPER_ADMIN)' })
+  sincronizarTodos(@Body('anio', ParseIntPipe) anio: number) {
+    return this.festivoService.sincronizarPaisesEnUso(anio);
+  }
+
   /* ── Festivos locales (los del municipio) ─────────────────
      La API externa solo publica nacionales y regionales. Los patronos de
      cada pueblo —los que hacen que Benalmádena y Marbella no cierren los

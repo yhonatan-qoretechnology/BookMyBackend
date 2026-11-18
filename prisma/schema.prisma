@@ -141,6 +141,10 @@ model UserData {
   gender    String    @db.VarChar(50)
   birthdate DateTime?
   direccion String?   @map("direccion") @db.VarChar(255)
+  /// Número de hijos (para campañas: Día del Niño, vuelta al cole…)
+  hijos            Int?     @map("hijos")
+  /// Fechas especiales que celebra: NAVIDAD, HALLOWEEN, AMOR_AMISTAD…
+  fechasEspeciales String[] @default([]) @map("fechas_especiales")
   country   Country   @relation(fields: [countryId], references: [id])
   user      Users     @relation("UserToUserData", fields: [userId], references: [id])
 
@@ -324,6 +328,12 @@ model Empresa {
   proGratisHasta  DateTime? @map("pro_gratis_hasta")
   /// Meses de Pro ganados que aún no se usaron (si ya paga Pro, cubren cuotas).
   mesesProCredito Int       @default(0) @map("meses_pro_credito")
+  /// Membresía Pro pagada online: vale hasta esta fecha.
+  proPagadoHasta  DateTime? @map("pro_pagado_hasta")
+  /// MENSUAL | ANUAL: el último ciclo que pagó (para renovar igual).
+  cicloPro        String?   @map("ciclo_pro") @db.VarChar(10)
+  /// Sedes compradas por encima de las incluidas en Pro.
+  sedesExtra      Int       @default(0) @map("sedes_extra")
   /// Para no repetir el correo de "tu prueba acaba pronto" cada día que
   /// pasa el cron de EmpresaPlanPagoCron. Se resetea en activarPrueba().
   trialAvisoEnviado Boolean @default(false) @map("trial_aviso_enviado")
@@ -457,6 +467,13 @@ model EmpresaPlanPago {
   vence     DateTime       @map("vence")
   pagadoEn  DateTime?      @map("pagado_en")
   estado    EstadoPagoPlan @default(PENDIENTE) @map("estado")
+  /// MENSUAL | ANUAL
+  ciclo          String    @default("MENSUAL") @map("ciclo") @db.VarChar(10)
+  /// Sedes extra incluidas en este pago
+  sedesExtra     Int       @default(0) @map("sedes_extra")
+  /// Pago online: sesión de Stripe Checkout y hasta cuándo cubre
+  stripeSessionId String?  @unique @map("stripe_session_id")
+  periodoHasta   DateTime? @map("periodo_hasta")
   /// Evita reenviar el correo de "vencido" cada día que pasa el cron.
   notificado  Boolean  @default(false) @map("notificado")
   /// Cuota pagada con un mes de Pro ganado por referidos (no cuenta como pago real).
@@ -1890,4 +1907,21 @@ model CuponCliente {
   @@index([empresaId, estado])
   @@index([userId])
   @@map("cupones_cliente")
+}
+
+/// Precios de Bookmy CRM Pro (una sola fila, id = 1). Los edita el superadmin.
+model ConfigMembresia {
+  id              Int      @id @default(1)
+  moneda          String   @default("EUR") @db.VarChar(3)
+  precioMensual   Float    @default(29) @map("precio_mensual")
+  precioAnual     Float    @default(290) @map("precio_anual")
+  /// Sedes que incluye Pro
+  sedesIncluidas  Int      @default(10) @map("sedes_incluidas")
+  /// Precio al mes de cada sede extra
+  precioSedeExtra Float    @default(9) @map("precio_sede_extra")
+  /// Días antes del vencimiento en que se avisa
+  diasAviso       Int      @default(7) @map("dias_aviso")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("config_membresia")
 }

@@ -155,6 +155,7 @@ export class MarketingService {
           select: {
             name: true, email: true, phone: true, gender: true, birthdate: true,
             idioma: true, direccion: true, country: { select: { dialingCode: true } },
+            hijos: true, fechasEspeciales: true,
           },
         },
         UserLocation: { select: { city: true, region: true } },
@@ -189,6 +190,9 @@ export class MarketingService {
         const donde = normalizar([u.UserLocation?.city, u.UserLocation?.region, d?.direccion].filter(Boolean).join(' '));
         if (!donde.includes(ciudad)) continue;
       }
+      if (c.conHijos === true && !((d?.hijos ?? 0) > 0)) continue;
+      if (c.conHijos === false && (d?.hijos ?? 0) > 0) continue;
+      if (c.fechaEspecial && !(d?.fechasEspeciales ?? []).includes(c.fechaEspecial)) continue;
       if (c.reservasMin != null && st.reservas < c.reservasMin) continue;
       if (c.sinVisitaDias) {
         if (st.ultima && hoy.getTime() - st.ultima.getTime() < c.sinVisitaDias * DIA_MS) continue;
@@ -284,7 +288,8 @@ export class MarketingService {
   /** Quita los vacíos; la sede de un BRANCH_ADMIN queda fija. */
   private criteriosLimpios(c: CriteriosFiltroDto, alc: Alcance): Prisma.InputJsonObject {
     const limpio = Object.fromEntries(
-      Object.entries(c ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== false),
+      /* false solo cuenta en conHijos («sin hijos»); en el resto es «no filtrar» */
+      Object.entries(c ?? {}).filter(([k, v]) => v !== undefined && v !== null && v !== '' && (v !== false || k === 'conHijos')),
     );
     if (alc.sedeId) limpio.sedeId = alc.sedeId;
     return limpio as Prisma.InputJsonObject;

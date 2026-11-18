@@ -1,5 +1,6 @@
 import { HttpService } from '@nestjs/axios';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { AmbitoFestivo } from '@prisma/client';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -347,12 +348,8 @@ export class FestivoService {
   async sincronizarAnio(anio: number, paisPedido?: string) {
     const pais = (paisPedido ?? PAIS_POR_DEFECTO).toUpperCase();
     const calendario = CALENDARIO_POR_PAIS[pais];
-    if (!calendario) {
-      throw new BadRequestException(
-        `No hay calendario de festivos configurado para el país ${pais}. ` +
-          `Disponibles: ${Object.keys(CALENDARIO_POR_PAIS).join(', ')}.`,
-      );
-    }
+    /* Resto de países: festivos nacionales desde Nager.Date */
+    if (!calendario) return this.sincronizarNager(anio, pais);
 
     const base = `${this.EXTERNAL_API_BASE}/${calendario.slug}/v1`;
     let nacionalesCount = 0;
@@ -429,6 +426,91 @@ export class FestivoService {
       fuente: 'https://calendariosnacionales.com',
       fuenteLocales: 'https://www.seg-social.es',
     };
+  }
+
+  /**
+   * Festivos nacionales de cualquier país desde Nager.Date (API pública y
+   * gratuita, ~110 países). Solo los de ámbito nacional (`global`).
+   */
+  private async sincronizarNager(anio: number, pais: string) {
+    const existe = await this.prisma.country.findUnique({ where: { isoCode: pais }, select: { id: true } });
+    if (!existe) throw new BadRequestException(`El país ${pais} no está dado de alta.`);
+    let nacionalesCount = 0;
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.get<{ date: string; localName: string; name: string; global: boolean }[]>(
+          `https://date.nager.at/api/v3/PublicHolidays/${anio}/${pais}`,
+          { family: 4 } as any,
+        ),
+      );
+      for (const f of data ?? []) {
+        if (f.global === false) continue;
+        await this.upsertFestivo(pais, f.date, f.localName || f.name, AmbitoFestivo.NACIONAL, '');
+        nacionalesCount++;
+      }
+    } catch (error) {
+      this.logger.error(`Nager.Date ${pais} ${anio}: ${error instanceof Error ? error.message : error}`);
+      throw new BadRequestException(
+        `No se pudieron obtener los festivos de ${pais} para ${anio}. Prueba de nuevo más tarde.`,
+      );
+    }
+    this.logger.log(`Festivos de ${pais} sincronizados para ${anio} (Nager.Date): ${nacionalesCount} nacionales`);
+    return {
+      pais,
+      anio,
+      nacionalesCount,
+      regionalesCount: 0,
+      localesCount: 0,
+      municipiosCount: 0,
+      localesOmitidas: null,
+      regionesFallidas: [] as string[],
+      fuente: 'https://date.nager.at',
+      fuenteLocales: null,
+    };
+  }
+
+  /**
+   * Cada día, a las 4:00: si un país que ya usa algún negocio no tiene
+   * festivos cargados este año o el siguiente, los trae solo. Así un
+   * negocio que se registra desde un país nuevo ve sus festivos sin que
+   * nadie tenga que pulsar «Sincronizar».
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  async completarFestivosQueFaltan() {
+    const ahora = new Date().getFullYear();
+    const paises = await this.prisma.country.findMany({
+      where: { activo: true, empresas: { some: {} } },
+      select: { isoCode: true },
+    });
+    for (const { isoCode } of paises) {
+      for (const anio of [ahora, ahora + 1]) {
+        const desde = new Date(Date.UTC(anio, 0, 1));
+        const hasta = new Date(Date.UTC(anio + 1, 0, 1));
+        const hay = await this.prisma.festivo.count({ where: { pais: isoCode, fecha: { gte: desde, lt: hasta } } });
+        if (hay > 0) continue;
+        await this.sincronizarAnio(anio, isoCode).catch((e) =>
+          this.logger.warn(`Festivos ${isoCode} ${anio}: ${e instanceof Error ? e.message : e}`),
+        );
+      }
+    }
+  }
+
+  /** Sincroniza todos los países que usan los negocios dados de alta. */
+  async sincronizarPaisesEnUso(anio: number) {
+    const paises = await this.prisma.country.findMany({
+      where: { activo: true, empresas: { some: {} } },
+      select: { isoCode: true },
+    });
+    const resultados: { pais: string; ok: boolean; nacionales?: number; error?: string }[] = [];
+    for (const { isoCode } of paises) {
+      try {
+        const r = await this.sincronizarAnio(anio, isoCode);
+        resultados.push({ pais: isoCode, ok: true, nacionales: r.nacionalesCount });
+      } catch (e) {
+        resultados.push({ pais: isoCode, ok: false, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    return { anio, resultados };
   }
 
   /**

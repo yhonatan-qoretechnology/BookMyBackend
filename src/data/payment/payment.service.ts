@@ -1,4 +1,5 @@
 import { HttpService } from '@nestjs/axios';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   BadRequestException,
   ForbiddenException,
@@ -77,6 +78,7 @@ export class PaymentService {
     private httpService: HttpService,
     private wiseService: WiseService,
     private stripeService: StripeService,
+    private eventos: EventEmitter2,
   ) {}
 
   /* ── Alcance ─────────────────────────────────────────────────────
@@ -694,6 +696,14 @@ export class PaymentService {
   /** Aplica el evento al pago y devuelve su id (null si no es de Bookmy). */
   private async aplicarEventoStripe(evento: Stripe.Event): Promise<number | null> {
     switch (evento.type) {
+      /* Membresía Pro pagada en Stripe Checkout: la aplica MembresiaService */
+      case 'checkout.session.completed': {
+        const sesion = evento.data.object as Stripe.Checkout.Session;
+        if (sesion.metadata?.tipo === 'membresia') {
+          this.eventos.emit('membresia.checkout-completado', { sessionId: sesion.id });
+        }
+        return null;
+      }
       case 'payment_intent.succeeded': {
         const intent = evento.data.object;
         const paymentId = await this.pagoDeCobro(intent.id, intent.metadata);

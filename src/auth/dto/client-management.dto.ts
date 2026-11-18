@@ -18,6 +18,12 @@ import {
   PASSWORD_EXAMPLE,
   PASSWORD_RULES_MESSAGE,
 } from '../common/validators/password.decorator';
+import { IsArray as IsArrayFE, IsIn as IsInFE, Max as MaxFE, Min as MinFE } from 'class-validator';
+import { Type as TypeFE } from 'class-transformer';
+
+/** Fechas especiales que puede celebrar un cliente (para campañas). */
+export const FECHAS_ESPECIALES = ['NAVIDAD', 'ANO_NUEVO', 'SAN_VALENTIN', 'AMOR_AMISTAD', 'DIA_MUJER', 'DIA_MADRE', 'DIA_PADRE', 'DIA_NINO', 'HALLOWEEN', 'BLACK_FRIDAY', 'VUELTA_COLE', 'ANIVERSARIO'];
+
 
 /**
  * Busqueda EXACTA de un cliente, para traer al negocio a alguien que
@@ -138,6 +144,21 @@ export class UpdateClientDto {
   @IsString()
   direccion?: string;
 
+  @ApiPropertyOptional({ example: 2, description: 'Número de hijos' })
+  @IsOptional()
+  @TypeFE(() => Number)
+  @IsInt()
+  @MinFE(0)
+  @MaxFE(20)
+  hijos?: number;
+
+  @ApiPropertyOptional({ example: ['NAVIDAD', 'DIA_MADRE'], description: 'Fechas especiales que celebra' })
+  @IsOptional()
+  @IsArrayFE()
+  @IsInFE(FECHAS_ESPECIALES, { each: true })
+  fechasEspeciales?: string[];
+
+
   @ApiPropertyOptional({ example: 1, description: 'ID del país' })
   @IsOptional()
   @Type(() => Number)
@@ -209,6 +230,20 @@ export class CreateClientDto {
   @IsOptional()
   @IsDateString()
   birthdate?: string;
+
+  @ApiPropertyOptional({ example: 2, description: 'Número de hijos' })
+  @IsOptional()
+  @TypeFE(() => Number)
+  @IsInt()
+  @MinFE(0)
+  @MaxFE(20)
+  hijos?: number;
+
+  @ApiPropertyOptional({ example: ['NAVIDAD', 'DIA_MADRE'], description: 'Fechas especiales que celebra' })
+  @IsOptional()
+  @IsArrayFE()
+  @IsInFE(FECHAS_ESPECIALES, { each: true })
+  fechasEspeciales?: string[];
 
   @ApiPropertyOptional({
     description: 'Solo SUPER_ADMIN: negocio al que se vincula. Los demás usan el suyo.',

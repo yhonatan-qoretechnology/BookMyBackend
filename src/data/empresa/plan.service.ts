@@ -45,10 +45,13 @@ export interface EstadoPlan {
   diasProGratis: number;
   /** Meses ganados por referidos que cubrirán las próximas cuotas de Pro. */
   mesesProCredito: number;
+  /** Membresía pagada online: hasta cuándo (ISO) y días que le quedan. */
+  proPagadoHasta: string | null;
+  diasProPagado: number;
 }
 
 type EmpresaPlan = Pick<Empresa, 'plan' | 'trialEndsAt' | 'trialUsed'> &
-  Partial<Pick<Empresa, 'proGratisHasta' | 'mesesProCredito'>>;
+  Partial<Pick<Empresa, 'proGratisHasta' | 'mesesProCredito' | 'proPagadoHasta'>>;
 
 /** Campos que hace falta leer para calcular el plan. */
 const SELECT_PLAN = {
@@ -57,6 +60,7 @@ const SELECT_PLAN = {
   trialUsed: true,
   proGratisHasta: true,
   mesesProCredito: true,
+  proPagadoHasta: true,
 } as const;
 
 /**
@@ -82,11 +86,14 @@ export class PlanService {
     /* Meses de Pro ganados invitando a otros negocios */
     const gratis = empresa.proGratisHasta ? new Date(empresa.proGratisHasta) : null;
     const conProGratis = !!gratis && gratis.getTime() > ahora.getTime();
+    /* Membresía pagada online (Stripe Checkout) */
+    const pagado = empresa.proPagadoHasta ? new Date(empresa.proPagadoHasta) : null;
+    const conProPagado = !!pagado && pagado.getTime() > ahora.getTime();
 
     return {
       plan: empresa.plan,
       planEfectivo:
-        empresa.plan === PlanEmpresa.PRO || enPrueba || conProGratis
+        empresa.plan === PlanEmpresa.PRO || enPrueba || conProGratis || conProPagado
           ? PlanEmpresa.PRO
           : PlanEmpresa.FREE,
       trialEndsAt: fin ? fin.toISOString() : null,
@@ -98,6 +105,8 @@ export class PlanService {
       proGratisHasta: conProGratis ? gratis!.toISOString() : null,
       diasProGratis: conProGratis ? Math.ceil((gratis!.getTime() - ahora.getTime()) / 86_400_000) : 0,
       mesesProCredito: empresa.mesesProCredito ?? 0,
+      proPagadoHasta: pagado ? pagado.toISOString() : null,
+      diasProPagado: conProPagado ? Math.ceil((pagado!.getTime() - ahora.getTime()) / 86_400_000) : 0,
     };
   }
 

@@ -31,6 +31,7 @@ import { ActividadModule } from './data/actividad/actividad.module';
 import { ReferidoModule } from './data/referido/referido.module';
 import { AutomatizacionModule } from './data/automatizacion/automatizacion.module';
 import { MarketingModule } from './data/marketing/marketing.module';
+import { MembresiaModule } from './data/membresia/membresia.module';
 import { WiseModule } from './data/wise/wise.module';
 import { GastoModule } from './data/gasto/gasto.module';
 import { HorarioSedeModule } from './data/HorarioSede/horario-sede.module';
@@ -191,6 +192,7 @@ import { ChatMessageModule } from './data/chatMessage/chatMessage.module';
     ReferidoModule,
     AutomatizacionModule,
     MarketingModule,
+    MembresiaModule,
     WiseModule,
     NotificationModule,
   ],
